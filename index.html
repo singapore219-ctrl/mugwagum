@@ -405,11 +405,10 @@ const ZONES = [
 const BOTN = ['검은늑대', '린저씨', '아침사냥꾼', '만렙가즈아', '강화의신', '증발장인', '물약도둑', '초보에요', '오크킬러', '달빛요정', '불꽃법사',
   '무과금전사2', '쌀먹', '레어헌터', '은하수', '하늘바라기', '새벽기사', '용사김씨', '막타전문', '자동사냥중', '고독한궁수', '빨물충전',
   '텔텔텔', '축복주세요', '뼈다귀', '흑마법사', '초원지킴이', '밤샘사냥', '회사몰래', '아덴의별', '칼바람', '행운의요정', '느긋한곰', '폭풍법사'];
-const CHAT = ['오늘 드랍 운 좋네', '물약 떨어져서 마을 감', '여기 자리 있어요?', 'ㅋㅋㅋㅋㅋ', '+8 도전했다가 증발함...', '초록물약 필수입니다',
-  '렙업 가즈아', '자동사냥 최고', '막타 누가 쳐감 ㅡㅡ', '보스 언제 뜨지', '갑옷 +5 성공했다', '강화는 역시 새벽에', '사람 너무 많다',
-  '텔 주문서 사야겠다', '무과금으로 여기까지 왔다', '드디어 축복 주문서 먹음', '안녕하세요~', '수고하세요', '던전 같이 가실 분?',
-  '아 또 죽었네', '경험치 다 날아감', '오늘은 여기까지...', '강화 확률 조작 아님?', '자리 비켜드려요', '+6 안전 강화 완료', '잡템 팔러 가야지',
-  '오늘 몇 렙까지 가능?', '물약값이 더 나오네', '와 방금 주문서 두 장 연속', '무기 +7 뜨면 은퇴함'];
+const CHAT = ['물약 떨어져서 마을 감', '여기 자리 있어요?', 'ㅋㅋㅋㅋㅋ', '초록물약 필수입니다', '렙업 가즈아', '자동사냥 최고',
+  '막타 누가 쳐감 ㅡㅡ', '보스 언제 뜨지', '강화는 역시 새벽에', '사람 너무 많다', '텔 주문서 사야겠다', '무과금으로 여기까지 왔다',
+  '안녕하세요~', '수고하세요', '던전 같이 가실 분?', '아 또 죽었네', '경험치 다 날아감', '오늘은 여기까지...', '강화 확률 조작 아님?',
+  '자리 비켜드려요', '잡템 팔러 가야지', '오늘 몇 렙까지 가능?', '물약값이 더 나오네'];
 
 /* ================= STATE ================= */
 let S = null;
@@ -920,8 +919,9 @@ function makePartyBot(info) {
   const b = { kind: 'b', name: info.name, cls: info.cls, lv: S.lv, x: P.x + rnd(-1.5, 1.5), y: P.y + rnd(1, 2), rot: 0, hp: 0, maxHp: 1, moving: false, hurt: 0, target: null, cd: 0,
     wx: 0, wy: 0, wT: 0, say: '', sayT: 0, dead: false, respT: 0, healCd: 0, skCd: 0, telT: 1e9, town: !!Z.town, party: true };
   partyStats(b); b.hp = b.maxHp;
-  const bm = info.cls === 'knight' ? { model: 'Knight', r: 'sword_1handed', l: 'shield_badge', st: '1h' } : botModel(info.cls);
-  b.act = makeActor(bm);
+  b.bm = info.cls === 'knight' ? { model: 'Knight', r: 'sword_1handed', l: 'shield_badge', st: '1h' } : botModel(info.cls);
+  const ro = rosterOf(info.name);
+  b.act = makeActor({ ...b.bm, wglow: ro ? glowFor(ro.we) : null });
   return b;
 }
 function partySlot(b) {
@@ -987,19 +987,76 @@ function updatePartyBot(b, dt) {
     }
   }
 }
+/* ---------- AI users: each one really owns a weapon, an enchant level and scrolls ----------
+   The roster lives in the save, so their progress carries over between sessions. */
+const WTYPE = { knight: 'sword', elf: 'bow', mage: 'staff' };
+const glowFor = e => e >= 10 ? '#ffb547' : e >= 9 ? '#c98bff' : e >= 7 ? '#6aa8ff' : null;
+function roster() {
+  if (!S.world) S.world = { roster: [] };
+  const R0 = S.world.roster;
+  if (!R0.length) for (const name of BOTN) {
+    const lv = ri(4, 48), wt = clamp(1 + Math.floor(lv / 14) + (Math.random() < .2 ? 1 : 0), 1, 4);
+    R0.push({ name, cls: pick(['knight', 'knight', 'elf', 'mage']), lv, wt, we: Math.random() < .15 ? ri(7, 8) : ri(0, 6), ew: ri(0, 3), bew: Math.random() < .2 ? 1 : 0 });
+  }
+  return R0;
+}
+const rosterOf = name => roster().find(r => r.name === name);
+const aiWeapon = r => `${r.we ? '+' + r.we + ' ' : ''}${GEAR[WTYPE[r.cls] + r.wt].n}`;
+function refreshBotWeapon(r) {
+  for (const b of R.bots) if (b.name === r.name && b.bm) setWeapons(b.act, b.bm.r, b.bm.l, glowFor(r.we));
+}
+function sayAs(name, msg) { const b = R.bots.find(x => x.name === name && !x.dead); if (b) botSay(b, msg); else log(msg, 'chat', name); }
+// one real enchant attempt by an AI user, same rules and odds as the player's
+function aiEnchant(r) {
+  const bless = r.bew > 0 && (r.we <= 5 || Math.random() < .5);
+  if (bless) r.bew--; else r.ew--;
+  const before = aiWeapon(r);
+  if (r.we < 6) {
+    r.we += bless ? ri(1, 3) : 1;
+  } else if (Math.random() < encOdds(r.we + 1 - 6, bless)) {
+    r.we++;
+  } else {
+    r.we = 0; if (r.wt > 1 && Math.random() < .5) r.wt--;
+    sayAs(r.name, pick([`${before} 증발... ㅠㅠ`, `아 ${before} 날아갔다`, '증발했어요 ㅋㅋ 멘탈...', `${before}... 다시 시작합니다`]));
+    refreshBotWeapon(r); return;
+  }
+  refreshBotWeapon(r);
+  if (r.we >= 7) {
+    log(`${r.name}님이 ${aiWeapon(r)} 강화에 성공했습니다!`, 'ann');
+    if (Math.random() < .5) setTimeout(() => sayAs(r.name, pick(['와 떴다!!', '손 떨려요 ㅋㅋ', `+${r.we} 가즈아`, '오늘 운 좋네요'])), 700);
+  } else if (Math.random() < .25) sayAs(r.name, pick([`+${r.we} 완료`, '안전 강화 끝', '다음은 축복 주문서로 가야지']));
+}
+// AI users keep playing in the background: they level, find scrolls and sometimes a better weapon
+function aiProgress() {
+  const all = roster(), inParty = new Set((S.party || []).map(x => x.name));
+  for (let k = 0; k < 3; k++) {
+    const r = pick(all);
+    if (Math.random() < .08 && r.lv < 55) r.lv++;
+    if (Math.random() < .3) r.ew++;
+    if (Math.random() < .04) r.bew++;
+  }
+  if (Math.random() < .05) {
+    const r = pick(all.filter(x => x.wt < 4 && !inParty.has(x.name)));
+    if (r) {
+      r.wt++; r.we = 0; refreshBotWeapon(r);
+      const z = clamp(1 + Math.floor(r.lv / 12), 1, 4), nm = GEAR[WTYPE[r.cls] + r.wt].n;
+      log(`${r.name}님이 ${ZONES[z].n}에서 ${nm}${J(nm, '을', '를')} 획득했습니다.`, 'ann');
+    }
+  }
+}
 function makeBot(town) {
   const Z = ZONES[S.zone], used = new Set(R.bots.map(b => b.name).concat((S.party || []).map(x => x.name)));
-  let name = pick(BOTN); for (let k = 0; k < 10 && used.has(name); k++) name = pick(BOTN);
-  const cls = pick(['knight', 'knight', 'elf', 'mage']);
-  const lv = town ? ri(5, 45) : ri(Z.blv[0], Z.blv[1]);
+  const free = roster().filter(r => !used.has(r.name));
+  const fit = town ? free : free.filter(r => r.lv >= Z.blv[0] - 3 && r.lv <= Z.blv[1] + 3);
+  const info = pick(fit.length ? fit : free.length ? free : roster());
+  const { name, cls, lv } = info;
   let x, y;
   if (town) { const a = Math.random() * 7, r = rnd(3, 7.5); x = Z.N / 2 + Math.cos(a) * r; y = Z.N / 2 + Math.sin(a) * r; if (blocked(x, y)) { x = Z.N / 2 + 5; y = Z.N / 2 + 1; } }
   else [x, y] = randPos(4);
-  const hp = 20 + lv * 11, e = Math.random() < .25 ? ri(7, 10) : ri(0, 6);
-  const glow = e >= 10 ? '#ffb547' : e >= 9 ? '#c98bff' : e >= 7 ? '#6aa8ff' : null;
+  const hp = 20 + lv * 11, glow = glowFor(info.we);
   const b = { kind: 'b', name, cls, lv, x, y, rot: rnd(0, 6.28), hp, maxHp: hp, moving: false, hurt: 0, target: null, cd: 0,
     wx: x, wy: y, wT: 0, say: '', sayT: 0, dead: false, respT: 0, healCd: 0, telT: rnd(30, 90), town: !!town };
-  b.act = makeActor({ ...botModel(cls), wglow: glow });
+  b.bm = botModel(cls); b.act = makeActor({ ...b.bm, wglow: glow });
   if (town) b.idleAnim = cls === 'elf' ? pick(['Ranged_Bow_Idle', 'Ranged_Bow_Idle', 'Waving']) : pick(['Idle_A', 'Idle_A', 'Idle_B', 'Waving', 'Cheering', 'Sit_Floor_Idle']);
   return b;
 }
@@ -1535,21 +1592,18 @@ function updateBoss() {
       log(`${ZONES[z].n}에 ${nm}${J(nm, '이', '가')} 나타났습니다!`, 'ann');
       if (S.zone === z) { spawnMon(ZONES[z].boss, true); toast(`${nm} 출현!`, 'red'); }
     }
-    if (B.alive && S.zone !== z && R.t - B.since > 300) { B.alive = false; B.next = R.t + 480; log(`${pick(BOTN)}님이 ${nm}${J(nm, '을', '를')} 처치했습니다.`, 'ann'); }
+    if (B.alive && S.zone !== z && R.t - B.since > 300) { B.alive = false; B.next = R.t + 480; log(`${pick(roster().filter(x => x.lv >= MON[ZONES[z].boss].lv - 8).concat(roster()[0])).name}님이 ${nm}${J(nm, '을', '를')} 처치했습니다.`, 'ann'); }
   }
 }
 function botSay(b, msg) { b.say = msg; b.sayT = 3.5; log(msg, 'chat', b.name); }
 function updateChatter(dt) {
   R.chatT -= dt; if (R.chatT > 0) return;
   R.chatT = rnd(10, 26);
+  aiProgress();
   const r = Math.random();
-  if (r < .3) {
-    const e = pick([7, 7, 7, 7, 8, 8, 8, 9, 9, 10]), tier = ri(2, 4);
-    const item = Math.random() < .5 ? GEAR[pick(['sword', 'bow', 'staff']) + tier].n : GEAR[pick(['helm', 'armor', 'gloves', 'boots']) + tier].n;
-    log(`${pick(BOTN)}님이 +${e} ${item} 강화에 성공했습니다!`, 'ann');
-  } else if (r < .38) {
-    const z = ri(2, 4), g = pick(['sword', 'bow', 'staff']) + ri(3, 4);
-    log(`${pick(BOTN)}님이 ${ZONES[z].n}에서 ${GEAR[g].n}${J(GEAR[g].n, '을', '를')} 획득했습니다.`, 'ann');
+  if (r < .4) {
+    const who = roster().filter(x => x.ew + x.bew > 0);
+    if (who.length) aiEnchant(pick(who));
   } else {
     const pb = partyBots().filter(b => !b.dead);
     if (pb.length && Math.random() < .45) { const b = pick(pb), m = pick(PCHAT); b.say = m; b.sayT = 3.5; log(m, 'party', '파티 ' + b.name); return; }
@@ -1729,11 +1783,11 @@ const VIEWS = {
     const mem = partyBots();
     let h = `<div class="sec"><span>파티원 (${mem.length}/${PARTY_MAX})</span></div>`;
     if (!mem.length) h += `<p class="note">아직 파티원이 없어요. 아래 근처 유저를 초대하거나, 화면에서 다른 유저를 눌러 보세요.</p>`;
-    for (const b of mem) h += `<div class="row">${icoHtml('#59c46e', CLS[b.cls].n[0])}<div class="info"><div class="n">${b.name}</div><div class="s">${CLS[b.cls].n} · Lv.${b.lv} · HP ${fmt(Math.max(0, b.hp))}/${fmt(b.maxHp)}${b.dead ? ' · 부활 대기' : ''}</div></div><div class="btns"><button class="btn" data-a="kick" data-v="${b.name}">내보내기</button></div></div>`;
+    for (const b of mem) h += `<div class="row">${icoHtml('#59c46e', CLS[b.cls].n[0])}<div class="info"><div class="n">${b.name}</div><div class="s">${CLS[b.cls].n} · Lv.${b.lv} · ${rosterOf(b.name) ? aiWeapon(rosterOf(b.name)) : ''} · HP ${fmt(Math.max(0, b.hp))}/${fmt(b.maxHp)}${b.dead ? ' · 부활 대기' : ''}</div></div><div class="btns"><button class="btn" data-a="kick" data-v="${b.name}">내보내기</button></div></div>`;
     const near = R.bots.filter(b => !b.party && !b.dead).sort((a, b) => (b.name === R.partyPick) - (a.name === R.partyPick) || dist(a, P) - dist(b, P)).slice(0, 8);
     h += `<div class="sec">근처 유저</div>`;
     if (!near.length) h += `<p class="note">근처에 초대할 유저가 없어요.</p>`;
-    for (const b of near) h += `<div class="row ${b.name === R.partyPick ? 'sel' : ''}">${icoHtml('#6f8fc4', CLS[b.cls].n[0])}<div class="info"><div class="n">${b.name}</div><div class="s">${CLS[b.cls].n} · Lv.${b.lv} · ${Math.round(dist(b, P))}m</div></div><div class="btns"><button class="btn pri" data-a="invite" data-v="${b.name}" ${mem.length >= PARTY_MAX ? 'disabled' : ''}>초대</button></div></div>`;
+    for (const b of near) h += `<div class="row ${b.name === R.partyPick ? 'sel' : ''}">${icoHtml('#6f8fc4', CLS[b.cls].n[0])}<div class="info"><div class="n">${b.name}</div><div class="s">${CLS[b.cls].n} · Lv.${b.lv} · ${rosterOf(b.name) ? aiWeapon(rosterOf(b.name)) : ''} · ${Math.round(dist(b, P))}m</div></div><div class="btns"><button class="btn pri" data-a="invite" data-v="${b.name}" ${mem.length >= PARTY_MAX ? 'disabled' : ''}>초대</button></div></div>`;
     return h + `<p class="note">파티원은 나를 따라다니며 같이 싸우고, 마법사는 체력이 낮을 때 힐을 해줘요. 파티원이 준 피해도 내 몫이라 경험치와 드랍은 모두 내가 받아요. 파티원 레벨은 내 레벨을 따라가고, 순간이동이나 사냥터 이동 때도 함께 와요.</p>`;
   },
   bag() {
