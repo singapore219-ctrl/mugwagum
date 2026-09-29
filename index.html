@@ -1311,6 +1311,16 @@ function aiEnchant(r) {
 // AI users keep playing in the background: they level, find scrolls and sometimes a better weapon
 function aiProgress() {
   const all = roster(), inParty = new Set((S.party || []).map(x => x.name));
+  if (Math.random() < .05) {
+    const a = pick(all), b = pick(all.filter(x => x !== a && Math.abs(x.lv - a.lv) < 12));
+    if (a && b) {
+      const pa = aiDps(a) * (20 + a.lv * 12), pb = aiDps(b) * (20 + b.lv * 12);
+      const [w, l] = Math.random() < pa / (pa + pb) ? [a, b] : [b, a];
+      log(`[PK] ${w.name}님이 ${l.name}님을 처치했습니다.`, 'ann');
+      if (l.ew > 0) { l.ew--; w.ew++; }
+      if (Math.random() < .4) setTimeout(() => sayAs(l.name, pick([`${w.name} 기억한다`, 'PK 당했어요 ㅠㅠ', '복수 간다'])), 900);
+    }
+  }
   if (Math.random() < .12) {
     const r = pick(all), id = rollPoly();
     if (!r.poly || POLY[id] > POLY[r.poly]) r.poly = id;
@@ -1363,6 +1373,7 @@ function enterZone(z) {
   if (!Z.town) {
     for (let k = 0; k < Z.cnt; k++) spawnMon(pick(Z.mons));
     for (let k = 0; k < Z.bots; k++) R.bots.push(makeBot(false));
+    if (S.opts.pkOn !== false && Math.random() < .2) spawnPkAi();
     for (const info of S.party || []) R.bots.push(makePartyBot(info));
     if (Z.boss && R.boss[z] && R.boss[z].alive) {
       const B = R.boss[z], bm = spawnMon(Z.boss, true);
@@ -1517,15 +1528,71 @@ function hitMon(src, m, dmg, sure) {
   if (m.hp <= 0) killMon(m);
 }
 function aggro(m, src) { if (!m.target || m.target.dead || Math.random() < .12) m.target = src; }
+/* ---------- PK ----------
+   A hostile AI user is turned into a monster-like entity so all the chase/attack/aggro code applies.
+   pk: a red-named player killer who hunts the player; victim: an ordinary user the player attacked. */
+const alignOf = () => S.align || 0;
+const nameColor = () => R.t < (P.purpleUntil || 0) ? '#d69bff' : alignOf() < 0 ? '#ff6a5a' : '#f1d58c';
+function hostileFromBot(b, pk) {
+  R.bots = R.bots.filter(x => x !== b);
+  const ro = rosterOf(b.name) || { wt: 2, we: 0 };
+  const lv = b.lv, hp = Math.round(20 + lv * 14 + ro.wt * 20);
+  const st = b.cls === 'elf' ? 'bow' : b.cls === 'mage' ? 'magic' : '1h';
+  const m = { kind: 'm', k: 'pk', d: { n: b.name, lv, s: 1, ag: 1, rg: b.cls === 'knight' ? 0 : 4.6, st, pk, victim: !pk, j: null }, lv, x: b.x, y: b.y, rot: b.rot,
+    hp, maxHp: hp, dmg: lv * .9 + 4 + ro.wt * 3 + ro.we * 1.5, moving: false, slow: false, hurt: 0, target: null, cd: .5, wx: b.x, wy: b.y, wT: 2,
+    dmgBy: { p: 0, b: 0 }, dead: false, fade: 0, boss: false, spd: 2.9, act: b.act, cls: b.cls, pots: pk ? ri(3, 6) : ri(1, 3), healCd: 0, pkAt: R.t };
+  m.act.A = styleAnims(st, false); m.act.curName = '';
+  R.mons.push(m);
+  return m;
+}
+function spawnPkAi() {
+  const inParty = new Set((S.party || []).map(x => x.name)), used = new Set(R.bots.map(b => b.name));
+  const pool = roster().filter(r => !inParty.has(r.name) && !used.has(r.name) && r.lv >= S.lv - 3 && r.lv <= S.lv + 6);
+  const r = pool.length ? pick(pool) : pick(roster().filter(x => !inParty.has(x.name) && !used.has(x.name)));
+  if (!r) return;
+  const b = makeBot(false, r.name); b.lv = Math.max(r.lv, S.lv - 2);
+  const [x, y] = randPos(14); b.x = x; b.y = y;
+  const m = hostileFromBot(b, true);
+  m.pkAt = R.t + rnd(15, 45); // lets the player settle in before the ambush
+}
+function pkAttackBot(name) {
+  const b = R.bots.find(x => x.name === name && !x.party && !x.dead); if (!b) return;
+  if (ZONES[S.zone].town) { toast('마을에서는 공격할 수 없어요'); return; }
+  const m = hostileFromBot(b, false);
+  m.target = P; P.target = m; P.engage = true; P.purpleUntil = R.t + 60;
+  closeSheet(); log(pick(['갑자기 왜 때려요?!', '뭐야 PK야?', '덤벼라!']), 'chat', b.name);
+  log(`${b.name}님을 공격했습니다. 1분간 보라색 이름이 되고, 처치하면 성향이 300 떨어져요.`, 'warn');
+}
+function pkKilled(m) {
+  const ro = rosterOf(m.d.n);
+  if (m.d.pk) {
+    const ad = m.lv * 60; S.adena += ad; ftxt(m, `+${fmt(ad)}`, '#f1d58c', 12, .9);
+    let loot = '';
+    if (ro && ro.ew > 0 && Math.random() < .5) { const n = Math.min(ro.ew, ri(1, 2)); ro.ew -= n; addItem('ew', n); loot = ` · 무기 마법 주문서 ${n}장`; }
+    S.align = Math.min(1000, alignOf() + 150);
+    log(`${S.name}님이 PK 유저 ${m.d.n}님을 처치했습니다!`, 'ann');
+    log(`현상금 ${fmt(ad)} 아데나${loot} 획득 · 성향 +150`, 'loot');
+    setTimeout(() => log(pick(['다음엔 안 봐준다...', '와 세네', '복수하러 온다']), 'chat', m.d.n), 900);
+  } else {
+    const wasRed = alignOf() < 0;
+    S.align = alignOf() - 300; S.pkKills = (S.pkKills || 0) + 1;
+    log(`${S.name}님이 ${m.d.n}님을 처치했습니다. (성향 -300${!wasRed && S.align < 0 ? ', 이름이 빨간색이 됩니다' : ''})`, 'ann');
+    if (ro && ro.ew > 0 && Math.random() < .3) { ro.ew--; addItem('ew', 1); log('무기 마법 주문서 1장 획득', 'loot'); }
+    setTimeout(() => log(pick(['PK 신고합니다 ㅡㅡ', '기억해 두겠습니다', '아 억울해']), 'chat', m.d.n), 900);
+  }
+  if (P.target === m) { P.target = null; if (!R.auto) P.engage = false; }
+  R.dirty = true; save();
+}
 function killMon(m) {
   m.dead = true; m.fade = 2.2; m.hp = 0; m.target = null;
   play(m.act, m.act.A.death, { once: true, speed: 1.1 });
+  if (m.k === 'pk') { if (m.dmgBy.p > 0) pkKilled(m); else if (m.d.pk) log(`PK 유저 ${m.d.n}님이 쓰러졌습니다.`, 'ann'); return; }
   const p = m.dmgBy.p, b = m.dmgBy.b;
   if (p > 0 && !R.dead) {
     let ex = Math.floor(3 + 1.4 * Math.pow(m.lv, 2.1)) * (m.boss ? 30 : 1);
     if (S.lv > m.lv + 10) ex = Math.floor(ex * .3);
     gainExp(Math.max(1, Math.round(ex * (p >= b ? 1 : p / (p + b) * .6))));
-    if (p >= b) { S.kills++; loot(m); }
+    if (p >= b) { S.kills++; loot(m); S.align = Math.min(1000, alignOf() + (alignOf() < 0 ? 5 : 1)); }
     else if (Math.random() < .3) { const bb = R.bots.find(x => !x.dead && Math.hypot(x.x - m.x, x.y - m.y) < 7); if (bb) botSay(bb, pick(['ㅋㅋ 막타 감사요', '앗 제가 먹었네요', '죄송ㅎㅎ'])); }
   }
   if (P.target === m) { P.target = null; if (!R.auto) P.engage = false; }
@@ -1605,7 +1672,7 @@ function monHit(m, t) {
     if (R.dead) return;
     const hc = clamp(.8 - D.def * .012 + (m.lv - S.lv) * .02, .15, .95);
     if (Math.random() > hc || Math.random() < D.dodge) { ftxt(P, 'MISS', '#9fb8ff', 12); return; }
-    hurtPlayer(Math.max(1, Math.round((m.dmg * rnd(.7, 1.2) - D.def * .25) * D.taken)));
+    R.lastHit = m; hurtPlayer(Math.max(1, Math.round((m.dmg * rnd(.7, 1.2) - D.def * .25) * D.taken)));
     fx('hit', P.x, P.y, { col: 0xff6040, dur: .18, r1: .9, h: .9 });
   } else { t.hp -= Math.max(1, m.dmg * rnd(.4, .8)); t.hurt = .14; if (t.hp <= 0) botDie(t); }
 }
@@ -1621,7 +1688,20 @@ function playerDie() {
   const loss = Math.min(S.exp, Math.floor(need(S.lv) * .05));
   S.exp -= loss; S.deaths = (S.deaths || 0) + 1;
   for (const m of R.mons) if (m.target === P) m.target = null;
-  el('deathMsg').textContent = loss > 0 ? `경험치 ${fmt(loss)}(5%)를 잃었습니다. 물약 자동 사용 설정을 확인해 보세요.` : '경험치 손실은 없었습니다.';
+  let extra = '';
+  const k = R.lastHit;
+  if (k && k.k === 'pk' && !k.dead) {
+    S.revenge = k.d.n; extra += ` ${k.d.n}님에게 당했어요.`;
+    log(`${k.d.n}님이 ${S.name}님을 처치했습니다.`, 'ann');
+    setTimeout(() => log(pick(['ㅋㅋ 잘 가요', '다음엔 물약 챙기세요', '여긴 내 사냥터']), 'chat', k.d.n), 800);
+  }
+  if (alignOf() < 0 && Math.random() < .3 && S.gear.length) {
+    const g = pick(S.gear), nm = gname(g);
+    for (const sl of SLOTS) if (S.eq[sl] === g.id) S.eq[sl] = null;
+    S.gear = S.gear.filter(x => x !== g); recalc();
+    extra += ` 성향이 나빠서 ${nm}${J(nm, '을', '를')} 떨어뜨렸어요.`; log(`${nm}${J(nm, '을', '를')} 떨어뜨렸습니다.`, 'warn');
+  }
+  el('deathMsg').textContent = (loss > 0 ? `경험치 ${fmt(loss)}(5%)를 잃었습니다.` : '경험치 손실은 없었습니다.') + extra;
   setTimeout(() => { if (R.dead) el('death').hidden = false; }, 1400);
   closeSheet(); save();
 }
@@ -1776,6 +1856,7 @@ function updatePlayer(dt) {
   const inC = R.t - P.lastCombat < 4;
   S.hp = Math.min(D.maxHp, S.hp + D.hpReg * (inC ? 1 : 3) * dt);
   S.mp = Math.min(D.maxMp, S.mp + D.mpReg * (inC ? 1 : 2.5) * dt);
+  if (R.auto && !Z.town && S.hp < D.maxHp * .35 && cnt('tele') && P.teleCd <= 0 && R.mons.some(m => m.k === 'pk' && !m.dead && m.target === P)) { useTele(); log('PK 유저를 피해 순간이동했습니다.', 'warn'); }
   if (R.auto && !Z.town && S.hp < D.maxHp * .5) { const hs = mySkills().find(k => k.id === 'heal'); if (hs && skReady(hs) && autoOn(hs)) castSkill(hs, null); }
   if (S.opts.pot > 0 && S.hp < D.maxHp * S.opts.pot / 100) { const k = bestPotion(); if (k) useItem(k); }
   if (!Z.town) {
@@ -1858,11 +1939,24 @@ function updateBot(b, dt) {
     moveToward(b, b.wx, b.wy, 2.2 * dt);
   }
 }
+function updatePk(m, dt) {
+  m.healCd -= dt;
+  if (m.d.pk && !m.target && !R.dead && R.t > m.pkAt) {
+    m.target = P;
+    if (!m.warned) { m.warned = true; log(`PK 유저 ${m.d.n}님이 나타났습니다!`, 'warn'); toast(`PK 유저 ${m.d.n} 접근!`, 'red'); setTimeout(() => log(pick(['아이템 두고 가시죠 ㅋㅋ', '사냥터 비켜', '레벨 좀 올랐나 보네?']), 'chat', m.d.n), 600); }
+  }
+  if (m.hp < m.maxHp * .4 && m.pots > 0 && m.healCd <= 0) { m.pots--; m.healCd = 3; m.hp = Math.min(m.maxHp, m.hp + m.maxHp * .3); fx('heal', m.x, m.y, { col: 0x7fe08a, dur: .4, r1: .9 }); }
+  if (m.hp < m.maxHp * .18 && m.pots <= 0 && !m.fled && Math.random() < .5 * dt) {
+    m.fled = true; fx('spark', m.x, m.y, { col: 0xbfe1ff, dur: .6 }); log(pick(['다음에 보자', '물약이 없네... 튄다', 'ㅌㅌ']), 'chat', m.d.n);
+    m.dead = true; m.fade = 0; if (P.target === m) P.target = null;
+  }
+}
 function updateMon(m, dt) {
+  if (m.k === 'pk' && !m.dead) updatePk(m, dt);
   if (m.dead) { m.fade -= dt; if (m.fade < 1) m.sink = -(1 - m.fade) * 1.3; return; }
   m.moving = false; m.slow = false; m.cd -= dt; m.hurt = Math.max(0, m.hurt - dt);
   const t0 = m.target;
-  if (t0 && (t0.dead || (t0 === P && R.dead) || dist(m, t0) > 13)) m.target = null;
+  if (t0 && (t0.dead || (t0 === P && R.dead) || (m.k !== 'pk' && dist(m, t0) > 13))) m.target = null;
   if (!m.target && m.d.ag) {
     if (!R.dead && dist(m, P) < 3.5) m.target = P;
     else if (Math.random() < dt * .5) { const b = R.bots.find(b => !b.dead && dist(b, m) < 3); if (b) m.target = b; }
@@ -2041,7 +2135,7 @@ function drawOverlay() {
   for (const m of R.mons) {
     if (m.dead || !m.act.root.visible) continue;
     const p = toScreen(m.x, m.act.h + .25, m.y); if (!p) continue;
-    label(c, p[0], p[1] - 6, m.d.n, m.boss ? '#ff8a6a' : m.d.ag ? '#ffcfb8' : '#ece4d0', m.boss ? 13 : 10.5, m.boss);
+    label(c, p[0], p[1] - 6, m.d.pk ? '[PK] ' + m.d.n : m.d.n, m.d.pk ? '#ff4a3a' : m.d.victim ? '#c9a0ff' : m.boss ? '#ff8a6a' : m.d.ag ? '#ffcfb8' : '#ece4d0', m.boss || m.k === 'pk' ? 12 : 10.5, m.boss || m.k === 'pk');
     if (m.hp < m.maxHp || P.target === m) {
       const w = m.boss ? 80 : 38; c.fillStyle = 'rgba(0,0,0,.7)'; c.fillRect(p[0] - w / 2 - 1, p[1] - 2, w + 2, 5);
       c.fillStyle = '#d8402f'; c.fillRect(p[0] - w / 2, p[1] - 1, w * Math.max(0, m.hp / m.maxHp), 3);
@@ -2054,7 +2148,7 @@ function drawOverlay() {
     if (b.sayT > 0 && b.say) bubble(c, p[0], p[1] - 14, b.say);
   }
   for (const n of R.npcs) { const p = toScreen(n.x, n.act.h + .3, n.y); if (p) label(c, p[0], p[1], n.name, '#f1d58c', 11.5, true); }
-  const pp = toScreen(P.x, P.act.h + .25, P.y); if (pp) label(c, pp[0], pp[1], S.name, '#f1d58c', 11.5, true);
+  const pp = toScreen(P.x, P.act.h + .25, P.y); if (pp) label(c, pp[0], pp[1], S.name, nameColor(), 11.5, true);
   for (const tx of R.txt) {
     const pr = tx.t / tx.dur, p = toScreen(tx.x, tx.h + pr * .9, tx.y); if (!p) continue;
     c.globalAlpha = pr < .7 ? 1 : 1 - (pr - .7) / .3;
@@ -2165,7 +2259,7 @@ const VIEWS = {
     const near = R.bots.filter(b => !b.party && !b.dead).sort((a, b) => (b.name === R.partyPick) - (a.name === R.partyPick) || dist(a, P) - dist(b, P)).slice(0, 8);
     h += `<div class="sec">근처 유저</div>`;
     if (!near.length) h += `<p class="note">근처에 초대할 유저가 없어요.</p>`;
-    for (const b of near) h += `<div class="row ${b.name === R.partyPick ? 'sel' : ''}">${icoHtml('#6f8fc4', CLS[b.cls].n[0])}<div class="info"><div class="n">${b.name}</div><div class="s">${CLS[b.cls].n} · Lv.${b.lv} · ${rosterOf(b.name) ? aiWeapon(rosterOf(b.name)) : ''} · ${Math.round(dist(b, P))}m</div></div><div class="btns"><button class="btn pri" data-a="invite" data-v="${b.name}" ${mem.length >= PARTY_MAX ? 'disabled' : ''}>초대</button></div></div>`;
+    for (const b of near) h += `<div class="row ${b.name === R.partyPick ? 'sel' : ''}">${icoHtml('#6f8fc4', CLS[b.cls].n[0])}<div class="info"><div class="n">${b.name}</div><div class="s">${CLS[b.cls].n} · Lv.${b.lv} · ${rosterOf(b.name) ? aiWeapon(rosterOf(b.name)) : ''} · ${Math.round(dist(b, P))}m</div></div><div class="btns"><button class="btn pri" data-a="invite" data-v="${b.name}" ${mem.length >= PARTY_MAX ? 'disabled' : ''}>초대</button>${ZONES[S.zone].town ? '' : `<button class="btn danger" data-a="pkattack" data-v="${b.name}">공격</button>`}</div></div>`;
     return h + `<p class="note">파티원은 나를 따라다니며 같이 싸우고, 마법사는 체력이 낮을 때 힐을 해줘요. 파티원이 준 피해도 내 몫이라 경험치와 드랍은 모두 내가 받아요. 파티원 레벨은 내 레벨을 따라가고, 순간이동이나 사냥터 이동 때도 함께 와요.</p>`;
   },
   bag() {
@@ -2239,6 +2333,7 @@ const VIEWS = {
       <div><span>공격력</span><b>${D.wmin}-${D.wmax}${D.wbonus ? ' +' + D.wbonus : ''}</b></div><div><span>레벨 보정</span><b>+${S.cls === 'mage' ? Math.floor(S.lv * 1.1) + 3 : Math.floor(S.lv * .8) + 2}</b></div>
       <div><span>공격 속도</span><b>${(1 / D.aspd).toFixed(2)}/초</b></div><div><span>이동 속도</span><b>${D.haste ? '빠름' : '보통'}</b></div>
       <div><span>처치 수</span><b>${fmt(S.kills)}</b></div><div><span>최고 강화</span><b>${S.best ? '+' + S.best : '-'}</b></div>
+      <div><span>성향</span><b style="color:${alignOf() < 0 ? 'var(--bad)' : 'var(--good)'}">${alignOf()}</b></div><div><span>PK 처치</span><b>${S.pkKills || 0}회</b></div>
       <div><span>사망</span><b>${S.deaths || 0}회</b></div><div><span>아데나</span><b>${fmt(S.adena)}</b></div></div>
       <div class="sec">스킬</div>${mySkills().map(k => `<div class="row" style="${S.lv < k.lv ? 'opacity:.5' : ''}"><span class="ico" style="background:#d8ae4f">${k.n[0]}</span><div class="info"><div class="n">${k.n}${S.lv < k.lv ? `<span class="tag">Lv.${k.lv}</span>` : ''}</div><div class="s">${k.desc} · MP ${skCost(k)} · 재사용 ${k.cd}초</div></div></div>`).join('')}
       <div class="sec">사냥터 안내</div>
@@ -2251,7 +2346,7 @@ const VIEWS = {
       <div class="sec">자동 사냥 때 쓸 스킬 <span style="font-weight:500">스킬 버튼을 길게 눌러도 바뀌어요</span></div>
       ${mySkills().map(k => `<div class="set"><span>${k.n}${S.lv < k.lv ? ` <span class="tag">Lv.${k.lv}</span>` : ''}</span><button class="tog ${autoOn(k) ? 'on' : ''}" data-a="skauto" data-v="${k.id}" aria-pressed="${autoOn(k)}"></button></div>`).join('')}
       <div class="sec">자동 기능</div>
-      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자 끄기)')}
+      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자 끄기)')}<div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
       <div class="set"><span>카메라 거리 <b id="camzv" style="color:var(--gold2)">${Math.round(camOpt().z * 100)}%</b></span><input type="range" id="camz" min="50" max="180" step="5" value="${Math.round(camOpt().z * 100)}"></div>
       <div class="set"><span>카메라 각도 <b id="campv" style="color:var(--gold2)">${Math.round(camOpt().pitch)}°</b></span><input type="range" id="camp" min="30" max="82" step="1" value="${Math.round(camOpt().pitch)}"></div>
       <div class="set"><span>시점 회전·거리·각도</span><button class="btn" data-a="camreset">기본값으로</button></div>
@@ -2385,6 +2480,8 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'buyg' && town) { const p = gearPrice(v); if (S.adena < p) return; S.adena -= p; addGear(v); log(`${GEAR[v].n} 구입`, 'sys'); }
   else if (a === 'tele' && town) { const z = ZONES[+v]; if (S.adena < z.cost) return; S.adena -= z.cost; closeSheet(); enterZone(+v); return; }
   else if (a === 'equipbest') { equipBest(); }
+  else if (a === 'pktog') { S.opts.pkOn = S.opts.pkOn === false; }
+  else if (a === 'pkattack') { pkAttackBot(v); return; }
   else if (a === 'invite') { inviteBot(R.bots.find(b => b.name === v && !b.party)); }
   else if (a === 'kick') { kickBot(v); }
   else if (a === 'encpick') { R.encSel = +v; R.encRes = null; }
