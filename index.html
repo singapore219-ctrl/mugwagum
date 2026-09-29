@@ -388,6 +388,11 @@ const MON = {
   berserk: { n: '광전사', lv: 38, m: 'Barbarian', tint: '#d07a6a', s: 1.12, r: 'axe_2handed', st: '2h', ag: 1, j: ['피 묻은 도끼날', 220] },
   warlock: { n: '흑마법사', lv: 42, m: 'Mage', tint: '#8a70b0', s: 1, r: 'staff', st: 'magic', rg: 4.6, ag: 1, j: ['저주받은 마도서', 260] },
   assassin: { n: '그림자 암살자', lv: 46, m: 'Rogue_Hooded', tint: '#5a5a70', s: 1.02, r: 'dagger', l: 'dagger', st: '1h', ag: 1, j: ['그림자 단검', 320] },
+  iceskel: { n: '서리 해골', lv: 48, m: 'Skeleton_Warrior', tint: '#9fd4ff', s: 1.05, r: 'Skeleton_Axe', l: 'Skeleton_Shield_Large_A', st: '1h', sk: 1, ag: 1, j: ['얼어붙은 뼈', 380] },
+  icearcher: { n: '빙결 석궁병', lv: 50, m: 'Skeleton_Rogue', tint: '#a8dcff', s: 1.05, r: 'Skeleton_Crossbow', st: 'xbow', rg: 4.6, sk: 1, ag: 1, j: ['빙결 화살촉', 420] },
+  frostmage: { n: '서리 마녀', lv: 53, m: 'Mage', tint: '#bfe4ff', s: 1.05, r: 'staff', l: 'spellbook_open', st: 'magic', rg: 4.8, ag: 1, glow: '#4aa8ff', j: ['서리 결정', 480] },
+  yeti: { n: '설인', lv: 56, m: 'Barbarian', tint: '#f2f7ff', s: 1.4, r: 'axe_2handed', st: '2h', ag: 1, j: ['설인의 털가죽', 560] },
+  frostlord: { n: '서리 군주', lv: 64, m: 'Knight', tint: '#8fc8ff', s: 2.2, r: 'sword_2handed_color', st: '2h', ag: 1, boss: 1, glow: '#4aa8ff', j: ['서리 군주의 왕관', 9000] },
   lord: { n: '화염의 군주', lv: 54, m: 'Barbarian', tint: '#ff7a50', s: 2.1, r: 'axe_2handed', st: '2h', ag: 1, boss: 1, glow: '#ff5a20', j: ['군주의 심장', 6000] },
 };
 for (const k in MON) ITEMS['j_' + k] = { n: MON[k].j[0], sell: MON[k].j[1], junk: 1, ic: ['#7a6548', '잡'] };
@@ -400,7 +405,8 @@ const ZONES = [
   { n: '푸른 초원', N: 44, lv: '1~12', cost: 0, mons: ['goblin', 'bandit', 'gshaman', 'scout'], cnt: 30, bots: 7, tier: 1, blv: [3, 14], sky: 0xa8cbe0, fog: [0xa8cbe0, 24, 50] },
   { n: '오크 숲', N: 44, lv: '12~22', cost: 150, mons: ['orcw', 'orca', 'orcshaman', 'orcchief'], cnt: 30, bots: 6, tier: 2, blv: [12, 24], sky: 0x6f8a6a, fog: [0x6f8a6a, 20, 44] },
   { n: '망자의 던전', N: 40, lv: '22~32', cost: 400, mons: ['skmin', 'skel', 'skela', 'skmage'], cnt: 28, bots: 5, tier: 3, boss: 'fallen', blv: [22, 34], sky: 0x0c0c16, fog: [0x0c0c16, 15, 34] },
-  { n: '타락한 요새', N: 44, lv: '32~', cost: 900, mons: ['dknight', 'berserk', 'warlock', 'assassin'], cnt: 28, bots: 4, tier: 3, boss: 'lord', blv: [32, 50], sky: 0x3a1a14, fog: [0x3a1a14, 18, 42] },
+  { n: '타락한 요새', N: 44, lv: '32~44', cost: 900, mons: ['dknight', 'berserk', 'warlock', 'assassin'], cnt: 28, bots: 4, tier: 3, boss: 'lord', blv: [32, 46], sky: 0x3a1a14, fog: [0x3a1a14, 18, 42] },
+  { n: '서리 설원', N: 44, lv: '44~', cost: 1500, mons: ['iceskel', 'icearcher', 'frostmage', 'yeti'], cnt: 28, bots: 4, tier: 4, boss: 'frostlord', blv: [42, 58], sky: 0xc9dcea, fog: [0xc9dcea, 20, 46] },
 ];
 const BOTN = ['검은늑대', '린저씨', '아침사냥꾼', '만렙가즈아', '강화의신', '증발장인', '물약도둑', '초보에요', '오크킬러', '달빛요정', '불꽃법사',
   '무과금전사2', '쌀먹', '레어헌터', '은하수', '하늘바라기', '새벽기사', '용사김씨', '막타전문', '자동사냥중', '고독한궁수', '빨물충전',
@@ -719,6 +725,7 @@ function tileHSL(z, i, j, N, r) {
   if (z === 1) return n > .66 ? [36, 34, 44 + r * 5, 'dirt'] : [92 + n2 * 14, 48, 40 + n * 9 + r * 3, 'grass'];
   if (z === 2) return n > .7 ? [30, 28, 30 + r * 4, 'dirt'] : [100 + n2 * 12, 38, 28 + n * 7 + r * 3, 'grass'];
   if (z === 3) return [228, 10, 22 + r * 5 + ((i + j) % 2) * 3 - n * 4, 'stone'];
+  if (z === 5) return n > .72 ? [200, 40, 72 + r * 5, 'ice'] : [210, 22, 84 + r * 6 - n * 7, 'snow'];
   return [14 + n2 * 8, 30, 22 + n * 8 + r * 4, 'rock'];
 }
 function groundTexture(z, N) {
@@ -729,6 +736,11 @@ function groundTexture(z, N) {
     if (kind === 'stone') { g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 1.5; g.strokeRect(x + .75, y + .75, T - 1.5, T - 1.5); g.fillStyle = 'rgba(255,255,255,.05)'; g.fillRect(x + 2, y + 2, T - 4, 4); }
     if (kind === 'grass') for (let k = 0; k < 5; k++) { g.fillStyle = `hsla(${h + rnd(-8, 8)},${s}%,${l + rnd(-7, 7)}%,.9)`; g.fillRect(x + rnd(0, T), y + rnd(0, T), 2, 3); }
     if (kind === 'dirt' || kind === 'rock') for (let k = 0; k < 3; k++) { g.fillStyle = 'rgba(0,0,0,.14)'; g.beginPath(); g.arc(x + rnd(0, T), y + rnd(0, T), rnd(1, 2.5), 0, 7); g.fill(); }
+  }
+  if (z === 5) { // snow drifts and cracks in the ice
+    for (let k = 0; k < 140; k++) { g.fillStyle = `rgba(255,255,255,${.25 + rng() * .35})`; g.beginPath(); g.ellipse(rng() * N * T, rng() * N * T, 6 + rng() * 22, 3 + rng() * 8, rng() * 3, 0, 7); g.fill(); }
+    g.strokeStyle = 'rgba(90,140,190,.35)'; g.lineWidth = 1.5;
+    for (let k = 0; k < 40; k++) { g.beginPath(); let x = rng() * N * T, y = rng() * N * T; g.moveTo(x, y); for (let q = 0; q < 4; q++) { x += rnd(-18, 18); y += rnd(-18, 18); g.lineTo(x, y); } g.stroke(); }
   }
   if (z === 4) {
     g.strokeStyle = '#ff8a2a'; g.lineWidth = 3; g.shadowColor = '#ff5a00'; g.shadowBlur = 12;
@@ -747,14 +759,14 @@ function buildZone(z) {
     scene.remove(zoneGroup);
     zoneGroup.traverse(o => { if (o.userData.own) { o.geometry && o.geometry.dispose(); if (o.material) { o.material.map && o.material.map.userData.own && o.material.map.dispose(); o.material.dispose(); } } });
   }
-  R.torches = null; R.water = null;
+  R.torches = null; R.water = null; R.snow = null;
   zoneGroup = new THREE.Group(); scene.add(zoneGroup);
   const Z = ZONES[z], N = Z.N, rng = mulberry(z * 991 + 7);
   scene.background = new THREE.Color(Z.sky);
   scene.fog = new THREE.Fog(Z.fog[0], Z.fog[1], Z.fog[2]); fogZ = -1;
-  const LIGHT = [[.7, 1.45, 0xfff0d8], [.7, 1.5, 0xfff4e0], [.6, 1.15, 0xe8ffd8], [.35, .45, 0x8fa0ff], [.5, 1, 0xffa070]][z];
+  const LIGHT = [[.7, 1.45, 0xfff0d8], [.7, 1.5, 0xfff4e0], [.6, 1.15, 0xe8ffd8], [.35, .45, 0x8fa0ff], [.5, 1, 0xffa070], [.75, 1.15, 0xe2f0ff]][z];
   hemi.intensity = LIGHT[0]; sun.intensity = LIGHT[1]; sun.color.set(LIGHT[2]);
-  hemi.groundColor.set(z === 3 ? 0x1a1a2a : z === 4 ? 0x3a1a10 : 0x4a3a28);
+  hemi.groundColor.set(z === 3 ? 0x1a1a2a : z === 4 ? 0x3a1a10 : z === 5 ? 0x6a8098 : 0x4a3a28);
   playerLight.intensity = z === 3 ? 2.2 : z === 4 ? .8 : 0;
   const own = o => { o.userData.own = true; return o; };
   const gm = own(new THREE.Mesh(new THREE.PlaneGeometry(N, N), new THREE.MeshStandardMaterial({ map: groundTexture(z, N), roughness: .95 })));
@@ -842,6 +854,21 @@ function buildZone(z) {
       f.position.set(x, 1.6, y); f.scale.set(.9, 1.2, 1); zoneGroup.add(f); R.torches.push(f);
     }
     scatter(ROCKS, 20, .3, .7, 0); natTint = new THREE.Color(0x8a8aa0);
+  } else if (z === 5) {
+    scatter(PINES, 34, 2.4, 3.3, .5); scatter(BARE, 20, 2.2, 3, .45); scatter(PINES, 80, 2.8, 3.6, 0, true); scatter(ROCKS, 26, .5, 1.4, .5);
+    natTint = new THREE.Color(0xd8ecff);
+    const iceM = new THREE.MeshStandardMaterial({ color: 0xa8d8ff, roughness: .15, metalness: .1, transparent: true, opacity: .85 });
+    for (let k = 0; k < 14; k++) {
+      const h = 1 + rng() * 1.8, m = own(new THREE.Mesh(new THREE.ConeGeometry(.25 + rng() * .3, h, 5), iceM));
+      const x = 3 + rng() * (N - 6), y = 3 + rng() * (N - 6); m.position.set(x, h / 2, y); m.rotation.set(rnd(-.2, .2), rng() * 6, rnd(-.2, .2)); m.castShadow = true; zoneGroup.add(m);
+      solids.push({ c: [x, y, .4] });
+    }
+    // falling snow around the camera
+    const n = 700, pos = new Float32Array(n * 3);
+    for (let k = 0; k < n; k++) { pos[k * 3] = rnd(-14, 14); pos[k * 3 + 1] = rnd(0, 14); pos[k * 3 + 2] = rnd(-14, 14); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    R.snow = own(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: .09, transparent: true, opacity: .85, depthWrite: false })));
+    zoneGroup.add(R.snow);
   } else {
     scatter(BARE, 30, 2.2, 3, .45); scatter(BARE, 70, 2.5, 3.3, 0, true); scatter(ROCKS, 40, .5, 1.6, .55);
     natTint = new THREE.Color(0xb07060);
@@ -1044,11 +1071,11 @@ function aiProgress() {
     }
   }
 }
-function makeBot(town) {
+function makeBot(town, forceName) {
   const Z = ZONES[S.zone], used = new Set(R.bots.map(b => b.name).concat((S.party || []).map(x => x.name)));
   const free = roster().filter(r => !used.has(r.name));
   const fit = town ? free : free.filter(r => r.lv >= Z.blv[0] - 3 && r.lv <= Z.blv[1] + 3);
-  const info = pick(fit.length ? fit : free.length ? free : roster());
+  const info = (forceName && rosterOf(forceName)) || pick(fit.length ? fit : free.length ? free : roster());
   const { name, cls, lv } = info;
   let x, y;
   if (town) { const a = Math.random() * 7, r = rnd(3, 7.5); x = Z.N / 2 + Math.cos(a) * r; y = Z.N / 2 + Math.sin(a) * r; if (blocked(x, y)) { x = Z.N / 2 + 5; y = Z.N / 2 + 1; } }
@@ -1067,6 +1094,7 @@ function clearEntities() {
   R.mons = []; R.bots = []; R.npcs = []; R.proj = []; R.fx = []; R.txt = []; R.resp = [];
 }
 function enterZone(z) {
+  for (const m of R.mons) if (m.boss && !m.dead && R.boss[S.zone]) R.boss[S.zone].hpFrac = m.hp / m.maxHp;
   S.zone = z; const Z = ZONES[z];
   clearEntities(); buildZone(z);
   P.target = null; P.engage = false; P.moveTo = null; R.recallAt = 0; P.sink = 0;
@@ -1076,7 +1104,17 @@ function enterZone(z) {
     for (let k = 0; k < Z.cnt; k++) spawnMon(pick(Z.mons));
     for (let k = 0; k < Z.bots; k++) R.bots.push(makeBot(false));
     for (const info of S.party || []) R.bots.push(makePartyBot(info));
-    if (Z.boss && R.boss[z] && R.boss[z].alive) spawnMon(Z.boss, true);
+    if (Z.boss && R.boss[z] && R.boss[z].alive) {
+      const B = R.boss[z], bm = spawnMon(Z.boss, true);
+      bm.hp = Math.max(1, Math.round(bm.maxHp * (B.hpFrac || 1)));
+      if (B.raid) {
+        for (const name of B.raid.members) {
+          const bot = R.bots.find(b => b.name === name) || (() => { const nb = makeBot(false, name); R.bots.push(nb); return nb; })();
+          bot.x = bm.x + rnd(-2.5, 2.5); bot.y = bm.y + rnd(-2.5, 2.5); bot.target = bm;
+        }
+        B.raid = null;
+      }
+    }
   } else {
     for (const info of S.party || []) R.bots.push(makePartyBot(info));
     for (let k = 0; k < 7; k++) R.bots.push(makeBot(true));
@@ -1211,6 +1249,7 @@ function hitMon(src, m, dmg, sure) {
   if (isP && Math.random() < .06) { dmg *= 1.6; crit = true; }
   dmg = Math.max(1, Math.round(dmg));
   m.hp -= dmg; m.hurt = .14; m.dmgBy[isP || isParty ? 'p' : 'b'] += dmg;
+  if (!isP && !isParty && src.name) { m.byName = m.byName || {}; m.byName[src.name] = (m.byName[src.name] || 0) + dmg; }
   if (isP) { ftxt(m, fmt(dmg), crit ? '#ffd166' : '#ffffff', crit ? 19 : 15); P.lastCombat = R.t; fx('hit', m.x, m.y, { col: crit ? 0xffd070 : 0xffffff, dur: .18, r1: crit ? 1.4 : .9, h: m.act.h * .6 }); }
   else if (isParty) ftxt(m, fmt(dmg), '#9fe8b4', 12);
   else if (Math.hypot(m.x - P.x, m.y - P.y) < 9) ftxt(m, fmt(dmg), 'rgba(230,230,230,.55)', 11);
@@ -1232,8 +1271,12 @@ function killMon(m) {
   if (P.target === m) { P.target = null; if (!R.auto) P.engage = false; }
   for (const bt of R.bots) if (bt.target === m) bt.target = null;
   if (m.boss) {
-    const B = R.boss[S.zone]; B.alive = false; B.next = R.t + 480;
-    log(p >= b ? `${S.name}님이 ${m.d.n}${J(m.d.n, '을', '를')} 처치했습니다!` : `${m.d.n}${J(m.d.n, '이', '가')} 쓰러졌습니다.`, 'ann');
+    const B = R.boss[S.zone]; B.alive = false; B.next = R.t + 480; B.hpFrac = 1; B.raid = null;
+    if (p >= b) log(`${S.name}님이 ${m.d.n}${J(m.d.n, '을', '를')} 처치했습니다!`, 'ann');
+    else {
+      const top = m.byName && rosterOf(Object.entries(m.byName).sort((x, y) => y[1] - x[1])[0][0]);
+      if (top) rewardBossKill(top, m.d.n); else log(`${m.d.n}${J(m.d.n, '이', '가')} 쓰러졌습니다.`, 'ann');
+    }
   } else R.resp.push({ k: m.k, t: R.t + rnd(4, 10) });
 }
 function gainExp(n) {
@@ -1583,17 +1626,66 @@ function updateMon(m, dt) {
     if (m.hp < m.maxHp) { m.hp = Math.min(m.maxHp, m.hp + m.maxHp * .05 * dt); if (m.hp >= m.maxHp) m.dmgBy = { p: 0, b: 0 }; }
   }
 }
-function updateBoss() {
-  for (let z = 3; z <= 4; z++) {
-    const B = R.boss[z] || (R.boss[z] = { alive: false, next: R.t + (z === 3 ? 180 : 300), since: 0 });
-    const nm = MON[ZONES[z].boss].n;
-    if (!B.alive && R.t >= B.next) {
-      B.alive = true; B.since = R.t;
-      log(`${ZONES[z].n}에 ${nm}${J(nm, '이', '가')} 나타났습니다!`, 'ann');
-      if (S.zone === z) { spawnMon(ZONES[z].boss, true); toast(`${nm} 출현!`, 'red'); }
-    }
-    if (B.alive && S.zone !== z && R.t - B.since > 300) { B.alive = false; B.next = R.t + 480; log(`${pick(roster().filter(x => x.lv >= MON[ZONES[z].boss].lv - 8).concat(roster()[0])).name}님이 ${nm}${J(nm, '을', '를')} 처치했습니다.`, 'ann'); }
+/* ---------- boss raids by AI users ----------
+   While the player is elsewhere, a group of AI users that is strong enough fights the boss second by
+   second: their damage comes from their level, weapon tier and enchant, and the boss can kill them. */
+const bossHp = d => Math.floor(14 + d.lv * 6 + d.lv * d.lv * .6) * 25;
+const aiDps = r => (r.lv * .85 + 4 + r.wt * 3 + r.we * 1.5) / 1.1;
+function rewardBossKill(r, bossName) {
+  r.ew += 2; if (Math.random() < .35) r.bew++;
+  log(`${r.name}님이 ${bossName}${J(bossName, '을', '를')} 처치했습니다!`, 'ann');
+  if (r.wt < 4 && Math.random() < .5) {
+    r.wt++; r.we = 0; refreshBotWeapon(r);
+    const nm = GEAR[WTYPE[r.cls] + r.wt].n;
+    setTimeout(() => log(`${r.name}님이 ${bossName}에게서 ${nm}${J(nm, '을', '를')} 획득했습니다.`, 'ann'), 1200);
   }
+}
+function updateBoss(dt) {
+  ZONES.forEach((Z, z) => {
+    if (!Z.boss) return;
+    const B = R.boss[z] || (R.boss[z] = { alive: false, next: R.t + 120 + z * 60, since: 0, raid: null });
+    const d = MON[Z.boss], nm = d.n;
+    if (!B.alive && R.t >= B.next) {
+      B.alive = true; B.since = R.t; B.hpFrac = 1; B.raid = null; B.formAt = R.t + rnd(40, 110);
+      log(`${Z.n}에 ${nm}${J(nm, '이', '가')} 나타났습니다!`, 'ann');
+      if (S.zone === z) { spawnMon(Z.boss, true); toast(`${nm} 출현!`, 'red'); }
+    }
+    if (!B.alive || S.zone === z) return;
+    if (!B.raid && R.t >= B.formAt) {
+      const inParty = new Set((S.party || []).map(x => x.name));
+      const ok = roster().filter(r => r.lv >= d.lv - 12 && !inParty.has(r.name)).sort(() => Math.random() - .5).slice(0, ri(3, 5));
+      if (ok.length < 2) { B.formAt = R.t + 90; return; }
+      B.raid = { members: ok.map(r => r.name), dmg: {}, hp: bossHp(d) * B.hpFrac, max: bossHp(d), acc: 0 };
+      log(`${ok[0].name}님 일행 ${ok.length}명이 ${nm}에게 도전합니다.`, 'ann');
+      if (Math.random() < .6) sayAs(ok[0].name, pick([`${nm} 잡으러 갑니다`, '보스 트라이 들어가요', '다들 물약 챙기세요']));
+      return;
+    }
+    const raid = B.raid; if (!raid) return;
+    raid.acc += dt; if (raid.acc < 1) return; raid.acc -= 1;
+    const alive = raid.members.map(rosterOf).filter(Boolean);
+    for (const r of alive) { const h = aiDps(r) * rnd(.7, 1.3); raid.hp -= h; raid.dmg[r.name] = (raid.dmg[r.name] || 0) + h; }
+    B.hpFrac = Math.max(0, raid.hp / raid.max);
+    if (raid.hp <= 0) {
+      const top = rosterOf(Object.entries(raid.dmg).sort((a, b) => b[1] - a[1])[0][0]);
+      for (const r of alive) if (r !== top) r.ew++;
+      rewardBossKill(top, nm);
+      B.alive = false; B.next = R.t + 480; B.raid = null; B.hpFrac = 1;
+      return;
+    }
+    // the boss hits back; weaker members fall first
+    const bossDps = (1.5 + d.lv * 1.05) * 2.1 / 1.3;
+    for (const r of alive.slice()) {
+      const hp = 20 + r.lv * 12, risk = bossDps / (hp * 9) * (1 + Math.max(0, d.lv - r.lv) * .08);
+      if (Math.random() < risk) {
+        raid.members = raid.members.filter(n => n !== r.name);
+        if (Math.random() < .6) sayAs(r.name, pick([`${nm} 너무 세다...`, '보스한테 죽었어요 ㅠㅠ', '저 먼저 누워요']));
+      }
+    }
+    if (!raid.members.length) {
+      log(`${nm}에게 도전한 일행이 전멸했습니다. (보스 남은 체력 ${Math.round(B.hpFrac * 100)}%)`, 'ann');
+      B.raid = null; B.formAt = R.t + rnd(90, 180);
+    }
+  });
 }
 function botSay(b, msg) { b.say = msg; b.sayT = 3.5; log(msg, 'chat', b.name); }
 function updateChatter(dt) {
@@ -1631,13 +1723,19 @@ function update(dt) {
   for (let i = R.mons.length - 1; i >= 0; i--) if (R.mons[i].dead && R.mons[i].fade <= 0) { killActor(R.mons[i].act); R.mons.splice(i, 1); }
   updateProj(dt); updateFx(dt);
   for (let i = R.resp.length - 1; i >= 0; i--) if (R.t >= R.resp[i].t) { spawnMon(R.resp[i].k); R.resp.splice(i, 1); }
-  updateBoss(); updateChatter(dt);
+  updateBoss(dt); updateChatter(dt);
   stepActor(P, dt, true);
   const C = camState(), vr = 13 + 16 * C.z;
   const near = e => Math.hypot(e.x - P.x, e.y - P.y) < vr;
   for (const e of R.mons) stepActor(e, dt, near(e));
   for (const e of R.bots) stepActor(e, dt, near(e) && !(e.dead && e.fade <= 0));
   for (const e of R.npcs) stepActor(e, dt, near(e));
+  if (R.snow) {
+    R.snow.position.set(P.x, 0, P.y);
+    const a = R.snow.geometry.attributes.position, v = a.array;
+    for (let k = 0; k < v.length; k += 3) { v[k + 1] -= dt * (1.2 + (k % 7) * .12); v[k] += Math.sin(R.t + k) * dt * .2; if (v[k + 1] < 0) v[k + 1] += 14; }
+    a.needsUpdate = true;
+  }
   if (R.torches) for (const f of R.torches) { const s = .9 + Math.sin(R.t * 13 + f.position.x) * .08; f.scale.set(s, s * 1.3, 1); }
   const k = camSnap ? 1 : Math.min(1, dt * 8);
   camLook.lerp(TMP.set(P.x, .6, P.y), k);
