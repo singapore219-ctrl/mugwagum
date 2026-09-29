@@ -145,6 +145,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
 .row .s{font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums}
 .row .btns{display:flex;gap:6px;flex:none}
 .row.sel{background:rgba(216,174,79,.1);margin:0 -8px;padding:8px}
+.tag.up{background:rgba(127,198,130,.22);color:#9ff0b8}
+.row.up{background:linear-gradient(90deg,rgba(127,198,130,.12),transparent 70%);margin:0 -8px;padding:8px}
+.eqs{cursor:default}
+.mbtn{position:relative}
+.mbtn.alert::after{content:"";position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:#7fc682;box-shadow:0 0 6px #7fc682}
 .tag{font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(216,174,79,.18);color:var(--gold2);margin-left:5px;vertical-align:1px;font-weight:500}
 .ico{width:34px;height:34px;flex:none;border-radius:7px;display:grid;place-items:center;font-weight:700;font-size:13px;color:#1a140c;
   border:1px solid rgba(255,255,255,.18);box-shadow:inset 0 -6px 10px rgba(0,0,0,.25)}
@@ -1673,6 +1678,7 @@ function hud() {
   if (pc < 10 && !ZONES[S.zone].town) b += `<span class="chip warn">물약 부족</span>`;
   if (camChanged()) b += `<button class="chip cam" data-cam="reset">시점 초기화</button>`;
   if (el('buffs').innerHTML !== b) el('buffs').innerHTML = b;
+  $('[data-open=bag]').classList.toggle('alert', S.gear.some(g => upgradeDelta(g) > 0));
   const ph = partyBots().map(m => `<div class="pm${m.dead ? ' dead' : ''}"><b>♦ ${m.name} <span style="color:var(--dim)">${CLS[m.cls].n}</span></b><i style="--w:${Math.max(0, m.hp / m.maxHp * 100)}%"></i></div>`).join('');
   if (el('party').innerHTML !== ph) el('party').innerHTML = ph;
   if ((R.dirty || R.sheet === 'party') && R.sheet && !R.encBusy && R.sheet !== 'set') renderSheet();
@@ -1694,6 +1700,28 @@ function renderSheet() {
   el('sheetTitle').textContent = TITLES[R.sheet]; body.innerHTML = VIEWS[R.sheet](); body.scrollTop = st;
 }
 const sortedGear = () => S.gear.slice().sort((a, b) => (isEq(b.id) - isEq(a.id)) || (GEAR[b.b].tier - GEAR[a.b].tier) || (b.e - a.e));
+// how good a piece is in its slot: average weapon damage incl. enchant bonus, or armor defense incl. enchant bonus
+function gearScore(g) {
+  const b = GEAR[g.b];
+  return b.slot === 'weapon' ? (b.min + b.max) / 2 + g.e + Math.max(0, g.e - 6) : b.def + g.e + Math.max(0, g.e - 4);
+}
+function upgradeDelta(g) {
+  const b = GEAR[g.b];
+  if (isEq(g.id) || (b.slot === 'weapon' && b.wt !== CLS[S.cls].wt)) return 0;
+  const cur = S.eq[b.slot] != null && gearById(S.eq[b.slot]);
+  const d = gearScore(g) - (cur ? gearScore(cur) : 0);
+  return d > 0 ? d : 0;
+}
+const fmt1 = n => (Math.round(n * 10) / 10).toString();
+function equipBest() {
+  let n = 0;
+  for (const slot of SLOTS) {
+    let best = null, bs = 0;
+    for (const g of S.gear) if (GEAR[g.b].slot === slot) { const d = upgradeDelta(g); if (d > bs) { bs = d; best = g; } }
+    if (best) { S.eq[slot] = best.id; n++; }
+  }
+  recalc(); if (n) log(`더 좋은 장비 ${n}개를 착용했습니다.`, 'sys');
+}
 const encOdds = k => [.33, .25, .18, .12, .08][Math.min(k - 1, 4)];
 const VIEWS = {
   party() {
@@ -1709,13 +1737,14 @@ const VIEWS = {
   },
   bag() {
     const town = ZONES[S.zone].town;
-    let h = `<div class="sec">착용 중</div><div class="eqgrid">`;
-    for (const s of SLOTS) {
-      const g = S.eq[s] != null && gearById(S.eq[s]);
-      h += `<div class="eqs">${g ? gearIco(g) : `<span class="ico" style="background:#2a2217;color:#6d5733">${s === 'weapon' ? '무' : AGLYPH[s]}</span>`}
-        <div class="k">${SLOTN[s]}</div><div class="v" style="color:${g ? ecol(g.e) : 'var(--dim)'}">${g ? '+' + g.e : '없음'}</div></div>`;
+    let h = `<div class="sec">착용 중</div>`;
+    for (const sl of SLOTS) {
+      const g = S.eq[sl] != null && gearById(S.eq[sl]);
+      if (g) h += `<div class="row">${gearIco(g)}<div class="info"><div class="n" style="color:${ecol(g.e)}">${gname(g)}<span class="tag">${SLOTN[sl]}</span></div><div class="s">${gearStat(g)} · 안전 강화 +${GEAR[g.b].slot === 'weapon' ? 6 : 4}</div></div></div>`;
+      else h += `<div class="row" style="opacity:.55"><span class="ico" style="background:#2a2217;color:#6d5733">${sl === 'weapon' ? '무' : AGLYPH[sl]}</span><div class="info"><div class="n">${SLOTN[sl]} 없음</div><div class="s">가방에서 착용할 수 있어요</div></div></div>`;
     }
-    h += `</div><div class="sec">소모품</div>`;
+    h += `<p class="note">합계 · 공격 ${D.wmin}-${D.wmax}${D.wbonus ? ' +' + D.wbonus : ''} · 방어 ${D.def} (AC ${D.ac})</p>`;
+    h += `<div class="sec">소모품</div>`;
     const cons = ['red', 'orange', 'clear', 'blue', 'green', 'tele', 'ret', 'ew', 'ea', 'bew', 'bea'].filter(k => cnt(k) > 0);
     if (!cons.length) h += `<p class="note">소모품이 없어요.</p>`;
     for (const k of cons) {
@@ -1723,12 +1752,15 @@ const VIEWS = {
       h += `<div class="row">${itemIco(k)}<div class="info"><div class="n">${it.n}</div><div class="s">${fmt(cnt(k))}개${it.heal ? ` · HP +${it.heal}` : it.mp ? ` · MP +${it.mp}` : it.haste ? ' · 5분간 공격·이동 속도 증가' : ''}</div></div>
         <div class="btns">${usable ? `<button class="btn" data-a="use" data-v="${k}">사용</button>` : ''}${enc ? `<button class="btn" data-a="goenc">강화</button>` : ''}${town && it.sell ? `<button class="btn" data-a="sellst" data-v="${k}">판매</button>` : ''}</div></div>`;
     }
-    const gear = sortedGear().filter(g => !isEq(g.id));
-    h += `<div class="sec"><span>장비 (${gear.length})</span>${town && gear.some(g => g.e === 0) ? `<button class="btn" data-a="sellplain">+0 장비 모두 판매</button>` : ''}</div>`;
+    const gear = sortedGear().filter(g => !isEq(g.id)).sort((a, b) => upgradeDelta(b) - upgradeDelta(a));
+    const ups = gear.filter(g => upgradeDelta(g) > 0).length;
+    h += `<div class="sec"><span>장비 (${gear.length})</span><span style="display:flex;gap:6px">${ups ? `<button class="btn pri" data-a="equipbest">좋은 장비 착용</button>` : ''}${town && gear.some(g => g.e === 0 && !upgradeDelta(g)) ? `<button class="btn" data-a="sellplain">+0 장비 판매</button>` : ''}</span></div>`;
+    if (ups) h += `<p class="note" style="margin:2px 0 6px;color:#9ff0b8">▲ 표시는 지금 착용한 장비보다 좋은 장비예요.</p>`;
     if (!gear.length) h += `<p class="note">가방에 여분 장비가 없어요.</p>`;
     for (const g of gear) {
       const b = GEAR[g.b], ok = b.slot !== 'weapon' || b.wt === CLS[S.cls].wt;
-      h += `<div class="row">${gearIco(g)}<div class="info"><div class="n" style="color:${ecol(g.e)}">${gname(g)}</div><div class="s">${gearStat(g)}</div></div>
+      const up = upgradeDelta(g);
+      h += `<div class="row${up ? ' up' : ''}">${gearIco(g)}<div class="info"><div class="n" style="color:${ecol(g.e)}">${gname(g)}${up ? `<span class="tag up">▲ ${b.slot === 'weapon' ? '공격' : '방어'} +${fmt1(up)}</span>` : ''}</div><div class="s">${gearStat(g)}</div></div>
         <div class="btns">${ok ? `<button class="btn" data-a="equip" data-v="${g.id}">착용</button>` : ''}${town ? `<button class="btn" data-a="sellg" data-v="${g.id}">${fmt(gearSell(g))}</button>` : ''}</div></div>`;
     }
     const junk = Object.keys(S.stack).filter(k => k.startsWith('j_') && cnt(k) > 0 && ITEMS[k]);
@@ -1855,10 +1887,11 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'sellg' && town) { const g = gearById(+v); if (!g || isEq(g.id)) return; S.adena += gearSell(g); S.gear = S.gear.filter(x => x !== g); }
   else if (a === 'sellst' && town) { S.adena += ITEMS[v].sell * cnt(v); S.stack[v] = 0; }
   else if (a === 'selljunk' && town) { let s = 0; for (const k in S.stack) if (k.startsWith('j_') && ITEMS[k]) { s += ITEMS[k].sell * S.stack[k]; S.stack[k] = 0; } S.adena += s; log(`잡템을 팔아 ${fmt(s)} 아데나를 받았습니다.`, 'sys'); }
-  else if (a === 'sellplain' && town) { let s = 0; S.gear = S.gear.filter(g => { if (!isEq(g.id) && g.e === 0) { s += gearSell(g); return false; } return true; }); S.adena += s; log(`+0 장비를 팔아 ${fmt(s)} 아데나를 받았습니다.`, 'sys'); }
+  else if (a === 'sellplain' && town) { let s = 0; S.gear = S.gear.filter(g => { if (!isEq(g.id) && g.e === 0 && !upgradeDelta(g)) { s += gearSell(g); return false; } return true; }); S.adena += s; log(`+0 장비를 팔아 ${fmt(s)} 아데나를 받았습니다.`, 'sys'); }
   else if (a === 'buy' && town) { const [k, n] = v.split(':'), cost = ITEMS[k].price * +n; if (S.adena < cost) return; S.adena -= cost; addItem(k, +n); }
   else if (a === 'buyg' && town) { const p = gearPrice(v); if (S.adena < p) return; S.adena -= p; addGear(v); log(`${GEAR[v].n} 구입`, 'sys'); }
   else if (a === 'tele' && town) { const z = ZONES[+v]; if (S.adena < z.cost) return; S.adena -= z.cost; closeSheet(); enterZone(+v); return; }
+  else if (a === 'equipbest') { equipBest(); }
   else if (a === 'invite') { inviteBot(R.bots.find(b => b.name === v && !b.party)); }
   else if (a === 'kick') { kickBot(v); }
   else if (a === 'encpick') { R.encSel = +v; R.encRes = null; }
