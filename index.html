@@ -512,8 +512,22 @@ function recalc() {
   D.aspd = c.aspd * (h ? .75 : 1) * (buffOn('rage') ? .77 : 1) * (buffOn('wind') ? .85 : 1);
   D.speed = 3.1 * (h ? 1.3 : 1) * (buffOn('wind') ? 1.2 : 1);
   D.dmgMul = buffOn('rage') ? 1.2 : 1; D.taken = buffOn('iron') ? .65 : 1; D.dodge = buffOn('wind') ? .15 : 0;
-  const pb = polyBonus(); if (pb) { D.aspd *= pb.aspd; D.speed *= pb.spd; D.dmgMul *= pb.dmg; }
   D.hpReg = (.6 + L * .12) * c.hpR; D.mpReg = c.mpR[0] + c.mpR[1] * L;
+  D.crit = .06; D.cdr = 0;
+  const pb = polyBonus();
+  if (pb) {
+    const o = pb.stats;
+    if (o.aspd) D.aspd /= 1 + o.aspd;
+    if (o.spd) D.speed *= 1 + o.spd;
+    if (o.dmg) D.dmgMul *= 1 + o.dmg;
+    if (o.hp) D.maxHp = Math.round(D.maxHp * (1 + o.hp));
+    if (o.def) { D.def += Math.round(o.def); D.ac = 10 - D.def; }
+    if (o.crit) D.crit += o.crit;
+    if (o.dodge) D.dodge += o.dodge;
+    if (o.mpr) D.mpReg *= 1 + o.mpr;
+    if (o.hpr) D.hpReg *= 1 + o.hpr;
+    if (o.cdr) D.cdr = o.cdr;
+  }
   S.hp = Math.min(S.hp, D.maxHp); S.mp = Math.min(S.mp, D.maxMp);
   const look = `${D.wtier}|${D.glow}|${S.eq.helm != null}|${S.poly && S.poly.active || ''}`;
   if (P.act && P.look !== look) { P.look = look; dressPlayer(); }
@@ -777,10 +791,42 @@ const POLY = { goblin: 0, bandit: 0, skmin: 0, gshaman: 0, scout: 1, orcw: 1, or
 const POLY_COST = 50000, POLY_COST10 = 450000;
 const polyState = () => S.poly || (S.poly = { owned: {}, active: null });
 const polyActive = () => { const a = polyState().active; return a && POLY[a] != null ? a : null; };
+// every polymorph has a type that decides where its grade's power goes
+const PTYPE = {
+  돌격: { desc: '강한 한 방과 맷집', w: { dmg: .04, hp: .05, aspd: .01, spd: .01 } },
+  민첩: { desc: '빠른 공격과 치명타', w: { aspd: .04, crit: .02, spd: .03, dmg: .01 } },
+  수호: { desc: '단단한 방어와 체력', w: { def: 1.5, hp: .06, dmg: .02, aspd: .01 } },
+  사격: { desc: '연사와 치명타', w: { aspd: .03, crit: .03, dmg: .02, spd: .01 } },
+  마력: { desc: '마나 회복과 스킬 회전', w: { mpr: .12, dmg: .03, cdr: .03 } },
+  불사: { desc: '회피와 체력 회복', w: { dodge: .025, hpr: .2, aspd: .02, spd: .02 } },
+};
+const PBUDGET = [1.2, 2, 3, 4.2, 6];
+const PSTATN = { aspd: '공격 속도', spd: '이동 속도', dmg: '피해', hp: '최대 HP', def: '방어', crit: '치명타', dodge: '회피', mpr: 'MP 회복', hpr: 'HP 회복', cdr: '스킬 재사용' };
+function polyType(id) {
+  const d = MON[id];
+  if (d.st === 'bow' || d.st === 'xbow') return '사격';
+  if (d.st === 'magic') return '마력';
+  if (d.sk) return '불사';
+  if (d.m === 'Knight') return '수호';
+  if (/Rogue/.test(d.m)) return '민첩';
+  return '돌격';
+}
+// legendary forms each carry one signature bonus on top of their type
+const PSIG = { fallen: { crit: .08 }, lord: { aspd: .08 }, frostlord: { dodge: .06 }, sandking: { spd: .1 }, swampqueen: { hpr: .8 },
+  empress: { cdr: .1 }, judge: { crit: .1 }, abysslord: { dmg: .08 } };
+function polyStatsOf(id, stars = 1) {
+  const w = PTYPE[polyType(id)].w, b = PBUDGET[POLY[id]] * (1 + .08 * (stars - 1)), o = {};
+  // each monster leans a little differently inside its type (fixed per monster, ±25%)
+  let seed = 0; for (const ch of id) seed = (seed * 31 + ch.charCodeAt(0)) | 0;
+  for (const k in w) { const r = Math.sin(seed * 12.9898 + k.length * 78.233 + k.charCodeAt(0)) * 43758.5453; o[k] = w[k] * b * (.75 + .5 * (r - Math.floor(r))); }
+  for (const k in PSIG[id] || {}) o[k] = (o[k] || 0) + PSIG[id][k] * (1 + .08 * (stars - 1));
+  return o;
+}
+const polyStatText = o => Object.entries(o).map(([k, v]) => k === 'def' ? `${PSTATN[k]} +${Math.round(v)}` : k === 'cdr' ? `${PSTATN[k]} -${Math.round(v * 100)}%` : `${PSTATN[k]} +${Math.round(v * 100)}%`).join(' · ');
 function polyBonus() {
   const a = polyActive(); if (!a) return null;
-  const g = PGRADE[POLY[a]], stars = polyState().owned[a] || 1;
-  return { ...g, dmg: g.dmg * (1 + .02 * (stars - 1)), stars };
+  const stars = polyState().owned[a] || 1;
+  return { stars, type: polyType(a), stats: polyStatsOf(a, stars) };
 }
 const polyScale = id => clamp(MON[id].s, .85, 1 + POLY[id] * .08);
 function rollPoly() {
@@ -1454,7 +1500,7 @@ function hitMon(src, m, dmg, sure) {
     if (Math.random() > hc) { ftxt(m, 'MISS', '#b8b0a0', 12); aggro(m, src); return; }
   }
   let crit = false;
-  if (isP && Math.random() < .06) { dmg *= 1.6; crit = true; }
+  if (isP && Math.random() < D.crit) { dmg *= 1.6; crit = true; }
   dmg = Math.max(1, Math.round(dmg));
   m.hp -= dmg; m.hurt = .14; m.dmgBy[isP || isParty ? 'p' : 'b'] += dmg;
   if (!isP && !isParty && src.name) { m.byName = m.byName || {}; m.byName[src.name] = (m.byName[src.name] || 0) + dmg; }
@@ -1585,7 +1631,7 @@ function pickAutoSkill(t) {
 }
 function aoeHit(cx, cy, r, dmgFn) { for (const m of R.mons.slice()) if (!m.dead && Math.hypot(m.x - cx, m.y - cy) < r) hitMon(P, m, dmgFn(), true); }
 function castSkill(sk, t) {
-  S.mp -= skCost(sk); P.cds[sk.id] = sk.cd; P.lastCombat = R.t;
+  S.mp -= skCost(sk); P.cds[sk.id] = sk.cd * (1 - D.cdr); P.lastCombat = R.t;
   if (t) faceTo(P, t);
   const later = (ms, fn) => setTimeout(() => { if (!R.dead) fn(); }, ms);
   switch (sk.id) {
@@ -2090,17 +2136,17 @@ const VIEWS = {
     const ps = polyState(), a = polyActive(), pb = polyBonus(), town = ZONES[S.zone].town;
     let h = `<div class="sec">현재 변신</div>`;
     if (a) h += `<div class="row">${icoHtml(PGRADE[POLY[a]].col, MON[a].n[0])}<div class="info"><div class="n">${MON[a].n}<span class="grade" style="--gc:${PGRADE[POLY[a]].col}">${PGRADE[POLY[a]].k}</span></div>
-      <div class="s">★${pb.stars} · 공격 속도 +${Math.round((1 / pb.aspd - 1) * 100)}% · 이동 +${Math.round((pb.spd - 1) * 100)}% · 피해 +${Math.round((pb.dmg - 1) * 100)}%</div></div><div class="btns"><button class="btn" data-a="polyoff">해제</button></div></div>`;
+      <div class="s">★${pb.stars} · ${pb.type}형 · ${polyStatText(pb.stats)}</div></div><div class="btns"><button class="btn" data-a="polyoff">해제</button></div></div>`;
     else h += `<p class="note">변신하지 않았어요. 아래에서 가진 변신을 고르세요.</p>`;
     h += `<div class="sec">변신 카드 뽑기</div>
       <div class="seg"><button data-a="polydraw" data-v="1" ${!town || S.adena < POLY_COST ? 'disabled' : ''}>1회 · ${fmt(POLY_COST)}</button><button data-a="polydraw" data-v="10" ${!town || S.adena < POLY_COST10 ? 'disabled' : ''}>10회 · ${fmt(POLY_COST10)}</button></div>
-      <p class="note">${town ? '' : '카드는 마을에서 뽑을 수 있어요. '}확률: ${PGRADE.map(g => `${g.k} ${+(g.p * 100).toFixed(1)}%`).join(' · ')}. 같은 변신을 또 뽑으면 ★가 올라 피해가 2%씩 늘어요(최대 ★5).</p>
+      <p class="note">${town ? '' : '카드는 마을에서 뽑을 수 있어요. '}확률: ${PGRADE.map(g => `${g.k} ${+(g.p * 100).toFixed(1)}%`).join(' · ')}. 같은 변신을 또 뽑으면 ★가 올라 능력치가 8%씩 늘어요(최대 ★5). 유형: ${Object.entries(PTYPE).map(([k, v]) => `${k}(${v.desc})`).join(', ')}.</p>
       <div class="sec">도감 (${Object.keys(ps.owned).length}/${Object.keys(POLY).length})</div>`;
     const ids = Object.keys(POLY).sort((x, y) => POLY[y] - POLY[x]);
     for (const id of ids) {
       const g = PGRADE[POLY[id]], own = ps.owned[id];
       h += `<div class="row" style="${own ? '' : 'opacity:.4'}">${icoHtml(own ? g.col : '#2a2217', own ? MON[id].n[0] : '?')}<div class="info"><div class="n">${MON[id].n}<span class="grade" style="--gc:${g.col}">${g.k}</span>${own ? ` <span style="color:var(--gold2);font-size:11px">★${own}</span>` : ''}</div>
-        <div class="s">공속 +${Math.round((1 / g.aspd - 1) * 100)}% · 이동 +${Math.round((g.spd - 1) * 100)}% · 피해 +${Math.round((g.dmg - 1) * 100)}%</div></div>
+        <div class="s">${polyType(id)}형 · ${polyStatText(polyStatsOf(id, own || 1))}</div></div>
         <div class="btns">${own && id !== a ? `<button class="btn pri" data-a="polyuse" data-v="${id}">변신</button>` : id === a ? '<span class="tag">변신 중</span>' : ''}</div></div>`;
     }
     return h;
