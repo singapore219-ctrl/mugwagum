@@ -55,6 +55,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
 .bar.ex i{background:linear-gradient(#e7c56a,#9c7a28)}
 .bar span{position:relative;display:block;text-align:center;font-size:10.5px;line-height:13px;font-weight:500;text-shadow:0 1px 2px #000,0 0 3px #000;font-variant-numeric:tabular-nums}
 .bar.ex span{font-size:9px;line-height:8px}
+#party{margin-top:6px;display:flex;flex-direction:column;gap:3px}
+#party .pm{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:6px;font-size:10.5px;color:#bfeccb}
+#party .pm b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
+#party .pm i{display:block;height:5px;border-radius:2px;background:rgba(0,0,0,.6);overflow:hidden}
+#party .pm i::after{content:"";display:block;height:100%;width:var(--w,100%);background:#59c46e}
+#party .pm.dead{opacity:.45}
+#log .party b{color:#8fe8a8;font-weight:500}
+#log .party{color:#d8f5df}
 #buffs{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
 .chip{font-size:10.5px;padding:1px 6px;border-radius:9px;background:rgba(63,154,74,.25);border:1px solid rgba(127,198,130,.5);color:#bfeec1;font-variant-numeric:tabular-nums}
 .chip.cam{cursor:pointer;font-family:inherit;background:rgba(106,168,255,.18);border-color:rgba(140,188,255,.6);color:#cfe2ff}
@@ -222,6 +230,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
       <div class="bar mp"><i id="mpf"></i><span id="mpt">0 / 0</span></div>
       <div class="bar ex"><i id="exf"></i><span id="ext">0.00%</span></div>
       <div id="buffs"></div>
+      <div id="party"></div>
     </div>
     <div id="right">
       <div id="zone">-</div>
@@ -231,6 +240,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
         <button class="mbtn" data-open="enc">강화</button>
         <button class="mbtn" data-open="char">정보</button>
         <button class="mbtn" data-open="set">설정</button>
+        <button class="mbtn" data-open="party">파티</button>
       </div>
     </div>
   </div>
@@ -894,8 +904,86 @@ function botModel(cls) {
   if (cls === 'knight') return pick([{ model: 'Knight', r: 'sword_1handed', l: 'shield_badge', st: '1h' }, { model: 'Barbarian', r: 'axe_2handed', st: '2h' }, { model: 'Rogue', r: 'dagger', l: 'dagger', st: '1h' }]);
   return cls === 'elf' ? { model: 'Ranger', l: 'bow_withString', st: 'bow' } : { model: 'Mage', r: 'staff', st: 'magic' };
 }
+/* ---------- AI party ---------- */
+const PARTY_MAX = 3;
+const PCHAT = ['같이 가요!', '물약 충분하세요?', '오 레어템 떴어요?', '보스 잡으러 가요', '뒤는 제가 맡을게요', 'ㅋㅋ 오늘 운 좋네요', '자동 켜두셨죠?',
+  '저 힐 들어갈게요', '다음 사냥터 갈까요?', '초록물약 드세요~', '강화 도전해 보세요', '파티 사냥 최고'];
+const partyBots = () => R.bots.filter(b => b.party);
+function partyStats(b) { b.lv = S.lv; b.maxHp = 20 + b.lv * 12; b.hp = Math.min(b.hp || b.maxHp, b.maxHp); }
+function makePartyBot(info) {
+  const Z = ZONES[S.zone];
+  const b = { kind: 'b', name: info.name, cls: info.cls, lv: S.lv, x: P.x + rnd(-1.5, 1.5), y: P.y + rnd(1, 2), rot: 0, hp: 0, maxHp: 1, moving: false, hurt: 0, target: null, cd: 0,
+    wx: 0, wy: 0, wT: 0, say: '', sayT: 0, dead: false, respT: 0, healCd: 0, skCd: 0, telT: 1e9, town: !!Z.town, party: true };
+  partyStats(b); b.hp = b.maxHp;
+  const bm = info.cls === 'knight' ? { model: 'Knight', r: 'sword_1handed', l: 'shield_badge', st: '1h' } : botModel(info.cls);
+  b.act = makeActor(bm);
+  return b;
+}
+function partySlot(b) {
+  const i = partyBots().indexOf(b), a = camYaw + Math.PI * .75 + i * .8;
+  return [P.x + Math.sin(a) * 1.8, P.y + Math.cos(a) * 1.8];
+}
+function inviteBot(b) {
+  if (!b || b.party || b.dead) return;
+  if (partyBots().length >= PARTY_MAX) { toast(`파티는 최대 ${PARTY_MAX}명까지예요`); return; }
+  if (Math.random() < .15) { botSay(b, pick(['지금은 혼자 할게요~', '죄송해요 곧 접속 종료해요', '다음에 같이 해요!'])); toast(`${b.name}님이 초대를 거절했어요`); return; }
+  b.party = true; b.town = false; b.idleAnim = null; b.target = null; partyStats(b); b.hp = b.maxHp;
+  S.party = (S.party || []).concat([{ name: b.name, cls: b.cls }]);
+  fx('ring', b.x, b.y, { col: 0x8fe8a8, r1: 1.4, dur: .6 });
+  log(`${b.name}님이 파티에 들어왔습니다.`, 'sys');
+  setTimeout(() => botSay(b, pick(['잘 부탁드려요!', '같이 사냥해요~', '초대 감사합니다 ㅎㅎ'])), 600);
+  R.dirty = true; save();
+}
+function kickBot(name) {
+  const b = R.bots.find(x => x.party && x.name === name);
+  S.party = (S.party || []).filter(x => x.name !== name);
+  if (b) { b.party = false; b.town = !!ZONES[S.zone].town; b.target = null; botSay(b, pick(['수고하셨어요!', '즐거웠어요~', '다음에 또 불러주세요'])); }
+  log(`${name}님이 파티를 떠났습니다.`, 'sys'); R.dirty = true; save();
+}
+function partyHit(b, t) {
+  const dmg = b.lv * .85 + 4 + rnd(-2, 4);
+  if (b.cls === 'knight') setTimeout(() => hitMon(b, t, dmg), 200);
+  else proj({ from: b, to: t, kind: b.cls === 'elf' ? 'arrow' : 'bolt', sp: 13, delay: .2, onHit: () => hitMon(b, t, dmg) });
+}
+function updatePartyBot(b, dt) {
+  const Z = ZONES[S.zone];
+  b.skCd -= dt;
+  if (b.hp < b.maxHp * .4 && b.healCd <= 0) { b.hp = Math.min(b.maxHp, b.hp + b.maxHp * .35); b.healCd = 3; fx('heal', b.x, b.y, { col: 0x7fe08a, dur: .4, r1: .8 }); }
+  if (b.cls === 'mage' && !R.dead && S.hp < D.maxHp * .6 && b.skCd <= 0 && dist(b, P) < 8) {
+    b.skCd = 7; const amt = Math.round(D.maxHp * .18); S.hp = Math.min(D.maxHp, S.hp + amt);
+    faceTo(b, P); attackAnim(b, 'Ranged_Magic_Spellcasting', .7);
+    fx('column', P.x, P.y, { col: 0x8fe89a, dur: .6 }); ftxt(P, '+' + amt, '#8fe8a8', 13, 2.3);
+    if (Math.random() < .15) botSay(b, '힐 드려요~');
+  }
+  if (dist(b, P) > 13) { fx('spark', b.x, b.y, { col: 0x8fe8a8 }); const [sx, sy] = partySlot(b); b.x = sx; b.y = sy; fx('spark', b.x, b.y, { col: 0x8fe8a8 }); b.target = null; return; }
+  let t = null;
+  if (!Z.town && !R.dead) {
+    if (P.target && !P.target.dead && (P.engage || R.auto)) t = P.target;
+    if (!t) { let bd = 8; for (const m of R.mons) if (!m.dead && (m.target === P || (m.target && m.target.party))) { const d = dist(m, P); if (d < bd) { bd = d; t = m; } } }
+    if (!t && b.target && !b.target.dead && dist(b.target, P) < 9) t = b.target;
+  }
+  b.target = t;
+  if (t) {
+    const rng = CLS[b.cls].range + (t.d.s - 1) * .5;
+    if (dist(b, t) > rng) moveToward(b, t.x, t.y, Math.max(3, D.speed) * dt);
+    else { faceTo(b, t); if (b.cd <= 0) { b.cd = rnd(.9, 1.2); attackAnim(b, null, b.cd); partyHit(b, t); } }
+  } else {
+    const [sx, sy] = partySlot(b);
+    if (Math.hypot(sx - b.x, sy - b.y) > .6) moveToward(b, sx, sy, D.speed * 1.05 * dt);
+  }
+  // keep personal space so members chasing the same monster don't merge into one body
+  for (const o of [P, ...partyBots()]) {
+    if (o === b || o.dead) continue;
+    let dx = b.x - o.x, dy = b.y - o.y, d = Math.hypot(dx, dy);
+    if (d < .85) {
+      if (d < 1e-3) { const a = Math.random() * 6.28; dx = Math.cos(a); dy = Math.sin(a); d = 1; }
+      const push = Math.min(.85 - d, 3 * dt) / d, N = ZONES[S.zone].N;
+      [b.x, b.y] = resolve(clamp(b.x + dx * push, 1.3, N - 1.3), clamp(b.y + dy * push, 1.3, N - 1.3));
+    }
+  }
+}
 function makeBot(town) {
-  const Z = ZONES[S.zone], used = new Set(R.bots.map(b => b.name));
+  const Z = ZONES[S.zone], used = new Set(R.bots.map(b => b.name).concat((S.party || []).map(x => x.name)));
   let name = pick(BOTN); for (let k = 0; k < 10 && used.has(name); k++) name = pick(BOTN);
   const cls = pick(['knight', 'knight', 'elf', 'mage']);
   const lv = town ? ri(5, 45) : ri(Z.blv[0], Z.blv[1]);
@@ -925,8 +1013,10 @@ function enterZone(z) {
   if (!Z.town) {
     for (let k = 0; k < Z.cnt; k++) spawnMon(pick(Z.mons));
     for (let k = 0; k < Z.bots; k++) R.bots.push(makeBot(false));
+    for (const info of S.party || []) R.bots.push(makePartyBot(info));
     if (Z.boss && R.boss[z] && R.boss[z].alive) spawnMon(Z.boss, true);
   } else {
+    for (const info of S.party || []) R.bots.push(makePartyBot(info));
     for (let k = 0; k < 7; k++) R.bots.push(makeBot(true));
     const C = Z.N / 2;
     const npc = (name, x, y, o, anim) => { const e = { kind: 'n', name, x, y, rot: 0, moving: false, hurt: 0, idleAnim: anim }; e.act = makeActor(o); R.npcs.push(e); R.solids.push({ c: [x, y, .5] }); };
@@ -1001,19 +1091,18 @@ function moveEnt(e, dx, dy) {
   let nx = clamp(e.x + dx, 1.3, N - 1.3), ny = clamp(e.y + dy, 1.3, N - 1.3);
   if (R.solids.length) {
     [nx, ny] = resolve(nx, ny);
+    const turn = a => { const c = Math.cos(a), sn = Math.sin(a); return resolve(clamp(e.x + dx * c - dy * sn, 1.3, N - 1.3), clamp(e.y + dx * sn + dy * c, 1.3, N - 1.3)); };
+    // keep walking a detour for a short distance once one was needed, otherwise the body slides
+    // straight back into the gap between two trees on the next frame
+    if (e.detourLeft > 0) [nx, ny] = turn(e.detourA);
     if (step > 1e-4 && Math.hypot(nx - e.x, ny - e.y) < step * .35) {
-      // walking straight into a round obstacle: sidestep around it
-      let o = null, od = 1e9;
-      for (const s of R.solids) if (s.c) { const d = Math.hypot(e.x + dx - s.c[0], e.y + dy - s.c[1]) - s.c[2]; if (d < od) { od = d; o = s; } }
-      if (o && od < .3) {
-        const rx = e.x - o.c[0], ry = e.y - o.c[1];
-        let tx = -ry, ty = rx; const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
-        const dot = tx * dx + ty * dy;
-        if (Math.abs(dot) < step * .15) { if (!e.side) e.side = Math.random() < .5 ? 1 : -1; tx *= e.side; ty *= e.side; }
-        else if (dot < 0) { tx = -tx; ty = -ty; }
-        [nx, ny] = resolve(clamp(e.x + tx * step, 1.3, N - 1.3), clamp(e.y + ty * step, 1.3, N - 1.3));
+      if (!e.side) e.side = Math.random() < .5 ? 1 : -1;
+      for (const k of [.8, -.8, 1.5, -1.5, 2.2, -2.2, 2.9]) {
+        const [tx, ty] = turn(k * e.side);
+        if (Math.hypot(tx - e.x, ty - e.y) > step * .5) { nx = tx; ny = ty; e.detourA = k * e.side; e.detourLeft = 1.8; if (k < 0) e.side = -e.side; break; }
       }
     }
+    if (e.detourLeft > 0) e.detourLeft -= Math.hypot(nx - e.x, ny - e.y);
   }
   if (Math.abs(nx - e.x) + Math.abs(ny - e.y) > 1e-5) e.rot = Math.atan2(nx - e.x, ny - e.y);
   e.x = nx; e.y = ny; e.moving = true;
@@ -1051,7 +1140,7 @@ const rollMagic = () => (ri(D.wmin, D.wmax) + D.wbonus + Math.floor(S.lv * 1.1) 
 
 function hitMon(src, m, dmg, sure) {
   if (m.dead || !R.mons.includes(m)) return;
-  const isP = src === P;
+  const isP = src === P, isParty = !!src.party;
   if (isP && !sure) {
     const hc = clamp(.88 + (S.lv - m.lv) * .02 + D.went * .01, .3, .98);
     if (Math.random() > hc) { ftxt(m, 'MISS', '#b8b0a0', 12); aggro(m, src); return; }
@@ -1059,8 +1148,9 @@ function hitMon(src, m, dmg, sure) {
   let crit = false;
   if (isP && Math.random() < .06) { dmg *= 1.6; crit = true; }
   dmg = Math.max(1, Math.round(dmg));
-  m.hp -= dmg; m.hurt = .14; m.dmgBy[isP ? 'p' : 'b'] += dmg;
+  m.hp -= dmg; m.hurt = .14; m.dmgBy[isP || isParty ? 'p' : 'b'] += dmg;
   if (isP) { ftxt(m, fmt(dmg), crit ? '#ffd166' : '#ffffff', crit ? 19 : 15); P.lastCombat = R.t; fx('hit', m.x, m.y, { col: crit ? 0xffd070 : 0xffffff, dur: .18, r1: crit ? 1.4 : .9, h: m.act.h * .6 }); }
+  else if (isParty) ftxt(m, fmt(dmg), '#9fe8b4', 12);
   else if (Math.hypot(m.x - P.x, m.y - P.y) < 9) ftxt(m, fmt(dmg), 'rgba(230,230,230,.55)', 11);
   aggro(m, src);
   if (m.hp <= 0) killMon(m);
@@ -1089,6 +1179,7 @@ function gainExp(n) {
   while (S.exp >= need(S.lv) && S.lv < 60) { S.exp -= need(S.lv); S.lv++; up = true; }
   if (up) {
     recalc(); S.hp = D.maxHp; S.mp = D.maxMp;
+    for (const b of partyBots()) partyStats(b);
     fx('lvl', P.x, P.y, { col: 0xffd070, dur: 1.2, r1: 2.6 });
     if (R.t - P.lastCombat > 1.5 || !P.target) play(P.act, 'Cheering', { once: true, hold: 1.2 });
     toast(`LEVEL UP · Lv.${S.lv}`); log(`레벨이 올랐습니다. (Lv.${S.lv})`, 'sys'); SFX.lvl();
@@ -1154,7 +1245,7 @@ function monHit(m, t) {
   } else { t.hp -= Math.max(1, m.dmg * rnd(.4, .8)); t.hurt = .14; if (t.hp <= 0) botDie(t); }
 }
 function botDie(b) {
-  b.dead = true; b.respT = R.t + rnd(20, 45); b.target = null; b.fade = 2.2;
+  b.dead = true; b.respT = R.t + (b.party ? 15 : rnd(20, 45)); b.target = null; b.fade = 2.2;
   play(b.act, b.act.A.death, { once: true });
   for (const m of R.mons) if (m.target === b) m.target = null;
   if (Math.random() < .5) log(pick(['아 죽었네', '물약 안 먹었다...', '헐 사망', '아 경험치ㅠㅠ']), 'chat', b.name);
@@ -1295,7 +1386,7 @@ function findTarget(maxD) {
   let best = null, bd = maxD;
   for (const m of R.mons) {
     if (m.dead) continue;
-    if (m.target && m.target !== P && m.target.kind === 'b') continue;
+    if (m.target && m.target !== P && m.target.kind === 'b' && !m.target.party) continue;
     const d = Math.hypot(m.x - P.x, m.y - P.y); if (d < bd) { bd = d; best = m; }
   }
   return best;
@@ -1357,9 +1448,14 @@ function updateBot(b, dt) {
   b.moving = false; b.slow = false; b.hurt = Math.max(0, b.hurt - dt); b.sayT -= dt; b.cd -= dt; b.healCd -= dt;
   if (b.dead) {
     b.fade -= dt; if (b.fade < 1) b.sink = -Math.min(1.5, (1 - b.fade) * 1.2);
-    if (R.t > b.respT) { const [x, y] = randPos(5); Object.assign(b, { dead: false, x, y, hp: b.maxHp, target: null, sink: 0 }); b.act.curName = ''; fx('spark', x, y, { col: 0xbfe1ff }); }
+    if (R.t > b.respT) {
+      const [x, y] = b.party ? partySlot(b) : randPos(5);
+      Object.assign(b, { dead: false, x, y, hp: b.maxHp, target: null, sink: 0 }); b.act.curName = ''; fx('spark', x, y, { col: b.party ? 0x8fe8a8 : 0xbfe1ff });
+      if (b.party) botSay(b, pick(['부활했어요!', '다시 왔어요 ㅠㅠ', '방심했네요']));
+    }
     return;
   }
+  if (b.party) { updatePartyBot(b, dt); return; }
   if (b.town) {
     b.wT -= dt;
     if (b.wT <= 0) { b.wT = rnd(4, 12); b.walking = Math.random() < .45; const C = ZONES[0].N / 2, a = Math.random() * 7, r = rnd(3, 7.5); b.wx = C + Math.cos(a) * r; b.wy = C + Math.sin(a) * r; }
@@ -1371,7 +1467,7 @@ function updateBot(b, dt) {
   if (!b.target && Math.random() < dt * 2) {
     let best = null, bd = 12;
     for (const m of R.mons) {
-      if (m.dead || m.target === P || (P.target === m && P.engage)) continue;
+      if (m.dead || m.target === P || (m.target && m.target.party) || (P.target === m && P.engage)) continue;
       if (R.bots.some(o => o !== b && o.target === m)) continue;
       const d = dist(b, m); if (d < bd) { bd = d; best = m; }
     }
@@ -1449,7 +1545,11 @@ function updateChatter(dt) {
   } else if (r < .38) {
     const z = ri(2, 4), g = pick(['sword', 'bow', 'staff']) + ri(3, 4);
     log(`${pick(BOTN)}님이 ${ZONES[z].n}에서 ${GEAR[g].n}${J(GEAR[g].n, '을', '를')} 획득했습니다.`, 'ann');
-  } else { const alive = R.bots.filter(b => !b.dead); if (alive.length) botSay(pick(alive), pick(CHAT)); }
+  } else {
+    const pb = partyBots().filter(b => !b.dead);
+    if (pb.length && Math.random() < .45) { const b = pick(pb), m = pick(PCHAT); b.say = m; b.sayT = 3.5; log(m, 'party', '파티 ' + b.name); return; }
+    const alive = R.bots.filter(b => !b.dead && !b.party); if (alive.length) botSay(pick(alive), pick(CHAT));
+  }
 }
 
 let saveT = 0, hudT = 0, camSnap = true;
@@ -1533,7 +1633,7 @@ function drawOverlay() {
   for (const b of R.bots) {
     if (b.dead || !b.act.root.visible) continue;
     const p = toScreen(b.x, b.act.h + .25, b.y); if (!p) continue;
-    label(c, p[0], p[1], b.name, '#a9ccff', 10.5);
+    label(c, p[0], p[1], b.party ? '♦ ' + b.name : b.name, b.party ? '#9ff0b8' : '#a9ccff', 10.5, b.party);
     if (b.sayT > 0 && b.say) bubble(c, p[0], p[1] - 14, b.say);
   }
   for (const n of R.npcs) { const p = toScreen(n.x, n.act.h + .3, n.y); if (p) label(c, p[0], p[1], n.name, '#f1d58c', 11.5, true); }
@@ -1573,14 +1673,17 @@ function hud() {
   if (pc < 10 && !ZONES[S.zone].town) b += `<span class="chip warn">물약 부족</span>`;
   if (camChanged()) b += `<button class="chip cam" data-cam="reset">시점 초기화</button>`;
   if (el('buffs').innerHTML !== b) el('buffs').innerHTML = b;
-  if (R.dirty && R.sheet && !R.encBusy && R.sheet !== 'set') renderSheet();
+  const ph = partyBots().map(m => `<div class="pm${m.dead ? ' dead' : ''}"><b>♦ ${m.name} <span style="color:var(--dim)">${CLS[m.cls].n}</span></b><i style="--w:${Math.max(0, m.hp / m.maxHp * 100)}%"></i></div>`).join('');
+  if (el('party').innerHTML !== ph) el('party').innerHTML = ph;
+  if ((R.dirty || R.sheet === 'party') && R.sheet && !R.encBusy && R.sheet !== 'set') renderSheet();
   R.dirty = false;
 }
 
 /* ================= SHEETS ================= */
-const TITLES = { bag: '가방', enc: '강화', char: '캐릭터 정보', set: '설정', shop: '상점 · 상인 메리', tele: '텔레포트 · 텔레포터 루카' };
+const TITLES = { party: '파티', bag: '가방', enc: '강화', char: '캐릭터 정보', set: '설정', shop: '상점 · 상인 메리', tele: '텔레포트 · 텔레포터 루카' };
 function openSheet(n) {
   if (!S || R.dead) return;
+  if (n !== 'party') R.partyPick = null;
   if ((n === 'shop' || n === 'tele') && !ZONES[S.zone].town) return;
   R.sheet = n; R.confirmReset = false; el('sheet').hidden = false; el('sheetBody').scrollTop = 0; renderSheet();
 }
@@ -1593,6 +1696,17 @@ function renderSheet() {
 const sortedGear = () => S.gear.slice().sort((a, b) => (isEq(b.id) - isEq(a.id)) || (GEAR[b.b].tier - GEAR[a.b].tier) || (b.e - a.e));
 const encOdds = k => [.33, .25, .18, .12, .08][Math.min(k - 1, 4)];
 const VIEWS = {
+  party() {
+    const mem = partyBots();
+    let h = `<div class="sec"><span>파티원 (${mem.length}/${PARTY_MAX})</span></div>`;
+    if (!mem.length) h += `<p class="note">아직 파티원이 없어요. 아래 근처 유저를 초대하거나, 화면에서 다른 유저를 눌러 보세요.</p>`;
+    for (const b of mem) h += `<div class="row">${icoHtml('#59c46e', CLS[b.cls].n[0])}<div class="info"><div class="n">${b.name}</div><div class="s">${CLS[b.cls].n} · Lv.${b.lv} · HP ${fmt(Math.max(0, b.hp))}/${fmt(b.maxHp)}${b.dead ? ' · 부활 대기' : ''}</div></div><div class="btns"><button class="btn" data-a="kick" data-v="${b.name}">내보내기</button></div></div>`;
+    const near = R.bots.filter(b => !b.party && !b.dead).sort((a, b) => (b.name === R.partyPick) - (a.name === R.partyPick) || dist(a, P) - dist(b, P)).slice(0, 8);
+    h += `<div class="sec">근처 유저</div>`;
+    if (!near.length) h += `<p class="note">근처에 초대할 유저가 없어요.</p>`;
+    for (const b of near) h += `<div class="row ${b.name === R.partyPick ? 'sel' : ''}">${icoHtml('#6f8fc4', CLS[b.cls].n[0])}<div class="info"><div class="n">${b.name}</div><div class="s">${CLS[b.cls].n} · Lv.${b.lv} · ${Math.round(dist(b, P))}m</div></div><div class="btns"><button class="btn pri" data-a="invite" data-v="${b.name}" ${mem.length >= PARTY_MAX ? 'disabled' : ''}>초대</button></div></div>`;
+    return h + `<p class="note">파티원은 나를 따라다니며 같이 싸우고, 마법사는 체력이 낮을 때 힐을 해줘요. 파티원이 준 피해도 내 몫이라 경험치와 드랍은 모두 내가 받아요. 파티원 레벨은 내 레벨을 따라가고, 순간이동이나 사냥터 이동 때도 함께 와요.</p>`;
+  },
   bag() {
     const town = ZONES[S.zone].town;
     let h = `<div class="sec">착용 중</div><div class="eqgrid">`;
@@ -1745,6 +1859,8 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'buy' && town) { const [k, n] = v.split(':'), cost = ITEMS[k].price * +n; if (S.adena < cost) return; S.adena -= cost; addItem(k, +n); }
   else if (a === 'buyg' && town) { const p = gearPrice(v); if (S.adena < p) return; S.adena -= p; addGear(v); log(`${GEAR[v].n} 구입`, 'sys'); }
   else if (a === 'tele' && town) { const z = ZONES[+v]; if (S.adena < z.cost) return; S.adena -= z.cost; closeSheet(); enterZone(+v); return; }
+  else if (a === 'invite') { inviteBot(R.bots.find(b => b.name === v && !b.party)); }
+  else if (a === 'kick') { kickBot(v); }
   else if (a === 'encpick') { R.encSel = +v; R.encRes = null; }
   else if (a === 'bless') { R.encBless = v === '1'; R.encRes = null; }
   else if (a === 'encgo') { doEnchant(); return; }
@@ -1825,6 +1941,11 @@ function tapAt(cx, cy) {
     const d = Math.hypot(p[0] - px, p[1] - py); if (d < bd * Math.max(1, m.d.s * .8)) { bd = d; best = m; }
   }
   if (best) { P.target = best; P.engage = true; P.moveTo = null; return; }
+  for (const b of R.bots) {
+    if (b.dead || !b.act.root.visible) continue;
+    const p = toScreen(b.x, b.act.h * .55, b.y);
+    if (p && Math.hypot(p[0] - px, p[1] - py) < 30) { R.partyPick = b.name; openSheet('party'); return; }
+  }
   ndc.set(px / W * 2 - 1, -(py / H) * 2 + 1); ray.setFromCamera(ndc, camera);
   const hit = ray.ray.intersectPlane(groundPlane, TMP2); if (!hit) return;
   const N = ZONES[S.zone].N;
@@ -1959,9 +2080,10 @@ function simAway(sec) {
     const mhp = 14 + lv * 6 + lv * lv * .6;
     const hit = clamp(.88 + (S.lv - lv) * .02 + D.went * .01, .3, .98);
     const avg = ((D.wmin + D.wmax) / 2 + D.wbonus + (S.cls === 'mage' ? Math.floor(S.lv * 1.1) + 3 : Math.floor(S.lv * .8) + 2)) * 1.3;
-    const killT = (mhp / (avg * hit / D.aspd) + 3) * 1.25;
+    const pn = (S.party || []).length;
+    const killT = (mhp / (avg * hit / D.aspd) + 3) * 1.25 / (1 + .45 * pn);
     const mdmg = Math.max(1, (1.5 + lv * 1.05) * .95 - D.def * .25), mh = clamp(.8 - D.def * .012 + (lv - S.lv) * .02, .15, .95);
-    let short = mdmg * mh / 1.6 * killT * (S.cls === 'knight' ? 1 : .55) * (d.ag ? 1.15 : 1) - D.hpReg * killT;
+    let short = mdmg * mh / 1.6 * killT * (S.cls === 'knight' ? 1 : .55) * (d.ag ? 1.15 : 1) * (1 - .15 * pn) - D.hpReg * killT;
     if (short > 0) {
       if (!S.opts.pot) { r.stop = '자동 물약이 꺼져 있어서 사냥을 멈췄어요.'; break; }
       while (short > 0) {
