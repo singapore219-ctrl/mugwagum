@@ -1160,7 +1160,7 @@ function botDie(b) {
   if (Math.random() < .5) log(pick(['아 죽었네', '물약 안 먹었다...', '헐 사망', '아 경험치ㅠㅠ']), 'chat', b.name);
 }
 function playerDie() {
-  R.dead = true; R.auto = false; S.hp = 0; P.target = null; P.engage = false;
+  R.dead = true; setAuto(false); S.hp = 0; P.target = null; P.engage = false;
   play(P.act, 'Death_A', { once: true });
   const loss = Math.min(S.exp, Math.floor(need(S.lv) * .05));
   S.exp -= loss; S.deaths = (S.deaths || 0) + 1;
@@ -1850,7 +1850,7 @@ function actSkill(i) {
 function actPot() { if (!S || R.dead) return; const k = bestPotion(); if (!k) { toast('체력 물약이 없어요'); return; } if (!useItem(k) && S.hp >= D.maxHp) toast('체력이 가득 찼어요'); }
 function actAuto() {
   if (!S || R.dead) return;
-  R.auto = !R.auto; if (!R.auto) P.engage = false;
+  setAuto(!R.auto); if (!R.auto) P.engage = false;
   toast(R.auto ? (ZONES[S.zone].town ? '사냥터에 가면 자동 사냥을 시작해요' : '자동 사냥 시작') : '자동 사냥 중지');
 }
 const bind = (id, fn) => el(id).addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); fn(); });
@@ -1918,7 +1918,7 @@ function begin() {
   P.act = makeActor({ model: CLS[S.cls].model, flash: true, st: '1h' }); P.look = '';
   recalc();
   if (S.hp <= 0) S.hp = D.maxHp * .5;
-  R.ready = true; R.dead = false; R.auto = false; P.cds = {}; P.buffs = {}; P.queue = null;
+  R.ready = true; R.dead = false; R.auto = !!S.autoOn; P.cds = {}; P.buffs = {}; P.queue = null;
   applyQuality();
   const away = S.away;
   enterZone(S.zone || 0);
@@ -1939,6 +1939,8 @@ try { window.claude && window.claude.hot && window.claude.hot.snapshot && window
 /* ---------- auto hunt while the screen is off ----------
    Browsers pause the page when hidden, so on return we replay the time away with the
    same kill/drop/potion rules, a little slower than live play, capped at 12 hours. */
+// auto hunting is remembered in the save so reopening the app keeps it running
+function setAuto(v) { R.auto = v; if (S) { S.autoOn = v; save(); } }
 function markAway() {
   if (!S) return;
   if (R.ready && !R.dead && R.auto && !ZONES[S.zone].town) S.away = { t: Date.now() }; else delete S.away;
@@ -2006,7 +2008,7 @@ function resumeAway() {
   const sec = (Date.now() - S.away.t) / 1000; delete S.away;
   if (sec < 60 || ZONES[S.zone].town || R.dead) { save(); return; }
   const r = simAway(sec); if (!r) { save(); return; }
-  if (r.stop) { R.auto = false; enterZone(0); } else R.auto = true;
+  if (r.stop) { setAuto(false); enterZone(0); } else setAuto(true);
   R.dirty = true; save(); showAway(r);
   log(`자리 비운 동안 ${fmt(r.kills)}마리를 처치했습니다.`, 'sys');
 }
