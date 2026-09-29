@@ -87,6 +87,25 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
 .act small{display:block;font-size:10px;font-weight:500;color:var(--text);font-variant-numeric:tabular-nums}
 #bAtk{right:0;bottom:0;width:84px;height:84px;font-size:15px;font-family:var(--serif);border-color:var(--gold);background:radial-gradient(circle at 50% 35%,#5a2a1c,#1d0e09 75%)}
 .act.sk{width:52px;height:52px;font-size:11px;letter-spacing:-.02em}
+.seg button:disabled{opacity:.4;cursor:default}
+.act.sk .au{position:absolute;top:-3px;right:-3px;font-style:normal;font-size:8.5px;font-weight:800;line-height:1;padding:2px 3px;border-radius:5px;
+  background:#1f4a66;color:#bfeaff;border:1px solid #8fe0ff;pointer-events:none}
+.act.sk.noauto .au{display:none}
+.gacha{position:absolute;inset:0;z-index:11;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px 16px;
+  background:radial-gradient(ellipse at 50% 40%,rgba(40,30,16,.92),rgba(6,5,3,.97))}
+.gacha h2{margin:0;font-family:var(--serif);font-size:24px;color:var(--gold2)}
+.cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;width:min(460px,100%)}
+.cards.one{grid-template-columns:minmax(0,160px);justify-content:center}
+.card{aspect-ratio:3/4;border-radius:10px;border:2px solid var(--gc);background:linear-gradient(160deg,color-mix(in srgb,var(--gc) 35%,#1b1610),#120e09 80%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px 4px;text-align:center;
+  box-shadow:0 0 18px color-mix(in srgb,var(--gc) 45%,transparent);animation:flip .5s both;animation-delay:var(--d,0s)}
+.card .g{font-size:10px;font-weight:700;color:var(--gc)}
+.card .cn{font-family:var(--serif);font-weight:800;font-size:13px;color:#fff;line-height:1.2;word-break:keep-all}
+.card .ct{font-size:10px;color:var(--gold2)}
+.cards.one .card .cn{font-size:20px}
+@keyframes flip{0%{transform:rotateY(90deg) scale(.8);opacity:0}100%{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.card{animation:none}}
+.grade{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:9px;border:1px solid var(--gc);color:var(--gc);margin-left:5px;vertical-align:1px}
 .act.sk.locked{opacity:.4;filter:grayscale(.9)}
 #bS1{right:94px;bottom:2px;width:56px;height:56px}
 #bS2{right:152px;bottom:44px}
@@ -246,6 +265,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
         <button class="mbtn" data-open="char">정보</button>
         <button class="mbtn" data-open="set">설정</button>
         <button class="mbtn" data-open="party">파티</button>
+        <button class="mbtn" data-open="poly">변신</button>
       </div>
     </div>
   </div>
@@ -258,10 +278,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
     <button class="act" id="bTele">순간<br>이동<small id="cTele">0</small></button>
     <button class="act" id="bAuto">자동<small>사냥</small></button>
     <button class="act" id="bPot">물약<small id="cPot">0</small></button>
-    <button class="act sk" id="bS1"><span class="skn">-</span><small class="skm"></small><i class="cd"></i></button>
-    <button class="act sk" id="bS2"><span class="skn">-</span><small class="skm"></small><i class="cd"></i></button>
-    <button class="act sk" id="bS3"><span class="skn">-</span><small class="skm"></small><i class="cd"></i></button>
-    <button class="act sk" id="bS4"><span class="skn">-</span><small class="skm"></small><i class="cd"></i></button>
+    <button class="act sk" id="bS1"><span class="skn">-</span><small class="skm"></small><i class="cd"></i><em class="au">AUTO</em></button>
+    <button class="act sk" id="bS2"><span class="skn">-</span><small class="skm"></small><i class="cd"></i><em class="au">AUTO</em></button>
+    <button class="act sk" id="bS3"><span class="skn">-</span><small class="skm"></small><i class="cd"></i><em class="au">AUTO</em></button>
+    <button class="act sk" id="bS4"><span class="skn">-</span><small class="skm"></small><i class="cd"></i><em class="au">AUTO</em></button>
     <button class="act" id="bAtk">공격</button>
   </div>
   <div id="toast"></div>
@@ -305,6 +325,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
       <div class="stop" id="awayStop"></div>
       <button class="btn pri wide" id="awayOk">확인</button>
     </div>
+  </div>
+  <div class="gacha" id="gacha" hidden>
+    <h2 id="gachaTitle">변신 카드</h2>
+    <div class="cards" id="gachaCards"></div>
+    <button class="btn pri" id="gachaOk" style="min-width:160px">확인</button>
   </div>
   <div class="ov dead" id="death" hidden>
     <div class="box">
@@ -450,9 +475,10 @@ function recalc() {
   D.aspd = c.aspd * (h ? .75 : 1) * (buffOn('rage') ? .77 : 1) * (buffOn('wind') ? .85 : 1);
   D.speed = 3.1 * (h ? 1.3 : 1) * (buffOn('wind') ? 1.2 : 1);
   D.dmgMul = buffOn('rage') ? 1.2 : 1; D.taken = buffOn('iron') ? .65 : 1; D.dodge = buffOn('wind') ? .15 : 0;
+  const pb = polyBonus(); if (pb) { D.aspd *= pb.aspd; D.speed *= pb.spd; D.dmgMul *= pb.dmg; }
   D.hpReg = (.6 + L * .12) * c.hpR; D.mpReg = c.mpR[0] + c.mpR[1] * L;
   S.hp = Math.min(S.hp, D.maxHp); S.mp = Math.min(S.mp, D.maxMp);
-  const look = `${D.wtier}|${D.glow}|${S.eq.helm != null}`;
+  const look = `${D.wtier}|${D.glow}|${S.eq.helm != null}|${S.poly && S.poly.active || ''}`;
   if (P.act && P.look !== look) { P.look = look; dressPlayer(); }
 }
 // kind: hit (one target) / aoe (around self or target) / triple / chain / heal / buff
@@ -480,6 +506,8 @@ const BUFFN = { iron: '철벽', rage: '광폭', wind: '바람의 가호' };
 const mySkills = () => SKILLS[S.cls];
 const skCost = sk => sk.mp + Math.floor(S.lv * (sk.mpl || 0));
 const skReady = sk => S.lv >= sk.lv && !(P.cds[sk.id] > 0) && S.mp >= skCost(sk);
+const autoOn = sk => !((S.opts.skOff || {})[sk.id]);
+function toggleAuto(sk) { S.opts.skOff = S.opts.skOff || {}; S.opts.skOff[sk.id] = autoOn(sk); toast(`${sk.n} 자동 사용 ${autoOn(sk) ? '켬' : '끔'}`); R.dirty = true; save(); }
 const needsTarget = sk => !(sk.buff || sk.id === 'heal');
 const buffOn = k => P.buffs[k] > R.t;
 
@@ -698,7 +726,78 @@ function playerWeapon() {
   if (S.cls === 'elf') return { r: null, l: 'bow_withString', st: 'bow' };
   return { r: t >= 3 ? 'staff' : 'wand', l: t >= 2 ? 'spellbook_open' : null, st: 'magic' };
 }
+/* ---------- polymorph cards ---------- */
+const PGRADE = [
+  { k: '일반', p: .55, col: '#c9c2b0', aspd: .95, spd: 1.05, dmg: 1.03 },
+  { k: '고급', p: .30, col: '#7fc682', aspd: .9, spd: 1.1, dmg: 1.06 },
+  { k: '희귀', p: .11, col: '#6aa8ff', aspd: .85, spd: 1.15, dmg: 1.1 },
+  { k: '영웅', p: .035, col: '#c98bff', aspd: .8, spd: 1.2, dmg: 1.15 },
+  { k: '전설', p: .005, col: '#ffb547', aspd: .72, spd: 1.25, dmg: 1.22 },
+];
+const POLY = { goblin: 0, bandit: 0, skmin: 0, gshaman: 0, scout: 1, orcw: 1, orca: 1, skel: 1, skela: 1,
+  orcchief: 2, skmage: 2, dknight: 2, warlock: 2, iceskel: 2, icearcher: 2, berserk: 3, assassin: 3, frostmage: 3, yeti: 3, fallen: 4, lord: 4, frostlord: 4 };
+const POLY_COST = 50000, POLY_COST10 = 450000;
+const polyState = () => S.poly || (S.poly = { owned: {}, active: null });
+const polyActive = () => { const a = polyState().active; return a && POLY[a] != null ? a : null; };
+function polyBonus() {
+  const a = polyActive(); if (!a) return null;
+  const g = PGRADE[POLY[a]], stars = polyState().owned[a] || 1;
+  return { ...g, dmg: g.dmg * (1 + .02 * (stars - 1)), stars };
+}
+const polyScale = id => clamp(MON[id].s, .85, 1 + POLY[id] * .08);
+function rollPoly() {
+  let x = Math.random(), g = 0;
+  for (; g < PGRADE.length - 1; g++) { if (x < PGRADE[g].p) break; x -= PGRADE[g].p; }
+  const ids = Object.keys(POLY).filter(k => POLY[k] === g);
+  return pick(ids);
+}
+function polyDraw(n) {
+  if (!ZONES[S.zone].town) { toast('변신 카드는 마을에서 뽑을 수 있어요'); return; }
+  const cost = n === 10 ? POLY_COST10 : POLY_COST;
+  if (S.adena < cost) { toast('아데나가 부족해요'); return; }
+  S.adena -= cost;
+  const ps = polyState(), res = [];
+  for (let k = 0; k < n; k++) {
+    const id = rollPoly(), isNew = !ps.owned[id];
+    ps.owned[id] = Math.min(5, (ps.owned[id] || 0) + 1);
+    res.push({ id, g: POLY[id], isNew, stars: ps.owned[id] });
+    if (POLY[id] >= 3) log(`${S.name}님이 변신 카드에서 [${PGRADE[POLY[id]].k}] ${MON[id].n}${J(MON[id].n, '을', '를')} 획득했습니다!`, 'ann');
+  }
+  const best = Math.max(...res.map(r => r.g));
+  if (best >= 3) SFX.rare(); else SFX.win();
+  el('gachaTitle').textContent = n === 10 ? '변신 카드 10회' : '변신 카드';
+  el('gachaCards').className = 'cards' + (n === 1 ? ' one' : '');
+  el('gachaCards').innerHTML = res.map((r, i) => `<div class="card" style="--gc:${PGRADE[r.g].col};--d:${(i * .12).toFixed(2)}s"><span class="g">${PGRADE[r.g].k}</span><span class="cn">${MON[r.id].n}</span><span class="ct">${r.isNew ? 'NEW' : '★' + r.stars}</span></div>`).join('');
+  el('gacha').hidden = false;
+  R.dirty = true; save();
+}
+function polyUse(id) {
+  const ps = polyState();
+  if (id && !ps.owned[id]) return;
+  ps.active = id || null; recalc();
+  fx('column', P.x, P.y, { col: id ? PGRADE[POLY[id]].col : 0xffffff, dur: .9 }); fx('ring', P.x, P.y, { col: 0xffffff, r1: 2, dur: .5 });
+  log(id ? `${MON[id].n}${J(MON[id].n, '으로', '로')} 변신했습니다.` : '변신을 해제했습니다.', 'sys');
+  R.dirty = true; save();
+}
 function dressPlayer() {
+  const pa = polyActive(), want = pa ? 'poly:' + pa : 'cls';
+  if (P.act.kindKey !== want) {
+    const rot = P.act.root.rotation.y; killActor(P.act);
+    const d = pa && MON[pa];
+    P.act = makeActor(d ? { model: d.m, s: polyScale(pa), tint: d.tint, glow: d.glow || (POLY[pa] === 4 ? '#ffb547' : null), flash: true, st: d.st, sk: d.sk }
+      : { model: CLS[S.cls].model, flash: true, st: '1h' });
+    P.act.kindKey = want; P.act.root.rotation.y = rot;
+  }
+  if (pa) {
+    const d = MON[pa], a = P.act;
+    a.A = styleAnims(d.st, d.sk); a.curName = '';
+    setWeapons(a, d.r, d.l, D.glow);
+    playerLight.color.set(D.glow || '#ffb060');
+    return;
+  }
+  dressClass();
+}
+function dressClass() {
   const w = playerWeapon(), a = P.act;
   a.A = styleAnims(w.st, false); a.curName = '';
   setWeapons(a, w.r, w.l, D.glow);
@@ -1056,6 +1155,11 @@ function aiEnchant(r) {
 // AI users keep playing in the background: they level, find scrolls and sometimes a better weapon
 function aiProgress() {
   const all = roster(), inParty = new Set((S.party || []).map(x => x.name));
+  if (Math.random() < .12) {
+    const r = pick(all), id = rollPoly();
+    if (!r.poly || POLY[id] > POLY[r.poly]) r.poly = id;
+    if (POLY[id] >= 3) log(`${r.name}님이 변신 카드에서 [${PGRADE[POLY[id]].k}] ${MON[id].n}${J(MON[id].n, '을', '를')} 획득했습니다!`, 'ann');
+  }
   for (let k = 0; k < 3; k++) {
     const r = pick(all);
     if (Math.random() < .08 && r.lv < 55) r.lv++;
@@ -1366,7 +1470,7 @@ function playerDie() {
   closeSheet(); save();
 }
 function pickAutoSkill(t) {
-  const ready = mySkills().filter(skReady), reserve = S.cls === 'knight' ? 0 : D.maxMp * .15;
+  const ready = mySkills().filter(k => skReady(k) && autoOn(k)), reserve = S.cls === 'knight' ? 0 : D.maxMp * .15;
   const heal = ready.find(k => k.id === 'heal'); if (heal && S.hp < D.maxHp * .55) return heal;
   const buff = ready.find(k => k.buff && S.mp - skCost(k) >= reserve); if (buff) return buff;
   const dmg = ready.filter(k => needsTarget(k) && S.mp - skCost(k) >= reserve);
@@ -1516,7 +1620,7 @@ function updatePlayer(dt) {
   const inC = R.t - P.lastCombat < 4;
   S.hp = Math.min(D.maxHp, S.hp + D.hpReg * (inC ? 1 : 3) * dt);
   S.mp = Math.min(D.maxMp, S.mp + D.mpReg * (inC ? 1 : 2.5) * dt);
-  if (R.auto && !Z.town && S.hp < D.maxHp * .5) { const hs = mySkills().find(k => k.id === 'heal'); if (hs && skReady(hs)) castSkill(hs, null); }
+  if (R.auto && !Z.town && S.hp < D.maxHp * .5) { const hs = mySkills().find(k => k.id === 'heal'); if (hs && skReady(hs) && autoOn(hs)) castSkill(hs, null); }
   if (S.opts.pot > 0 && S.hp < D.maxHp * S.opts.pot / 100) { const k = bestPotion(); if (k) useItem(k); }
   if (!Z.town) {
     if (S.opts.haste && S.hasteLeft <= 0 && cnt('green')) useItem('green');
@@ -1820,6 +1924,7 @@ function hud() {
     b.classList.toggle('locked', locked);
     b.querySelector('.skn').textContent = sk.n;
     b.querySelector('.skm').textContent = locked ? `Lv.${sk.lv}` : `MP ${skCost(sk)}`;
+    b.classList.toggle('noauto', !autoOn(sk) || locked);
     b.querySelector('.cd').style.setProperty('--p', (Math.max(0, P.cds[sk.id] || 0) / sk.cd * 100) + '%');
   });
   el('bAuto').classList.toggle('on', R.auto);
@@ -1838,7 +1943,7 @@ function hud() {
 }
 
 /* ================= SHEETS ================= */
-const TITLES = { party: '파티', bag: '가방', enc: '강화', char: '캐릭터 정보', set: '설정', shop: '상점 · 상인 메리', tele: '텔레포트 · 텔레포터 루카' };
+const TITLES = { poly: '변신', party: '파티', bag: '가방', enc: '강화', char: '캐릭터 정보', set: '설정', shop: '상점 · 상인 메리', tele: '텔레포트 · 텔레포터 루카' };
 function openSheet(n) {
   if (!S || R.dead) return;
   if (n !== 'party') R.partyPick = null;
@@ -1877,6 +1982,25 @@ function equipBest() {
 // success chance for the k-th step past the safe line; blessed scrolls add 10%p there
 const encOdds = (k, bless) => [.5, .4, .3, .2, .12][Math.min(k - 1, 4)] + (bless ? .1 : 0);
 const VIEWS = {
+  poly() {
+    const ps = polyState(), a = polyActive(), pb = polyBonus(), town = ZONES[S.zone].town;
+    let h = `<div class="sec">현재 변신</div>`;
+    if (a) h += `<div class="row">${icoHtml(PGRADE[POLY[a]].col, MON[a].n[0])}<div class="info"><div class="n">${MON[a].n}<span class="grade" style="--gc:${PGRADE[POLY[a]].col}">${PGRADE[POLY[a]].k}</span></div>
+      <div class="s">★${pb.stars} · 공격 속도 +${Math.round((1 / pb.aspd - 1) * 100)}% · 이동 +${Math.round((pb.spd - 1) * 100)}% · 피해 +${Math.round((pb.dmg - 1) * 100)}%</div></div><div class="btns"><button class="btn" data-a="polyoff">해제</button></div></div>`;
+    else h += `<p class="note">변신하지 않았어요. 아래에서 가진 변신을 고르세요.</p>`;
+    h += `<div class="sec">변신 카드 뽑기</div>
+      <div class="seg"><button data-a="polydraw" data-v="1" ${!town || S.adena < POLY_COST ? 'disabled' : ''}>1회 · ${fmt(POLY_COST)}</button><button data-a="polydraw" data-v="10" ${!town || S.adena < POLY_COST10 ? 'disabled' : ''}>10회 · ${fmt(POLY_COST10)}</button></div>
+      <p class="note">${town ? '' : '카드는 마을에서 뽑을 수 있어요. '}확률: ${PGRADE.map(g => `${g.k} ${+(g.p * 100).toFixed(1)}%`).join(' · ')}. 같은 변신을 또 뽑으면 ★가 올라 피해가 2%씩 늘어요(최대 ★5).</p>
+      <div class="sec">도감 (${Object.keys(ps.owned).length}/${Object.keys(POLY).length})</div>`;
+    const ids = Object.keys(POLY).sort((x, y) => POLY[y] - POLY[x]);
+    for (const id of ids) {
+      const g = PGRADE[POLY[id]], own = ps.owned[id];
+      h += `<div class="row" style="${own ? '' : 'opacity:.4'}">${icoHtml(own ? g.col : '#2a2217', own ? MON[id].n[0] : '?')}<div class="info"><div class="n">${MON[id].n}<span class="grade" style="--gc:${g.col}">${g.k}</span>${own ? ` <span style="color:var(--gold2);font-size:11px">★${own}</span>` : ''}</div>
+        <div class="s">공속 +${Math.round((1 / g.aspd - 1) * 100)}% · 이동 +${Math.round((g.spd - 1) * 100)}% · 피해 +${Math.round((g.dmg - 1) * 100)}%</div></div>
+        <div class="btns">${own && id !== a ? `<button class="btn pri" data-a="polyuse" data-v="${id}">변신</button>` : id === a ? '<span class="tag">변신 중</span>' : ''}</div></div>`;
+    }
+    return h;
+  },
   party() {
     const mem = partyBots();
     let h = `<div class="sec"><span>파티원 (${mem.length}/${PARTY_MAX})</span></div>`;
@@ -1966,6 +2090,9 @@ const VIEWS = {
   set() {
     const o = S.opts, tog = (k, t) => `<div class="set"><span>${t}</span><button class="tog ${o[k] ? 'on' : ''}" data-a="tog" data-v="${k}" aria-pressed="${!!o[k]}"></button></div>`;
     return `<div class="set"><span>자동 물약 <b id="potv" style="color:var(--gold2)">${o.pot ? `HP ${o.pot}% 이하` : '끔'}</b></span><input type="range" id="potr" min="0" max="90" step="10" value="${o.pot}"></div>
+      <div class="sec">자동 사냥 때 쓸 스킬 <span style="font-weight:500">스킬 버튼을 길게 눌러도 바뀌어요</span></div>
+      ${mySkills().map(k => `<div class="set"><span>${k.n}${S.lv < k.lv ? ` <span class="tag">Lv.${k.lv}</span>` : ''}</span><button class="tog ${autoOn(k) ? 'on' : ''}" data-a="skauto" data-v="${k.id}" aria-pressed="${autoOn(k)}"></button></div>`).join('')}
+      <div class="sec">자동 기능</div>
       ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자 끄기)')}
       <div class="set"><span>카메라 거리 <b id="camzv" style="color:var(--gold2)">${Math.round(camOpt().z * 100)}%</b></span><input type="range" id="camz" min="50" max="180" step="5" value="${Math.round(camOpt().z * 100)}"></div>
       <div class="set"><span>카메라 각도 <b id="campv" style="color:var(--gold2)">${Math.round(camOpt().pitch)}°</b></span><input type="range" id="camp" min="30" max="82" step="1" value="${Math.round(camOpt().pitch)}"></div>
@@ -2052,6 +2179,10 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'bless') { R.encBless = v === '1'; R.encRes = null; }
   else if (a === 'encgo') { doEnchant(); return; }
   else if (a === 'camreset') camReset();
+  else if (a === 'skauto') { const sk = mySkills().find(k => k.id === v); if (sk) toggleAuto(sk); }
+  else if (a === 'polydraw') { polyDraw(+v); }
+  else if (a === 'polyuse') { polyUse(v); }
+  else if (a === 'polyoff') { polyUse(null); }
   else if (a === 'tog') { S.opts[v] = !S.opts[v]; if (v === 'lowfx') applyQuality(); }
   else if (a === 'reset') {
     if (!R.confirmReset) R.confirmReset = true;
@@ -2163,7 +2294,14 @@ function actAuto() {
 }
 const bind = (id, fn) => el(id).addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); fn(); });
 bind('bAtk', actAttack); bind('bPot', actPot); bind('bAuto', actAuto);
-for (let i = 0; i < 4; i++) bind('bS' + (i + 1), () => actSkill(i));
+for (let i = 0; i < 4; i++) {
+  const b = el('bS' + (i + 1)); let tm = null, held = false;
+  b.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); held = false; tm = setTimeout(() => { held = true; tm = null; const sk = S && mySkills()[i]; if (sk) toggleAuto(sk); }, 550); });
+  const end = cast => { if (tm) { clearTimeout(tm); tm = null; if (cast && !held) actSkill(i); } };
+  b.addEventListener('pointerup', () => end(true));
+  b.addEventListener('pointerleave', () => end(false)); b.addEventListener('pointercancel', () => end(false));
+  b.addEventListener('contextmenu', e => e.preventDefault());
+}
 bind('bTele', () => S && !R.dead && useTele()); bind('bRet', () => S && !R.dead && useRet());
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
@@ -2223,7 +2361,7 @@ function begin() {
   S.opts = Object.assign({ pot: 50, tele: true, haste: true, mpPot: true, sound: true, lowfx: false }, S.opts || {});
   if (!(S.zone < ZONES.length)) S.zone = 0;
   if (P.act) killActor(P.act);
-  P.act = makeActor({ model: CLS[S.cls].model, flash: true, st: '1h' }); P.look = '';
+  P.act = makeActor({ model: CLS[S.cls].model, flash: true, st: '1h' }); P.act.kindKey = 'cls'; P.look = '';
   recalc();
   if (S.hp <= 0) S.hp = D.maxHp * .5;
   R.ready = true; R.dead = false; R.auto = !!S.autoOn; P.cds = {}; P.buffs = {}; P.queue = null;
@@ -2322,6 +2460,7 @@ function resumeAway() {
   log(`자리 비운 동안 ${fmt(r.kills)}마리를 처치했습니다.`, 'sys');
 }
 el('awayOk').addEventListener('click', () => { el('away').hidden = true; });
+el('gachaOk').addEventListener('click', () => { el('gacha').hidden = true; renderSheet(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) markAway(); else resumeAway(); });
 window.addEventListener('pagehide', markAway);
 /* ---------- install prompt (works when the page is served as an installable site) ---------- */
