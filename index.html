@@ -95,6 +95,13 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
 .bres .ok{color:#bcd9ff}.bres .bad{color:#ffb0a4}.bres .dim{color:var(--dim)}
 .codebox{width:100%;min-height:84px;margin-top:8px;background:#120f0a;border:1px solid var(--line2);border-radius:8px;color:var(--text);
   padding:9px 10px;font:12px/1.45 ui-monospace,Consolas,monospace;word-break:break-all;resize:vertical;user-select:text;-webkit-user-select:text}
+#raidbar{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top, 0px) + 246px);width:min(88%,380px);
+  background:rgba(20,8,8,.82);border:1px solid #a83a2a;border-radius:8px;padding:6px 10px 8px;pointer-events:none;z-index:2}
+#raidbar .rt{display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#ffcfb8;font-family:var(--serif)}
+#raidbar .rb{height:9px;margin-top:5px;border-radius:4px;background:rgba(0,0,0,.6);overflow:hidden}
+#raidbar .rb i{display:block;height:100%;background:linear-gradient(90deg,#ff5a3a,#b01a10);transition:width .15s}
+.pexp{height:5px;border-radius:3px;background:rgba(0,0,0,.5);overflow:hidden;margin-top:4px}
+.pexp i{display:block;height:100%;background:#7fc682}
 .seg button:disabled{opacity:.4;cursor:default}
 .act.sk .au{position:absolute;top:-3px;right:-3px;font-style:normal;font-size:8.5px;font-weight:800;line-height:1;padding:2px 3px;border-radius:5px;
   background:#1f4a66;color:#bfeaff;border:1px solid #8fe0ff;pointer-events:none}
@@ -274,6 +281,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
         <button class="mbtn" data-open="set">설정</button>
         <button class="mbtn" data-open="party">파티</button>
         <button class="mbtn" data-open="poly">변신</button>
+        <button class="mbtn" data-open="pet">펫</button>
       </div>
     </div>
   </div>
@@ -292,6 +300,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
     <button class="act sk" id="bS4"><span class="skn">-</span><small class="skm"></small><i class="cd"></i><em class="au">AUTO</em></button>
     <button class="act" id="bAtk">공격</button>
   </div>
+  <div id="raidbar" hidden><div class="rt"><span id="raidName">-</span><span id="raidTime">5:00</span></div><div class="rb"><i id="raidHp"></i></div></div>
   <div id="toast"></div>
   <div id="sheet" hidden>
     <div id="sheetHead"><div id="sheetTitle">가방</div><button id="sheetX" aria-label="닫기">✕</button></div>
@@ -397,6 +406,7 @@ const ITEMS = {
   ret: { n: '귀환 주문서', price: 60, sell: 12, ic: ['#c8b28a', '귀'] },
   ew: { n: '무기 마법 주문서', price: 20000, sell: 2000, ic: ['#e8d9a8', '무'] },
   ea: { n: '갑옷 마법 주문서', price: 12000, sell: 1200, ic: ['#d9cfb8', '갑'] },
+  pticket: { n: '변신 카드 1회권', sell: 5000, ic: ['#c98bff', '변'] },
   bew: { n: '축복받은 무기 마법 주문서', sell: 6000, ic: ['#f6d45a', '축'] },
   bea: { n: '축복받은 갑옷 마법 주문서', sell: 4000, ic: ['#f0e08a', '축'] },
 };
@@ -452,6 +462,9 @@ const MON = {
   voidskel: { n: '심연 해골왕', lv: 113, m: 'Skeleton_Warrior', tint: '#8060c0', s: 1.15, r: 'Skeleton_Axe', l: 'Skeleton_Shield_Large_A', st: '1h', sk: 1, ag: 1, glow: '#7a40ff', j: ['심연의 뼈', 3100] },
   voidbeast: { n: '심연의 거수', lv: 116, m: 'Barbarian', tint: '#3a2a5a', s: 1.6, r: 'axe_2handed', st: '2h', ag: 1, glow: '#6020c0', j: ['거수의 뿔', 3400] },
   abysslord: { n: '심연의 군주', lv: 128, m: 'Barbarian', tint: '#6a40a0', s: 2.4, r: 'axe_2handed', st: '2h', ag: 1, boss: 1, glow: '#a040ff', j: ['군주의 공허석', 45000] },
+  raid0: { n: '고대 거신', lv: 78, m: 'Barbarian', tint: '#8a6a50', s: 3, r: 'axe_2handed', st: '2h', ag: 1, glow: '#ff7a30', j: ['거신의 파편', 20000] },
+  raid1: { n: '멸망의 기사', lv: 102, m: 'Knight', tint: '#3a3a55', s: 3.1, r: 'sword_2handed_color', st: '2h', ag: 1, glow: '#6a8aff', j: ['멸망의 문장', 30000] },
+  raid2: { n: '심연의 대마녀', lv: 126, m: 'Mage', tint: '#402060', s: 3.2, r: 'staff', l: 'spellbook_open', st: 'magic', rg: 6, ag: 1, glow: '#c040ff', j: ['대마녀의 눈', 45000] },
   lord: { n: '화염의 군주', lv: 54, m: 'Barbarian', tint: '#ff7a50', s: 2.1, r: 'axe_2handed', st: '2h', ag: 1, boss: 1, glow: '#ff5a20', j: ['군주의 심장', 6000] },
 };
 for (const k in MON) ITEMS['j_' + k] = { n: MON[k].j[0], sell: MON[k].j[1], junk: 1, ic: ['#7a6548', '잡'] };
@@ -476,6 +489,8 @@ const ZONES = [
     light: [.9, 1.6, 0xfff8e8], hemiG: 0xa09070 },
   { n: '심연의 균열', N: 44, lv: '105~', cost: 14000, mons: ['voidknight', 'voidwitch', 'voidskel', 'voidbeast'], cnt: 28, bots: 2, tier: 6, boss: 'abysslord', blv: [103, 120], sky: 0x120a1e, fog: [0x120a1e, 14, 34], theme: 'void',
     light: [.4, .55, 0xc0a0ff], hemiG: 0x20103a, plight: 1.8 },
+  { n: '레이드 투기장', N: 30, raid: 1, lv: '레이드', cost: 0, mons: [], cnt: 0, bots: 0, tier: 6, blv: [1, 120], sky: 0x1a0808, fog: [0x1a0808, 16, 40], theme: 'void',
+    light: [.45, .75, 0xff9a70], hemiG: 0x3a1010, plight: 1.6 },
 ];
 const BOTN = ['검은늑대', '린저씨', '아침사냥꾼', '만렙가즈아', '강화의신', '증발장인', '물약도둑', '초보에요', '오크킬러', '달빛요정', '불꽃법사',
   '무과금전사2', '쌀먹', '레어헌터', '은하수', '하늘바라기', '새벽기사', '용사김씨', '막타전문', '자동사냥중', '고독한궁수', '빨물충전',
@@ -522,6 +537,9 @@ function recalc() {
   D.dmgMul = buffOn('rage') ? 1.2 : 1; D.taken = buffOn('iron') ? .65 : 1; D.dodge = buffOn('wind') ? .15 : 0;
   D.hpReg = (.6 + L * .12) * c.hpR; D.mpReg = c.mpR[0] + c.mpR[1] * L;
   D.crit = .06; D.cdr = 0;
+  const rb = S.reb || 0; // each rebirth: +6% max HP and damage, +2% attack speed, +25% exp
+  if (rb) { D.maxHp = Math.round(D.maxHp * (1 + .06 * rb)); D.dmgMul *= 1 + .06 * rb; D.aspd /= 1 + .02 * rb; }
+  D.expMul = 1 + .25 * rb;
   const pb = polyBonus();
   if (pb) {
     const o = pb.stats;
@@ -843,11 +861,14 @@ function rollPoly() {
   const ids = Object.keys(POLY).filter(k => POLY[k] === g);
   return pick(ids);
 }
-function polyDraw(n) {
-  if (!ZONES[S.zone].town) { toast('변신 카드는 마을에서 뽑을 수 있어요'); return; }
-  const cost = n === 10 ? POLY_COST10 : POLY_COST;
-  if (S.adena < cost) { toast('아데나가 부족해요'); return; }
-  S.adena -= cost;
+function polyDraw(n, ticket) {
+  if (ticket) { if (!cnt('pticket')) return; S.stack.pticket--; n = 1; }
+  else {
+    if (!ZONES[S.zone].town) { toast('변신 카드는 마을에서 뽑을 수 있어요'); return; }
+    const cost = n === 10 ? POLY_COST10 : POLY_COST;
+    if (S.adena < cost) { toast('아데나가 부족해요'); return; }
+    S.adena -= cost;
+  }
   const ps = polyState(), res = [];
   for (let k = 0; k < n; k++) {
     const id = rollPoly(), isNew = !ps.owned[id];
@@ -1106,6 +1127,15 @@ function buildZone(z) {
         solids.push({ c: [x, y, .5] });
       }
       glowCluster(0xffe080, 5, false);
+    } else if (th === 'void' && Z.raid) {
+      const bm = new THREE.MeshStandardMaterial({ color: 0x3a2a2a, roughness: .8 });
+      for (let k = 0; k < 14; k++) {
+        const a = k / 14 * Math.PI * 2, x = N / 2 + Math.cos(a) * (N / 2 - 2.2), y = N / 2 + Math.sin(a) * (N / 2 - 2.2);
+        const post = own(new THREE.Mesh(new THREE.CylinderGeometry(.25, .35, 1.4, 8), bm)); post.position.set(x, .7, y); zoneGroup.add(post);
+        const f = own(new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0xff6a20, blending: THREE.AdditiveBlending, depthWrite: false })));
+        f.position.set(x, 1.8, y); f.scale.set(1.4, 1.8, 1); zoneGroup.add(f); (R.torches = R.torches || []).push(f);
+      }
+      natTint = new THREE.Color(0x5a3030);
     } else if (th === 'void') {
       scatter(BARE, 24, 2.2, 3.2, .45); scatter(BARE, 70, 2.6, 3.4, 0, true); scatter(ROCKS, 30, .6, 1.8, .6);
       natTint = new THREE.Color(0x5a4878);
@@ -1247,7 +1277,8 @@ function updatePartyBot(b, dt) {
   if (dist(b, P) > 13) { fx('spark', b.x, b.y, { col: 0x8fe8a8 }); const [sx, sy] = partySlot(b); b.x = sx; b.y = sy; fx('spark', b.x, b.y, { col: 0x8fe8a8 }); b.target = null; return; }
   let t = null;
   if (!Z.town && !R.dead) {
-    if (P.target && !P.target.dead && (P.engage || R.auto)) t = P.target;
+    if (R.raidState && !R.raidState.boss.dead) t = R.raidState.boss;
+    if (!t && P.target && !P.target.dead && (P.engage || R.auto)) t = P.target;
     if (!t) { let bd = 8; for (const m of R.mons) if (!m.dead && (m.target === P || (m.target && m.target.party))) { const d = dist(m, P); if (d < bd) { bd = d; t = m; } } }
     if (!t && b.target && !b.target.dead && dist(b.target, P) < 9) t = b.target;
   }
@@ -1343,6 +1374,161 @@ function aiProgress() {
     }
   }
 }
+/* ---------- pets: one companion at a time, levels up from the player's kills ---------- */
+const PETS = {
+  orc: { n: '꼬마 오크', m: 'Barbarian', tint: '#9ccf6a', s: .5, r: 'axe_1handed', st: '1h', role: '공격', price: 200000, dmg: 1.4, hp: 1, desc: '강한 근접 공격' },
+  skel: { n: '꼬마 해골', m: 'Skeleton_Minion', s: .55, r: 'Skeleton_Blade', l: 'Skeleton_Shield_Small_A', st: '1h', sk: 1, role: '방어', price: 300000, dmg: .8, hp: 1.8, desc: '주변 몬스터의 공격을 대신 받아요' },
+  archer: { n: '꼬마 궁수', m: 'Ranger', s: .5, l: 'bow_withString', st: 'bow', role: '원거리', price: 300000, dmg: 1.1, hp: .9, rg: 5, desc: '멀리서 화살로 공격' },
+  priest: { n: '꼬마 사제', m: 'Mage', tint: '#fff0c0', s: .5, r: 'wand', st: 'magic', role: '회복', price: 500000, dmg: .6, hp: 1, rg: 4.5, desc: '주인의 체력을 회복해요' },
+  gold: { n: '황금 고블린', m: 'Rogue', tint: '#ffd86a', s: .5, r: 'dagger', st: '1h', role: '행운', price: 800000, dmg: .7, hp: 1, glow: '#ffb020', desc: '아데나 +20%, 드랍 기회 +15%' },
+};
+const petState = () => S.pets || (S.pets = { owned: {}, active: null });
+const petNeed = lv => Math.floor(20 * lv ** 1.7);
+const petActive = () => { const a = petState().active; return a && PETS[a] && petState().owned[a] ? a : null; };
+function petStats(type) {
+  const d = PETS[type], lv = petState().owned[type].lv;
+  return { lv, maxHp: Math.round((60 + lv * 22 + S.lv * 6) * d.hp), dmg: (3 + lv * 2 + S.lv * .4) * d.dmg };
+}
+function spawnPet() {
+  if (R.pet) { killActor(R.pet.act); R.pet = null; }
+  const t = petActive(); if (!t) return;
+  const d = PETS[t], st = petStats(t);
+  R.pet = { kind: 'pet', pet: true, type: t, name: d.n, x: P.x - 1, y: P.y + 1, rot: 0, hp: st.maxHp, maxHp: st.maxHp, moving: false, hurt: 0, target: null, cd: 0, skillCd: 3, dead: false, respT: 0 };
+  R.pet.act = makeActor({ model: d.m, s: d.s, tint: d.tint, glow: d.glow, r: d.r, l: d.l, st: d.st, sk: d.sk });
+}
+function petGainExp(n) {
+  const t = petActive(); if (!t) return;
+  const o = petState().owned[t]; if (o.lv >= 60) return;
+  o.exp += n; let up = false;
+  while (o.lv < 60 && o.exp >= petNeed(o.lv)) { o.exp -= petNeed(o.lv); o.lv++; up = true; }
+  if (up && R.pet) { const st = petStats(t); R.pet.maxHp = st.maxHp; R.pet.hp = st.maxHp; fx('ring', R.pet.x, R.pet.y, { col: 0xffd070, r1: 1.2, dur: .6 }); log(`${PETS[t].n} 레벨이 올랐습니다. (Lv.${o.lv})`, 'loot'); }
+}
+function updatePet(dt) {
+  const e = R.pet; if (!e) return;
+  e.moving = false; e.hurt = Math.max(0, e.hurt - dt); e.cd -= dt; e.skillCd -= dt;
+  if (e.dead) { if (R.t > e.respT) { Object.assign(e, { dead: false, hp: e.maxHp, x: P.x - 1, y: P.y + 1, target: null }); e.act.curName = ''; fx('spark', e.x, e.y, { col: 0xffd070 }); } return; }
+  const Z = ZONES[S.zone], d = PETS[e.type], st = petStats(e.type);
+  if (dist(e, P) > 12) { e.x = P.x - 1; e.y = P.y + 1; fx('spark', e.x, e.y, { col: 0xffd070 }); }
+  if (e.type === 'priest' && e.skillCd <= 0 && !R.dead && S.hp < D.maxHp * .7) {
+    e.skillCd = 6; const amt = Math.round(D.maxHp * .1); S.hp = Math.min(D.maxHp, S.hp + amt);
+    faceTo(e, P); attackAnim(e, 'Ranged_Magic_Spellcasting', .6); fx('heal', P.x, P.y, { col: 0x8fe89a, dur: .5, r1: 1.2 }); ftxt(P, '+' + amt, '#8fe8a8', 12, 2.3);
+  }
+  if (e.type === 'skel' && e.skillCd <= 0) {
+    const pulled = R.mons.filter(m => !m.dead && m.target === P && dist(m, e) < 6);
+    if (pulled.length) { e.skillCd = 6; for (const m of pulled) m.target = e; fx('ring', e.x, e.y, { col: 0xffd070, r1: 2.2, dur: .5 }); }
+  }
+  let t = null;
+  if (!Z.town && !R.dead) {
+    if (P.target && !P.target.dead && (P.engage || R.auto)) t = P.target;
+    if (!t) { let bd = 8; for (const m of R.mons) if (!m.dead && (m.target === P || m.target === e)) { const dd = dist(m, P); if (dd < bd) { bd = dd; t = m; } } }
+  }
+  e.target = t;
+  if (t) {
+    const rng = (d.rg || 1.2) + (t.d.s - 1) * .5;
+    if (dist(e, t) > rng) moveToward(e, t.x, t.y, Math.max(3, D.speed) * dt);
+    else if (e.cd <= 0) {
+      faceTo(e, t); e.cd = 1.1; attackAnim(e, null, 1);
+      const dmg = st.dmg * rnd(.85, 1.15);
+      if (!d.rg) setTimeout(() => hitMon(e, t, dmg), 200);
+      else proj({ from: e, to: t, kind: d.st === 'bow' ? 'arrow' : 'bolt', sp: 13, delay: .2, onHit: () => hitMon(e, t, dmg) });
+    }
+  } else {
+    const a = camYaw + Math.PI, sx = P.x + Math.sin(a) * 1.3, sy = P.y + Math.cos(a) * 1.3;
+    if (Math.hypot(sx - e.x, sy - e.y) > .5) { moveToward(e, sx, sy, D.speed * 1.1 * dt); e.slow = dist(e, P) < 3; }
+  }
+}
+/* ---------- raid: a timed fight against a giant boss with AI raiders ----------
+   The boss slams a marked circle every few seconds (step out of the red circle) and calls adds. */
+const RAIDS = [
+  { k: 'raid0', diff: '일반', minLv: 50, hpMul: 14, time: 300, adds: ['sandskel', 'nomad', 'mummy', 'dgiant'], tier: 5, cd: 20 },
+  { k: 'raid1', diff: '어려움', minLv: 85, hpMul: 19, time: 300, adds: ['cavewar', 'stalker', 'crystalmage', 'cgiant'], tier: 6, cd: 20 },
+  { k: 'raid2', diff: '지옥', minLv: 105, hpMul: 22, time: 330, adds: ['voidknight', 'voidwitch', 'voidskel', 'voidbeast'], tier: 6, cd: 25 },
+];
+const RAID_Z = () => ZONES.findIndex(z => z.raid);
+const monHpBase = lv => Math.floor(14 + lv * 6 + Math.min(lv, 60) ** 2 * .6 + Math.max(0, lv - 60) * 45);
+const RAID_DISC = new THREE.CircleGeometry(1, 40);
+function startRaid(i) {
+  const def = RAIDS[i], cd = (S.raidCd || {})[i] || 0;
+  if (S.lv < def.minLv && !(S.reb > 0)) { toast(`Lv.${def.minLv}부터 입장할 수 있어요`); return; }
+  if (Date.now() < cd) { toast(`${Math.ceil((cd - Date.now()) / 60000)}분 뒤에 다시 도전할 수 있어요`); return; }
+  S.raidCd = S.raidCd || {}; S.raidCd[i] = Date.now() + def.cd * 60000;
+  R.raidDef = i; closeSheet(); enterZone(RAID_Z());
+}
+function setupRaid() {
+  const def = RAIDS[R.raidDef || 0], Z = ZONES[S.zone], d = MON[def.k];
+  P.x = Z.N / 2; P.y = Z.N - 5;
+  const bm = spawnMon(def.k, true);
+  bm.x = Z.N / 2; bm.y = Z.N / 2 - 2; bm.raid = true; bm.boss = false;
+  bm.maxHp = bm.hp = monHpBase(d.lv) * def.hpMul; bm.dmg = (1.5 + d.lv * 1.05) * 2.4; bm.spd = 2; bm.target = P;
+  const inParty = new Set((S.party || []).map(x => x.name));
+  const pool = roster().filter(r => !inParty.has(r.name)).sort((a, b) => b.lv - a.lv).slice(0, 10).sort(() => Math.random() - .5).slice(0, 4);
+  for (const r of pool) { const b = makePartyBot({ name: r.name, cls: r.cls }); b.raider = true; b.x = P.x + rnd(-3, 3); b.y = P.y + rnd(-1, 1.5); R.bots.push(b); }
+  R.raidState = { def, boss: bm, t0: R.t, end: R.t + def.time, slamT: R.t + 7, addT: R.t + 20, marks: [], done: false };
+  el('raidName').textContent = `[${def.diff}] ${d.n}`; el('raidbar').hidden = false;
+  log(`레이드 시작! ${d.n}${J(d.n, '을', '를')} ${Math.round(def.time / 60)}분 안에 처치하세요. 빨간 원이 뜨면 밖으로 피하세요.`, 'ann');
+  if (pool.length) log(`${pool.map(r => r.name).join(', ')}님이 레이드에 합류했습니다.`, 'party');
+}
+function updateRaid(dt) {
+  const st = R.raidState, bm = st.boss;
+  const left = Math.max(0, st.end - R.t);
+  el('raidTime').textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
+  el('raidHp').style.width = Math.max(0, bm.hp / bm.maxHp * 100) + '%';
+  if (st.done) return;
+  if (left <= 0) { st.done = true; log(`시간 초과! ${bm.d.n} 레이드에 실패했습니다.`, 'warn'); toast('레이드 실패', 'red'); setTimeout(() => { if (ZONES[S.zone].raid) enterZone(0); }, 3500); return; }
+  if (bm.dead) return;
+  if (R.t >= st.slamT) {
+    st.slamT = R.t + rnd(7, 10);
+    const allies = partyBots().filter(b => !b.dead);
+    const n = 1 + (st.def.diff === '지옥' ? 2 : st.def.diff === '어려움' ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      const tgt = k === 0 || !allies.length ? P : pick(allies), r = 2.6;
+      const mesh = new THREE.Mesh(RAID_DISC, new THREE.MeshBasicMaterial({ color: 0xff2a10, transparent: true, opacity: .3, depthWrite: false }));
+      mesh.rotation.x = -Math.PI / 2; mesh.position.set(tgt.x, .06, tgt.y); mesh.scale.set(r, r, r); fxGroup.add(mesh);
+      st.marks.push({ x: tgt.x, y: tgt.y, r, at: R.t + 1.7, mesh });
+    }
+    faceTo(bm, P); attackAnim(bm, 'Melee_2H_Attack_Chop', 1.6);
+  }
+  for (let i = st.marks.length - 1; i >= 0; i--) {
+    const mk = st.marks[i];
+    mk.mesh.material.opacity = .25 + .35 * Math.abs(Math.sin(R.t * 10));
+    // auto hunting steps out of a circle aimed at the player
+    if (R.auto && !R.dead && Math.hypot(P.x - mk.x, P.y - mk.y) < mk.r + .3 && !P.moveTo) {
+      const a = Math.atan2(P.y - mk.y, P.x - mk.x) || rnd(0, 6), N = ZONES[S.zone].N;
+      P.moveTo = { x: clamp(mk.x + Math.cos(a) * (mk.r + 1), 2, N - 2), y: clamp(mk.y + Math.sin(a) * (mk.r + 1), 2, N - 2) };
+    }
+    if (R.t < mk.at) continue;
+    fxGroup.remove(mk.mesh); mk.mesh.material.dispose(); st.marks.splice(i, 1);
+    fx('boom', mk.x, mk.y, { col: 0xff5a20, r1: mk.r * 1.2, dur: .5 });
+    if (!R.dead && Math.hypot(P.x - mk.x, P.y - mk.y) < mk.r) { hurtPlayer(Math.max(1, Math.round(D.maxHp * .3 * D.taken))); R.lastHit = bm; }
+    for (const b of partyBots()) if (!b.dead && Math.hypot(b.x - mk.x, b.y - mk.y) < mk.r) { b.hp -= b.maxHp * .35; b.hurt = .14; if (b.hp <= 0) botDie(b); }
+    if (R.pet && !R.pet.dead && Math.hypot(R.pet.x - mk.x, R.pet.y - mk.y) < mk.r) { R.pet.hp -= R.pet.maxHp * .35; if (R.pet.hp <= 0) botDie(R.pet); }
+  }
+  if (R.t >= st.addT) {
+    st.addT = R.t + 25;
+    const alive = R.mons.filter(m => !m.dead && m.noResp).length;
+    for (let k = 0; k < Math.min(3, 6 - alive); k++) { const m = spawnMon(pick(st.def.adds)); m.x = bm.x + rnd(-4, 4); m.y = bm.y + rnd(-4, 4); m.target = P; m.noResp = true; }
+    log(`${bm.d.n}${J(bm.d.n, '이', '가')} 부하를 불렀습니다!`, 'warn');
+  }
+}
+function raidWin(m) {
+  const st = R.raidState; if (!st || st.done) return;
+  st.done = true;
+  for (const mk of st.marks) { fxGroup.remove(mk.mesh); mk.mesh.material.dispose(); } st.marks = [];
+  const def = st.def, sec = Math.round(R.t - st.t0), d = MON[def.k];
+  gainExp(Math.floor((3 + 1.4 * Math.pow(d.lv, 2.1)) * 60 * D.expMul));
+  const ad = d.lv * 900; S.adena += ad;
+  const got = [['ew', ri(4, 7)], ['ea', ri(4, 7)], ['bew', ri(1, 3)], ['bea', ri(1, 3)], ['pticket', ri(2, 4)], ['elixir', ri(20, 40)]];
+  for (const [k, n] of got) addItem(k, n);
+  const gears = [makeGear(def.tier), makeGear(def.tier)];
+  const i = RAIDS.indexOf(def); S.raidBest = S.raidBest || {}; const best = S.raidBest[i]; if (!best || sec < best) S.raidBest[i] = sec;
+  log(`${S.name}님 일행이 레이드 보스 ${d.n}${J(d.n, '을', '를')} 처치했습니다! (${Math.floor(sec / 60)}분 ${sec % 60}초)`, 'ann');
+  log(`보상: ${fmt(ad)} 아데나, ${got.map(([k, n]) => `${ITEMS[k].n} ${n}`).join(', ')}, ${gears.map(gname).join(', ')}`, 'loot');
+  toast(`레이드 성공! ${Math.floor(sec / 60)}분 ${sec % 60}초`, 'blue'); SFX.rare();
+  for (const b of partyBots()) if (b.raider && !b.dead) setTimeout(() => botSay(b, pick(['수고하셨어요!!', '레이드 성공 ㅋㅋ', '다음에 또 불러주세요'])), rnd(500, 2500));
+  for (const r of roster()) if (partyBots().some(b => b.raider && b.name === r.name)) r.ew += 2;
+  setTimeout(() => { if (ZONES[S.zone].raid) enterZone(0); }, 12000);
+  R.dirty = true; save();
+}
 function makeBot(town, forceName) {
   const Z = ZONES[S.zone], used = new Set(R.bots.map(b => b.name).concat((S.party || []).map(x => x.name)));
   const free = roster().filter(r => !used.has(r.name));
@@ -1361,6 +1547,7 @@ function makeBot(town, forceName) {
 }
 function clearEntities() {
   for (const e of R.mons.concat(R.bots, R.npcs)) killActor(e.act);
+  if (R.pet) { killActor(R.pet.act); R.pet = null; }
   for (const p of R.proj) if (p.obj) fxGroup.remove(p.obj);
   for (const f of R.fx) fxGroup.remove(f.obj);
   R.mons = []; R.bots = []; R.npcs = []; R.proj = []; R.fx = []; R.txt = []; R.resp = [];
@@ -1375,7 +1562,7 @@ function enterZone(z) {
   if (!Z.town) {
     for (let k = 0; k < Z.cnt; k++) spawnMon(pick(Z.mons));
     for (let k = 0; k < Z.bots; k++) R.bots.push(makeBot(false));
-    if (S.opts.pkOn !== false && Math.random() < .2) spawnPkAi();
+    if (!Z.raid && S.opts.pkOn !== false && Math.random() < .2) spawnPkAi();
     for (const info of S.party || []) R.bots.push(makePartyBot(info));
     if (Z.boss && R.boss[z] && R.boss[z].alive) {
       const B = R.boss[z], bm = spawnMon(Z.boss, true);
@@ -1396,6 +1583,9 @@ function enterZone(z) {
     npc('상인 메리', C - 3.4, C + 2.6, { model: 'Rogue_Hooded', r: 'dagger', st: '1h' }, 'Idle_A');
     npc('텔레포터 루카', C + 2.6, C - 3.4, { model: 'Mage', r: 'staff', l: 'spellbook_open', st: 'magic' }, 'Ranged_Magic_Spellcasting');
   }
+  R.raidState = null; el('raidbar').hidden = true;
+  if (Z.raid) setupRaid();
+  spawnPet();
   if (P.act) P.act.curName = '';
   camSnap = true;
   fx('spark', P.x, P.y, { col: 0xbfe1ff, dur: .8 });
@@ -1513,7 +1703,7 @@ const rollMagic = () => (ri(D.wmin, D.wmax) + D.wbonus + Math.floor(S.lv * 1.1) 
 
 function hitMon(src, m, dmg, sure) {
   if (m.dead || !R.mons.includes(m)) return;
-  const isP = src === P, isParty = !!src.party;
+  const isP = src === P, isParty = !!(src.party || src.pet);
   if (isP && !sure) {
     const hc = clamp(.88 + (S.lv - m.lv) * .02 + D.went * .01, .3, .98);
     if (Math.random() > hc) { ftxt(m, 'MISS', '#b8b0a0', 12); aggro(m, src); return; }
@@ -1588,13 +1778,14 @@ function pkKilled(m) {
 function killMon(m) {
   m.dead = true; m.fade = 2.2; m.hp = 0; m.target = null;
   play(m.act, m.act.A.death, { once: true, speed: 1.1 });
+  if (m.raid) { raidWin(m); return; }
   if (m.k === 'pk') { if (m.dmgBy.p > 0) pkKilled(m); else if (m.d.pk) log(`PK 유저 ${m.d.n}님이 쓰러졌습니다.`, 'ann'); return; }
   const p = m.dmgBy.p, b = m.dmgBy.b;
   if (p > 0 && !R.dead) {
-    let ex = Math.floor(3 + 1.4 * Math.pow(m.lv, 2.1)) * (m.boss ? 30 : 1);
+    let ex = Math.floor(Math.floor(3 + 1.4 * Math.pow(m.lv, 2.1)) * (m.boss ? 30 : 1) * D.expMul);
     if (S.lv > m.lv + 10) ex = Math.floor(ex * .3);
     gainExp(Math.max(1, Math.round(ex * (p >= b ? 1 : p / (p + b) * .6))));
-    if (p >= b) { S.kills++; loot(m); S.align = Math.min(1000, alignOf() + (alignOf() < 0 ? 5 : 1)); }
+    if (p >= b) { S.kills++; petGainExp(1 + Math.floor(m.lv / 15)); loot(m); S.align = Math.min(1000, alignOf() + (alignOf() < 0 ? 5 : 1)); }
     else if (Math.random() < .3) { const bb = R.bots.find(x => !x.dead && Math.hypot(x.x - m.x, x.y - m.y) < 7); if (bb) botSay(bb, pick(['ㅋㅋ 막타 감사요', '앗 제가 먹었네요', '죄송ㅎㅎ'])); }
   }
   if (P.target === m) { P.target = null; if (!R.auto) P.engage = false; }
@@ -1606,7 +1797,7 @@ function killMon(m) {
       const top = m.byName && rosterOf(Object.entries(m.byName).sort((x, y) => y[1] - x[1])[0][0]);
       if (top) rewardBossKill(top, m.d.n); else log(`${m.d.n}${J(m.d.n, '이', '가')} 쓰러졌습니다.`, 'ann');
     }
-  } else R.resp.push({ k: m.k, t: R.t + rnd(4, 10) });
+  } else if (!m.noResp) R.resp.push({ k: m.k, t: R.t + rnd(4, 10) });
 }
 function gainExp(n) {
   S.exp += n; let up = false;
@@ -1645,12 +1836,14 @@ function rollDrops(k, give, gear) {
 }
 function loot(m) {
   const z = S.zone, Z = ZONES[z], got = [];
-  const ad = Math.round(m.lv * rnd(2, 6) * (m.boss ? 30 : 1));
+  const gold = petActive() === 'gold' && R.pet && !R.pet.dead;
+  const ad = Math.round(m.lv * rnd(2, 6) * (m.boss ? 30 : 1) * (gold ? 1.2 : 1));
   S.adena += ad; ftxt(m, `+${fmt(ad)}`, '#f1d58c', 12, .9);
   const add = (k, n = 1) => { addItem(k, n); got.push([k, n]); };
   const gears = [];
   const dropGear = tier => { gears.push(makeGear(tier)); R.dirty = true; };
   rollDrops(m.k, (k, n, junk) => junk ? addItem(k, n) : add(k, n), dropGear);
+  if (gold && Math.random() < .15) rollDrops(m.k, (k, n, junk) => junk ? addItem(k, n) : add(k, n), dropGear);
   if (m.boss) { add('ew', ri(2, 4)); add('ea', ri(2, 4)); if (Math.random() < .35) add('bew'); if (Math.random() < .35) add('bea'); dropGear(4); dropGear(Math.random() < .5 ? 4 : 3); }
   let rare = null;
   for (const [k, n] of got) {
@@ -1679,6 +1872,7 @@ function monHit(m, t) {
   } else { t.hp -= Math.max(1, m.dmg * rnd(.4, .8)); t.hurt = .14; if (t.hp <= 0) botDie(t); }
 }
 function botDie(b) {
+  if (b.pet) { b.dead = true; b.respT = R.t + 20; b.target = null; play(b.act, b.act.A.death, { once: true }); for (const m of R.mons) if (m.target === b) m.target = null; log(`${b.name}${J(b.name, '이', '가')} 쓰러졌습니다. 20초 뒤 돌아와요.`, 'warn'); return; }
   b.dead = true; b.respT = R.t + (b.party ? 15 : rnd(20, 45)); b.target = null; b.fade = 2.2;
   play(b.act, b.act.A.death, { once: true });
   for (const m of R.mons) if (m.target === b) m.target = null;
@@ -1705,6 +1899,7 @@ function playerDie() {
   }
   el('deathMsg').textContent = (loss > 0 ? `경험치 ${fmt(loss)}(5%)를 잃었습니다.` : '경험치 손실은 없었습니다.') + extra;
   setTimeout(() => { if (R.dead) el('death').hidden = false; }, 1400);
+  if (R.raidState && !R.raidState.done) { R.raidState.done = true; log('쓰러져서 레이드에 실패했습니다.', 'warn'); }
   closeSheet(); save();
 }
 function pickAutoSkill(t) {
@@ -1863,7 +2058,7 @@ function updatePlayer(dt) {
   if (S.opts.pot > 0 && S.hp < D.maxHp * S.opts.pot / 100) { const k = bestPotion(); if (k) useItem(k); }
   if (!Z.town) {
     if (S.opts.haste && S.hasteLeft <= 0 && cnt('green')) useItem('green');
-    if (S.opts.mpPot && S.cls !== 'knight' && S.mp < D.maxMp * .25 && cnt('blue')) useItem('blue');
+    if (S.opts.mpPot && S.mp < D.maxMp * .25 && cnt('blue')) useItem('blue');
   }
   if (R.recallAt && R.t >= R.recallAt) { R.recallAt = 0; enterZone(0); return; }
   const [ix, iy] = inputVec();
@@ -1872,7 +2067,11 @@ function updatePlayer(dt) {
     moveEnt(P, (ix * cy + iy * sy) * D.speed * dt, (iy * cy - ix * sy) * D.speed * dt);
     P.engage = false; P.moveTo = null; P.act.lock = Math.min(P.act.lock, 0); return;
   }
-  if (P.moveTo) { if (moveToward(P, P.moveTo.x, P.moveTo.y, D.speed * dt)) P.moveTo = null; return; }
+  if (P.moveTo) {
+    if (P.moveTo !== P.moveRef) { P.moveRef = P.moveTo; P.moveT = R.t; }
+    if (moveToward(P, P.moveTo.x, P.moveTo.y, D.speed * dt) || R.t - P.moveT > 3) P.moveTo = null;
+    return;
+  }
   if (P.target && (P.target.dead || dist(P, P.target) > 16)) { P.target = null; if (!R.auto) P.engage = false; }
   if (R.auto && !Z.town) {
     let att = null, ad = 7;
@@ -1915,7 +2114,7 @@ function updateBot(b, dt) {
   if (!b.target && Math.random() < dt * 2) {
     let best = null, bd = 12;
     for (const m of R.mons) {
-      if (m.dead || m.target === P || (m.target && m.target.party) || (P.target === m && P.engage)) continue;
+      if (m.dead || m.target === P || (m.target && (m.target.party || m.target.pet)) || (P.target === m && P.engage)) continue;
       if (R.bots.some(o => o !== b && o.target === m)) continue;
       const d = dist(b, m); if (d < bd) { bd = d; best = m; }
     }
@@ -1963,6 +2162,7 @@ function updateMon(m, dt) {
     if (!R.dead && dist(m, P) < 3.5) m.target = P;
     else if (Math.random() < dt * .5) { const b = R.bots.find(b => !b.dead && dist(b, m) < 3); if (b) m.target = b; }
   }
+  if (m.raid && (!m.target || m.target.dead) && !R.dead) m.target = P; // raid bosses never drop aggro
   const t = m.target;
   if (t) {
     const rng = m.d.rg || (1.2 + (m.d.s - 1) * .7);
@@ -1979,7 +2179,7 @@ function updateMon(m, dt) {
     m.wT -= dt;
     if (m.wT <= 0) { m.wT = rnd(2, 6); m.wx = clamp(m.x + rnd(-3, 3), 2, ZONES[S.zone].N - 2); m.wy = clamp(m.y + rnd(-3, 3), 2, ZONES[S.zone].N - 2); }
     if (Math.hypot(m.wx - m.x, m.wy - m.y) > .1) { moveToward(m, m.wx, m.wy, dt); m.slow = true; }
-    if (m.hp < m.maxHp) { m.hp = Math.min(m.maxHp, m.hp + m.maxHp * .05 * dt); if (m.hp >= m.maxHp) m.dmgBy = { p: 0, b: 0 }; }
+    if (m.hp < m.maxHp && !m.raid) { m.hp = Math.min(m.maxHp, m.hp + m.maxHp * .05 * dt); if (m.hp >= m.maxHp) m.dmgBy = { p: 0, b: 0 }; }
   }
 }
 /* ---------- boss raids by AI users ----------
@@ -2086,6 +2286,8 @@ function update(dt) {
   for (const e of R.mons) stepActor(e, dt, near(e));
   for (const e of R.bots) stepActor(e, dt, near(e) && !(e.dead && e.fade <= 0));
   for (const e of R.npcs) stepActor(e, dt, near(e));
+  updatePet(dt); if (R.pet) stepActor(R.pet, dt, !(R.pet.dead && R.t > R.pet.respT - 18));
+  if (R.raidState) updateRaid(dt);
   if (R.snow) {
     R.snow.position.set(P.x, 0, P.y);
     const a = R.snow.geometry.attributes.position, v = a.array;
@@ -2137,9 +2339,9 @@ function drawOverlay() {
   for (const m of R.mons) {
     if (m.dead || !m.act.root.visible) continue;
     const p = toScreen(m.x, m.act.h + .25, m.y); if (!p) continue;
-    label(c, p[0], p[1] - 6, m.d.pk ? '[PK] ' + m.d.n : m.d.n, m.d.pk ? '#ff4a3a' : m.d.victim ? '#c9a0ff' : m.boss ? '#ff8a6a' : m.d.ag ? '#ffcfb8' : '#ece4d0', m.boss || m.k === 'pk' ? 12 : 10.5, m.boss || m.k === 'pk');
+    label(c, p[0], p[1] - 6, m.d.pk ? '[PK] ' + m.d.n : m.d.n, m.d.pk ? '#ff4a3a' : m.d.victim ? '#c9a0ff' : m.boss || m.raid ? '#ff8a6a' : m.d.ag ? '#ffcfb8' : '#ece4d0', m.boss || m.raid || m.k === 'pk' ? 13 : 10.5, m.boss || m.raid || m.k === 'pk');
     if (m.hp < m.maxHp || P.target === m) {
-      const w = m.boss ? 80 : 38; c.fillStyle = 'rgba(0,0,0,.7)'; c.fillRect(p[0] - w / 2 - 1, p[1] - 2, w + 2, 5);
+      const w = m.boss || m.raid ? 80 : 38; c.fillStyle = 'rgba(0,0,0,.7)'; c.fillRect(p[0] - w / 2 - 1, p[1] - 2, w + 2, 5);
       c.fillStyle = '#d8402f'; c.fillRect(p[0] - w / 2, p[1] - 1, w * Math.max(0, m.hp / m.maxHp), 3);
     }
   }
@@ -2149,6 +2351,7 @@ function drawOverlay() {
     label(c, p[0], p[1], b.party ? '♦ ' + b.name : b.name, b.party ? '#9ff0b8' : '#a9ccff', 10.5, b.party);
     if (b.sayT > 0 && b.say) bubble(c, p[0], p[1] - 14, b.say);
   }
+  if (R.pet && !R.pet.dead) { const e = R.pet, p = toScreen(e.x, e.act.h + .25, e.y); if (p) { label(c, p[0], p[1], `${e.name} Lv.${petState().owned[e.type].lv}`, '#ffd070', 10); if (e.hp < e.maxHp) { c.fillStyle = 'rgba(0,0,0,.7)'; c.fillRect(p[0] - 15, p[1] + 3, 30, 4); c.fillStyle = '#59c46e'; c.fillRect(p[0] - 15, p[1] + 3, 30 * e.hp / e.maxHp, 4); } } }
   for (const n of R.npcs) { const p = toScreen(n.x, n.act.h + .3, n.y); if (p) label(c, p[0], p[1], n.name, '#f1d58c', 11.5, true); }
   const pp = toScreen(P.x, P.act.h + .25, P.y); if (pp) label(c, pp[0], pp[1], S.name, nameColor(), 11.5, true);
   for (const tx of R.txt) {
@@ -2163,7 +2366,7 @@ function drawOverlay() {
 /* ================= HUD ================= */
 function hud() {
   const c = CLS[S.cls];
-  el('lv').textContent = 'Lv.' + S.lv; el('nm').textContent = S.name; el('cl').textContent = c.n;
+  el('lv').textContent = 'Lv.' + S.lv + (S.reb ? ` ✦${S.reb}` : ''); el('nm').textContent = S.name; el('cl').textContent = c.n;
   el('hpf').style.width = Math.max(0, S.hp / D.maxHp * 100) + '%'; el('hpt').textContent = `${fmt(Math.max(0, S.hp))} / ${fmt(D.maxHp)}`;
   el('mpf').style.width = (S.mp / D.maxMp * 100) + '%'; el('mpt').textContent = `${fmt(S.mp)} / ${fmt(D.maxMp)}`;
   const ep = S.lv >= MAXLV ? 100 : S.exp / need(S.lv) * 100;
@@ -2195,10 +2398,11 @@ function hud() {
 }
 
 /* ================= SHEETS ================= */
-const TITLES = { poly: '변신', party: '파티', bag: '가방', enc: '강화', char: '캐릭터 정보', set: '설정', shop: '상점 · 상인 메리', tele: '텔레포트 · 텔레포터 루카' };
+const TITLES = { pet: '펫', poly: '변신', party: '파티', bag: '가방', enc: '강화', char: '캐릭터 정보', set: '설정', shop: '상점 · 상인 메리', tele: '텔레포트 · 텔레포터 루카' };
 function openSheet(n) {
   if (!S || R.dead) return;
   if (n !== 'party') R.partyPick = null;
+  R.confirmReb = false;
   if ((n === 'shop' || n === 'tele') && !ZONES[S.zone].town) return;
   R.sheet = n; R.confirmReset = false; el('sheet').hidden = false; el('sheetBody').scrollTop = 0; renderSheet();
 }
@@ -2234,6 +2438,18 @@ function equipBest() {
 // success chance for the k-th step past the safe line; blessed scrolls add 10%p there
 const encOdds = (k, bless) => [.5, .4, .3, .2, .12][Math.min(k - 1, 4)] + (bless ? .1 : 0);
 const VIEWS = {
+  pet() {
+    const ps = petState(), a = petActive(), town = ZONES[S.zone].town;
+    let h = `<p class="note" style="margin-top:6px">펫은 한 마리만 데리고 다닐 수 있어요. 내가 잡은 몬스터로 레벨이 오르고(최대 Lv.60), 쓰러져도 20초 뒤 돌아와요. 분양은 마을에서만 할 수 있어요.</p>`;
+    for (const k in PETS) {
+      const d = PETS[k], o = ps.owned[k];
+      h += `<div class="row">${icoHtml(o ? (d.glow || '#d8ae4f') : '#2a2217', d.n[0] === '꼬' ? d.n[3] : d.n[0])}<div class="info"><div class="n">${d.n}<span class="tag">${d.role}</span>${o ? ` <span style="color:var(--gold2);font-size:11px">Lv.${o.lv}</span>` : ''}</div>
+        <div class="s">${d.desc}${o ? ` · 공격 ${Math.round(petStats(k).dmg)} · HP ${fmt(petStats(k).maxHp)}` : ` · ${fmt(d.price)} 아데나`}</div>
+        ${o && o.lv < 60 ? `<div class="pexp"><i style="width:${o.exp / petNeed(o.lv) * 100}%"></i></div>` : ''}</div>
+        <div class="btns">${o ? (a === k ? `<button class="btn" data-a="petoff">해제</button>` : `<button class="btn pri" data-a="petuse" data-v="${k}">소환</button>`) : `<button class="btn" data-a="petbuy" data-v="${k}" ${!town || S.adena < d.price ? 'disabled' : ''}>분양</button>`}</div></div>`;
+    }
+    return h;
+  },
   poly() {
     const ps = polyState(), a = polyActive(), pb = polyBonus(), town = ZONES[S.zone].town;
     let h = `<div class="sec">현재 변신</div>`;
@@ -2242,7 +2458,8 @@ const VIEWS = {
     else h += `<p class="note">변신하지 않았어요. 아래에서 가진 변신을 고르세요.</p>`;
     h += `<div class="sec">변신 카드 뽑기</div>
       <div class="seg"><button data-a="polydraw" data-v="1" ${!town || S.adena < POLY_COST ? 'disabled' : ''}>1회 · ${fmt(POLY_COST)}</button><button data-a="polydraw" data-v="10" ${!town || S.adena < POLY_COST10 ? 'disabled' : ''}>10회 · ${fmt(POLY_COST10)}</button></div>
-      <p class="note">${town ? '' : '카드는 마을에서 뽑을 수 있어요. '}확률: ${PGRADE.map(g => `${g.k} ${+(g.p * 100).toFixed(1)}%`).join(' · ')}. 같은 변신을 또 뽑으면 ★가 올라 능력치가 8%씩 늘어요(최대 ★5). 유형: ${Object.entries(PTYPE).map(([k, v]) => `${k}(${v.desc})`).join(', ')}.</p>
+      ${cnt('pticket') ? `<button class="btn pri wide" data-a="polyticket">변신 카드 1회권 사용 (${cnt('pticket')}장)</button>` : ''}
+      <p class="note">${town ? '' : '카드는 마을에서 뽑을 수 있어요(1회권은 어디서나). '}확률: ${PGRADE.map(g => `${g.k} ${+(g.p * 100).toFixed(1)}%`).join(' · ')}. 같은 변신을 또 뽑으면 ★가 올라 능력치가 8%씩 늘어요(최대 ★5). 유형: ${Object.entries(PTYPE).map(([k, v]) => `${k}(${v.desc})`).join(', ')}.</p>
       <div class="sec">도감 (${Object.keys(ps.owned).length}/${Object.keys(POLY).length})</div>`;
     const ids = Object.keys(POLY).sort((x, y) => POLY[y] - POLY[x]);
     for (const id of ids) {
@@ -2338,8 +2555,11 @@ const VIEWS = {
       <div><span>성향</span><b style="color:${alignOf() < 0 ? 'var(--bad)' : 'var(--good)'}">${alignOf()}</b></div><div><span>PK 처치</span><b>${S.pkKills || 0}회</b></div>
       <div><span>사망</span><b>${S.deaths || 0}회</b></div><div><span>아데나</span><b>${fmt(S.adena)}</b></div></div>
       <div class="sec">스킬</div>${mySkills().map(k => `<div class="row" style="${S.lv < k.lv ? 'opacity:.5' : ''}"><span class="ico" style="background:#d8ae4f">${k.n[0]}</span><div class="info"><div class="n">${k.n}${S.lv < k.lv ? `<span class="tag">Lv.${k.lv}</span>` : ''}</div><div class="s">${k.desc} · MP ${skCost(k)} · 재사용 ${k.cd}초</div></div></div>`).join('')}
+      <div class="sec">환생 ${S.reb ? `<span style="color:var(--gold2)">✦${S.reb}</span>` : ''}</div>
+      <p class="note" style="margin-top:0">Lv.${MAXLV}에 도달하면 Lv.1로 돌아가는 대신 영구 능력치를 얻어요. 장비, 아이템, 아데나, 변신, 펫은 그대로예요.<br>환생 1회마다 최대 HP +6%, 피해 +6%, 공격 속도 +2%, 경험치 +25%${S.reb ? ` (지금: HP·피해 +${6 * S.reb}%, 공속 +${2 * S.reb}%, 경험치 +${25 * S.reb}%)` : ''}.</p>
+      <button class="btn wide ${S.lv >= MAXLV ? 'pri' : ''}" data-a="rebirth" ${S.lv >= MAXLV ? '' : 'disabled'}>${S.lv < MAXLV ? `Lv.${MAXLV}부터 환생할 수 있어요` : R.confirmReb ? '정말 환생할까요? 한 번 더 누르면 Lv.1이 됩니다' : '환생하기'}</button>
       <div class="sec">사냥터 안내</div>
-      ${ZONES.slice(1).map(z => `<div class="row"><div class="info"><div class="n">${z.n}</div><div class="s">권장 Lv.${z.lv}${z.boss ? ` · 보스 ${MON[z.boss].n}` : ''} · ${z.mons.map(k => MON[k].n).join(', ')}</div></div></div>`).join('')}
+      ${ZONES.slice(1).filter(z => !z.raid).map(z => `<div class="row"><div class="info"><div class="n">${z.n}</div><div class="s">권장 Lv.${z.lv}${z.boss ? ` · 보스 ${MON[z.boss].n}` : ''} · ${z.mons.map(k => MON[k].n).join(', ')}</div></div></div>`).join('')}
       <p class="note">3D 모델: KayKit (Kay Lousberg, CC0)</p>`;
   },
   set() {
@@ -2381,8 +2601,15 @@ const VIEWS = {
   },
   tele() {
     let h = '';
+    h += `<div class="sec">레이드</div>`;
+    RAIDS.forEach((rd, i) => {
+      const cd = (S.raidCd || {})[i] || 0, wait = cd > Date.now(), best = (S.raidBest || {})[i];
+      h += `<div class="row"><div class="info"><div class="n">[${rd.diff}] ${MON[rd.k].n}</div><div class="s">Lv.${rd.minLv}+ · 제한 ${Math.round(rd.time / 60)}분 · AI 레이더 4명 합류${best ? ` · 최고 ${Math.floor(best / 60)}분 ${best % 60}초` : ''}${wait ? ` · <b style="color:var(--bad)">${Math.ceil((cd - Date.now()) / 60000)}분 대기</b>` : ''}</div></div>
+        <div class="btns"><button class="btn danger" data-a="raid" data-v="${i}" ${wait || (S.lv < rd.minLv && !S.reb) ? 'disabled' : ''}>입장</button></div></div>`;
+    });
+    h += `<p class="note">빨간 원이 뜨면 1.7초 안에 밖으로 피하세요. 자동 사냥 중이면 알아서 피해요. 처치하면 축복 주문서, 변신 카드 1회권, 최상급 장비를 얻어요.</p><div class="sec">사냥터</div>`;
     ZONES.forEach((z, i) => {
-      if (z.town) return;
+      if (z.town || z.raid) return;
       const B = R.boss[i];
       h += `<div class="row"><div class="info"><div class="n">${z.n}</div><div class="s">권장 Lv.${z.lv}${z.boss ? ` · 보스 ${MON[z.boss].n}${B && B.alive ? ' <b style="color:var(--bad)">출현 중</b>' : ''}` : ''}</div></div>
         <div class="btns"><button class="btn pri" data-a="tele" data-v="${i}" ${S.adena < z.cost ? 'disabled' : ''}>${z.cost ? fmt(z.cost) + ' 아데나' : '무료'}</button></div></div>`;
@@ -2481,6 +2708,15 @@ async function importSave() {
   closeSheet(); clearEntities(); begin(); save();
   toast(`${S.name} (Lv.${S.lv}) 불러오기 완료`); log('저장 코드로 캐릭터를 불러왔습니다.', 'sys');
 }
+function doRebirth() {
+  if (S.lv < MAXLV) return;
+  S.reb = (S.reb || 0) + 1; S.lv = 1; S.exp = 0;
+  recalc(); S.hp = D.maxHp; S.mp = D.maxMp;
+  for (const b of partyBots()) partyStats(b);
+  fx('column', P.x, P.y, { col: 0xffe08a, dur: 1.6 }); fx('lvl', P.x, P.y, { col: 0xffe08a, dur: 1.4, r1: 3 });
+  log(`${S.name}님이 ${S.reb}번째 환생에 성공했습니다!`, 'ann'); toast(`환생 ✦${S.reb}`); SFX.lvl();
+  R.confirmReb = false; save(); renderSheet();
+}
 function doEnchant() {
   const g = gearById(R.encSel); if (!g || R.encBusy) return;
   const b = GEAR[g.b], isW = b.slot === 'weapon', safe = isW ? 6 : 4, k = (R.encBless ? 'b' : '') + (isW ? 'ew' : 'ea');
@@ -2525,6 +2761,11 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'buyg' && town) { const p = gearPrice(v); if (S.adena < p) return; S.adena -= p; addGear(v); log(`${GEAR[v].n} 구입`, 'sys'); }
   else if (a === 'tele' && town) { const z = ZONES[+v]; if (S.adena < z.cost) return; S.adena -= z.cost; closeSheet(); enterZone(+v); return; }
   else if (a === 'equipbest') { equipBest(); }
+  else if (a === 'petbuy' && town) { const d = PETS[v]; if (S.adena < d.price || petState().owned[v]) return; S.adena -= d.price; petState().owned[v] = { lv: 1, exp: 0 }; petState().active = v; spawnPet(); log(`${d.n}${J(d.n, '을', '를')} 분양받았습니다.`, 'sys'); }
+  else if (a === 'petuse') { petState().active = v; spawnPet(); fx('spark', P.x - 1, P.y + 1, { col: 0xffd070 }); }
+  else if (a === 'petoff') { petState().active = null; spawnPet(); }
+  else if (a === 'rebirth') { if (!R.confirmReb) R.confirmReb = true; else { doRebirth(); return; } }
+  else if (a === 'raid' && town) { startRaid(+v); return; }
   else if (a === 'savecode') { exportSave(); return; }
   else if (a === 'loadcode') { if (!R.confirmImport) R.confirmImport = true; else { importSave(); return; } }
   else if (a === 'pktog') { S.opts.pkOn = S.opts.pkOn === false; }
@@ -2543,6 +2784,7 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'camreset') camReset();
   else if (a === 'skauto') { const sk = mySkills().find(k => k.id === v); if (sk) toggleAuto(sk); }
   else if (a === 'polydraw') { polyDraw(+v); }
+  else if (a === 'polyticket') { polyDraw(1, true); }
   else if (a === 'polyuse') { polyUse(v); }
   else if (a === 'polyoff') { polyUse(null); }
   else if (a === 'tog') { S.opts[v] = !S.opts[v]; if (v === 'lowfx') applyQuality(); }
@@ -2726,7 +2968,7 @@ el('startBtn').addEventListener('click', () => {
 el('reviveBtn').addEventListener('click', () => { R.dead = false; S.hp = Math.round(D.maxHp * .6); S.mp = Math.round(D.maxMp * .6); el('death').hidden = true; P.act.curName = ''; enterZone(0); });
 function begin() {
   S.opts = Object.assign({ pot: 50, tele: true, haste: true, mpPot: true, sound: true, lowfx: false }, S.opts || {});
-  if (!(S.zone < ZONES.length)) S.zone = 0;
+  if (!(S.zone < ZONES.length) || ZONES[S.zone].raid) S.zone = 0;
   if (P.act) killActor(P.act);
   P.act = makeActor({ model: CLS[S.cls].model, flash: true, st: '1h' }); P.act.kindKey = 'cls'; P.look = '';
   recalc();
@@ -2756,11 +2998,11 @@ try { window.claude && window.claude.hot && window.claude.hot.snapshot && window
 function setAuto(v) { R.auto = v; if (S) { S.autoOn = v; save(); } }
 function markAway() {
   if (!S) return;
-  if (R.ready && !R.dead && R.auto && !ZONES[S.zone].town) S.away = { t: Date.now() }; else delete S.away;
+  if (R.ready && !R.dead && R.auto && !ZONES[S.zone].town && !ZONES[S.zone].raid) S.away = { t: Date.now() }; else delete S.away;
   save();
 }
 function simAway(sec) {
-  const Z = ZONES[S.zone]; if (Z.town || !Z.mons) return null;
+  const Z = ZONES[S.zone]; if (Z.town || Z.raid || !Z.mons || !Z.mons.length) return null;
   sec = Math.min(sec, 12 * 3600);
   const r = { sec: 0, kills: 0, exp: 0, lv0: S.lv, ad0: S.adena, got: {}, gears: [], pots: 0, tele: 0, green: 0, stop: '' };
   const give = (k, n = 1) => { S.stack[k] = (S.stack[k] || 0) + n; r.got[k] = (r.got[k] || 0) + n; };
@@ -2772,10 +3014,10 @@ function simAway(sec) {
     const mhp = 14 + lv * 6 + Math.min(lv, 60) ** 2 * .6 + Math.max(0, lv - 60) * 45;
     const hit = clamp(.88 + (S.lv - lv) * .02 + D.went * .01, .3, .98);
     const avg = ((D.wmin + D.wmax) / 2 + D.wbonus + (S.cls === 'mage' ? Math.floor(S.lv * 1.1) + 3 : Math.floor(S.lv * .8) + 2)) * 1.3;
-    const pn = (S.party || []).length;
-    const killT = (mhp / (avg * hit / D.aspd) + 3) * 1.25 / (1 + .45 * pn);
+    const pn = (S.party || []).length, pt = petActive();
+    const killT = (mhp / (avg * hit / D.aspd) + 3) * 1.25 / (1 + .45 * pn + (pt === 'orc' || pt === 'archer' ? .12 : pt ? .05 : 0));
     const mdmg = Math.max(1, (1.5 + lv * 1.05) * .95 - D.def * .25), mh = clamp(.8 - D.def * .012 + (lv - S.lv) * .02, .15, .95);
-    let short = mdmg * mh / 1.6 * killT * (S.cls === 'knight' ? 1 : .55) * (d.ag ? 1.15 : 1) * (1 - .15 * pn) - D.hpReg * killT;
+    let short = mdmg * mh / 1.6 * killT * (S.cls === 'knight' ? 1 : .55) * (d.ag ? 1.15 : 1) * (1 - .15 * pn) * (pt === 'priest' || pt === 'skel' ? .8 : 1) - D.hpReg * killT;
     if (short > 0) {
       if (!S.opts.pot) { r.stop = '자동 물약이 꺼져 있어서 사냥을 멈췄어요.'; break; }
       while (short > 0) {
@@ -2786,10 +3028,12 @@ function simAway(sec) {
       if (r.stop) break;
     }
     t += killT; r.kills++; S.kills++;
-    let ex = Math.floor(3 + 1.4 * Math.pow(lv, 2.1)); if (S.lv > lv + 10) ex = Math.floor(ex * .3);
+    let ex = Math.floor((3 + 1.4 * Math.pow(lv, 2.1)) * D.expMul); if (S.lv > lv + 10) ex = Math.floor(ex * .3);
     r.exp += ex; S.exp += ex;
     while (S.exp >= need(S.lv) && S.lv < MAXLV) { S.exp -= need(S.lv); S.lv++; }
-    S.adena += Math.round(lv * rnd(2, 6));
+    S.adena += Math.round(lv * rnd(2, 6) * (pt === 'gold' ? 1.2 : 1));
+    if (pt) petGainExp(1 + Math.floor(lv / 15));
+    if (pt === 'gold' && Math.random() < .15) rollDrops(k, give, tier => r.gears.push(makeGear(tier)));
     rollDrops(k, give, tier => r.gears.push(makeGear(tier)));
     if (S.opts.tele && r.kills % 6 === 0 && cnt('tele')) { S.stack.tele--; r.tele++; }
     if (S.opts.haste) { haste -= killT; if (haste <= 0 && cnt('green')) { S.stack.green--; r.green++; haste = 300; } }
