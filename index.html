@@ -93,6 +93,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
 .row.pick.sel .chk{background:var(--gold);border-color:var(--gold2)}
 .bres{margin-top:10px;border:1px solid var(--line2);border-radius:10px;padding:10px 12px;background:#15110c;font-size:12.5px;line-height:1.7}
 .bres .ok{color:#bcd9ff}.bres .bad{color:#ffb0a4}.bres .dim{color:var(--dim)}
+.codebox{width:100%;min-height:84px;margin-top:8px;background:#120f0a;border:1px solid var(--line2);border-radius:8px;color:var(--text);
+  padding:9px 10px;font:12px/1.45 ui-monospace,Consolas,monospace;word-break:break-all;resize:vertical;user-select:text;-webkit-user-select:text}
 .seg button:disabled{opacity:.4;cursor:default}
 .act.sk .au{position:absolute;top:-3px;right:-3px;font-style:normal;font-size:8.5px;font-weight:800;line-height:1;padding:2px 3px;border-radius:5px;
   background:#1f4a66;color:#bfeaff;border:1px solid #8fe0ff;pointer-events:none}
@@ -2353,6 +2355,12 @@ const VIEWS = {
       <p class="note">조작: 왼쪽 아래를 끌어서 이동, 몬스터를 누르면 공격, 빈 땅을 누르면 그 자리로 이동합니다. 화면을 끌면 시점이 돌아가고, 두 손가락으로 벌리거나 오므리면 확대·축소됩니다. PC에서는 WASD·방향키로 이동, Space 공격, Q 스킬, E 물약, R 자동사냥, T 순간이동, 마우스 휠·Z/X 확대·축소, 쉼표/마침표 회전, C 시점 초기화.</p>
       <p class="note">휴대폰이 뜨거워지거나 끊기면 저사양 모드를 켜 보세요. 저장은 이 기기 브라우저에만 됩니다.</p>
       <p class="note">앱처럼 쓰기: 안드로이드 크롬 ⋮ 메뉴 → 홈 화면에 추가, 아이폰 사파리 공유 버튼 → 홈 화면에 추가. 사냥터에서 자동 사냥을 켠 채 화면을 꺼도, 다시 켜면 그동안 사냥한 결과를 받아요. (최대 12시간)</p>
+      <div class="sec">저장 코드</div>
+      <p class="note" style="margin-top:0">캐릭터 전체(레벨, 장비, 강화, 아이템, 변신, 파티, AI 유저 기록)를 글자로 바꾼 코드예요. 복사해서 Claude에게 보내면 진행 상황을 분석받을 수 있고, 다른 기기에서 불러오면 그대로 이어서 할 수 있어요.</p>
+      <button class="btn wide" data-a="savecode">저장 코드 만들고 복사</button>
+      ${R.saveCode ? `<textarea class="codebox" id="saveCodeOut" readonly>${R.saveCode}</textarea><p class="note">${R.saveCodeMsg || ''} 길이 ${fmt(R.saveCode.length)}자</p>` : ''}
+      <textarea class="codebox" id="saveCodeIn" placeholder="다른 기기에서 복사한 저장 코드를 여기에 붙여넣기">${(R.importText || '').replace(/</g, '&lt;')}</textarea>
+      <button class="btn wide" data-a="loadcode" ${R.importText ? '' : 'disabled'}>${R.confirmImport ? '지금 캐릭터를 덮어써요. 한 번 더 누르면 불러옵니다' : '저장 코드 불러오기'}</button>
       <button class="btn wide danger" data-a="reset">${R.confirmReset ? '정말 삭제할까요? 한 번 더 누르면 삭제됩니다' : '캐릭터 삭제하고 새로 시작'}</button>`;
   },
   shop() {
@@ -2436,6 +2444,43 @@ function batchEnchant() {
   if (evap) SFX.fail(); else if (up) SFX.win();
   recalc(); save(); renderSheet();
 }
+/* ---------- save code: the whole save as one pasteable string ----------
+   MGH2: gzip + base64 when the browser can compress, MGH1: plain base64 otherwise. */
+const b64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = t => { const b = atob(t), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
+async function makeSaveCode() {
+  const raw = new TextEncoder().encode(JSON.stringify({ ...S, away: undefined }));
+  if (window.CompressionStream) {
+    const gz = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+    return 'MGH2:' + b64(gz);
+  }
+  return 'MGH1:' + b64(raw);
+}
+async function readSaveCode(code) {
+  code = code.replace(/\s+/g, '');
+  const m = /^MGH([12]):(.+)$/.exec(code); if (!m) throw new Error('형식');
+  let bytes = unb64(m[2]);
+  if (m[1] === '2') bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+  const d = JSON.parse(new TextDecoder().decode(bytes));
+  if (d.v !== 1 || !CLS[d.cls] || !Array.isArray(d.gear)) throw new Error('내용');
+  return d;
+}
+async function exportSave() {
+  save();
+  try { R.saveCode = await makeSaveCode(); } catch (e) { toast('저장 코드를 만들지 못했어요'); return; }
+  R.saveCodeMsg = '만들었어요.';
+  try { await navigator.clipboard.writeText(R.saveCode); R.saveCodeMsg = '클립보드에 복사했어요.'; toast('저장 코드를 복사했어요'); }
+  catch (e) { R.saveCodeMsg = '자동 복사가 막혀 있어요. 아래 칸을 길게 눌러 전체 선택 후 복사해 주세요.'; }
+  renderSheet();
+  const out = el('saveCodeOut'); if (out && R.saveCodeMsg.startsWith('자동')) { out.focus(); out.select(); }
+}
+async function importSave() {
+  let d;
+  try { d = await readSaveCode(R.importText || ''); } catch (e) { toast('저장 코드가 올바르지 않아요'); R.confirmImport = false; renderSheet(); return; }
+  S = d; R.importText = ''; R.confirmImport = false; R.saveCode = null;
+  closeSheet(); clearEntities(); begin(); save();
+  toast(`${S.name} (Lv.${S.lv}) 불러오기 완료`); log('저장 코드로 캐릭터를 불러왔습니다.', 'sys');
+}
 function doEnchant() {
   const g = gearById(R.encSel); if (!g || R.encBusy) return;
   const b = GEAR[g.b], isW = b.slot === 'weapon', safe = isW ? 6 : 4, k = (R.encBless ? 'b' : '') + (isW ? 'ew' : 'ea');
@@ -2480,6 +2525,8 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'buyg' && town) { const p = gearPrice(v); if (S.adena < p) return; S.adena -= p; addGear(v); log(`${GEAR[v].n} 구입`, 'sys'); }
   else if (a === 'tele' && town) { const z = ZONES[+v]; if (S.adena < z.cost) return; S.adena -= z.cost; closeSheet(); enterZone(+v); return; }
   else if (a === 'equipbest') { equipBest(); }
+  else if (a === 'savecode') { exportSave(); return; }
+  else if (a === 'loadcode') { if (!R.confirmImport) R.confirmImport = true; else { importSave(); return; } }
   else if (a === 'pktog') { S.opts.pkOn = S.opts.pkOn === false; }
   else if (a === 'pkattack') { pkAttackBot(v); return; }
   else if (a === 'invite') { inviteBot(R.bots.find(b => b.name === v && !b.party)); }
@@ -2506,6 +2553,11 @@ el('sheetBody').addEventListener('click', e => {
   save(); renderSheet();
 });
 el('sheetBody').addEventListener('input', e => {
+  if (e.target.id === 'saveCodeIn') {
+    const had = !!R.importText; R.importText = e.target.value.trim(); R.confirmImport = false;
+    const btn = el('sheetBody').querySelector('[data-a=loadcode]'); if (btn) { btn.disabled = !R.importText; btn.textContent = '저장 코드 불러오기'; }
+    if (had !== !!R.importText) return;
+  }
   if (e.target.id === 'camz') { camOpt().z = +e.target.value / 100; el('camzv').textContent = e.target.value + '%'; }
   if (e.target.id === 'camp') { camOpt().pitch = +e.target.value; el('campv').textContent = e.target.value + '°'; }
 });
