@@ -357,6 +357,8 @@ function initGL() {
 }
 const lin = h => new THREE.Color(h).convertSRGBToLinear();
 const tileMeshes = [];
+let arena = null;
+const setArena = on => { arena.visible = on; for (const m of tileMeshes) if (m.userData.c != null) m.visible = !on; };
 function buildBoard() {
   const geo = new THREE.CylinderGeometry(HEX * .55, HEX * .55, .12, 6);
   for (let r = 0; r < 8; r++) for (let c = 0; c < COLS; c++) {
@@ -371,6 +373,12 @@ function buildBoard() {
     const m = new THREE.Mesh(new THREE.BoxGeometry(HEX * .85, .1, HEX * .85), new THREE.MeshStandardMaterial({ color: lin(0x3a2f20), roughness: .9 }));
     m.position.set(x, -.05, z); m.receiveShadow = true; m.userData = { bench: i }; scene.add(m); tileMeshes.push(m);
   }
+  // plain ground shown during combat so movement doesn't read as tile hopping
+  const sh = new THREE.Shape(), w = 4.6, h = 4.4, rr = .8;
+  sh.moveTo(-w + rr, -h); sh.lineTo(w - rr, -h); sh.quadraticCurveTo(w, -h, w, -h + rr); sh.lineTo(w, h - rr); sh.quadraticCurveTo(w, h, w - rr, h);
+  sh.lineTo(-w + rr, h); sh.quadraticCurveTo(-w, h, -w, h - rr); sh.lineTo(-w, -h + rr); sh.quadraticCurveTo(-w, -h, -w + rr, -h);
+  arena = new THREE.Mesh(new THREE.ShapeGeometry(sh), new THREE.MeshStandardMaterial({ color: lin(0x5a4c36), roughness: 1 }));
+  arena.rotation.x = -Math.PI / 2; arena.position.set(0, -.02, -.1); arena.receiveShadow = true; arena.visible = false; scene.add(arena);
   const floor = new THREE.Mesh(new THREE.CircleGeometry(16, 48), new THREE.MeshStandardMaterial({ color: lin(0x221b14), roughness: 1 }));
   floor.rotation.x = -Math.PI / 2; floor.position.y = -.13; floor.receiveShadow = true; scene.add(floor);
 }
@@ -468,12 +476,8 @@ function clearView() { for (const a of viewActors.values()) killActor(a); viewAc
 
 /* ================= BATTLE ================= */
 // fighters live on a 7x8 hex grid; rows 4-7 are side A (bottom), rows 0-3 side B (top)
-function offsetToCube(c, r) { const x = c - (r - (r & 1)) / 2, z = r; return [x, -x - z, z]; }
-const hexDist = (a, b) => { const p = offsetToCube(a.c, a.r), q = offsetToCube(b.c, b.r); return Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]), Math.abs(p[2] - q[2])); };
-function neighbors(c, r) {
-  const odd = r & 1, d = odd ? [[1, 0], [-1, 0], [0, -1], [1, -1], [0, 1], [1, 1]] : [[1, 0], [-1, 0], [-1, -1], [0, -1], [-1, 1], [0, 1]];
-  return d.map(([dc, dr]) => [c + dc, r + dr]).filter(([x, y]) => x >= 0 && x < COLS && y >= 0 && y < 8);
-}
+const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z) / HEX; // in tiles
+const MOVE_SPEED = 2.2, BODY = .8;
 function makeFighters(p, side, visual) {
   const t = countTraits(p), list = [];
   p.board.forEach((u, i) => {
@@ -546,23 +550,24 @@ function cast(B, f, t) {
   const foes = B.all.filter(o => !o.dead && o.side !== f.side), U = ALLU[f.key], st = f.star;
   if (B.visual) B.fx.push({ k: 'cast', f, t: 0 });
   if (f.cls === '수호자') { f.shield += Math.round(f.maxHp * (.2 + .05 * U.c) * (1 + (st - 1) * .3)); }
-  else if (f.cls === '야만족') { for (const o of foes) if (hexDist(o, f) <= 1) dealDamage(B, f, o, f.ad * 2.2, false); if (B.visual) B.fx.push({ k: 'ring', x: f.x, z: f.z, col: 0xffa060, t: 0 }); }
-  else if (f.cls === '마법사') { const dmg = (150 + 70 * U.c) * [0, 1, 1.6, 2.6][st] * f.abilMul; dealDamage(B, f, t, dmg, true); for (const o of foes) if (o !== t && hexDist(o, t) <= 1) dealDamage(B, f, o, dmg * .5, true); if (B.visual) B.fx.push({ k: 'boom', x: t.x, z: t.z, col: U.org === '서리' ? 0x8fd0ff : U.org === '심연' ? 0xb060ff : U.org === '빛' ? 0xffe080 : 0xff8a3a, t: 0 }); }
-  else if (f.cls === '사냥꾼') { const near = foes.sort((a, b) => hexDist(a, f) - hexDist(b, f)).slice(0, 3); for (const o of near) dealDamage(B, f, o, f.ad * 1.6, false); if (B.visual) for (const o of near) B.fx.push({ k: 'arrow', x: f.x, z: f.z, to: o, t: 0 }); }
+  else if (f.cls === '야만족') { for (const o of foes) if (dist(o, f) <= 1.3) dealDamage(B, f, o, f.ad * 2.2, false); if (B.visual) B.fx.push({ k: 'ring', x: f.x, z: f.z, col: 0xffa060, t: 0 }); }
+  else if (f.cls === '마법사') { const dmg = (150 + 70 * U.c) * [0, 1, 1.6, 2.6][st] * f.abilMul; dealDamage(B, f, t, dmg, true); for (const o of foes) if (o !== t && dist(o, t) <= 1.3) dealDamage(B, f, o, dmg * .5, true); if (B.visual) B.fx.push({ k: 'boom', x: t.x, z: t.z, col: U.org === '서리' ? 0x8fd0ff : U.org === '심연' ? 0xb060ff : U.org === '빛' ? 0xffe080 : 0xff8a3a, t: 0 }); }
+  else if (f.cls === '사냥꾼') { const near = foes.sort((a, b) => dist(a, f) - dist(b, f)).slice(0, 3); for (const o of near) dealDamage(B, f, o, f.ad * 1.6, false); if (B.visual) for (const o of near) B.fx.push({ k: 'arrow', x: f.x, z: f.z, to: o, t: 0 }); }
   else if (f.cls === '암살자') { dealDamage(B, f, t, f.ad * 3, false); if (B.visual) B.fx.push({ k: 'ring', x: t.x, z: t.z, col: 0xd070ff, t: 0 }); }
 }
 function stepBattle(B, dt) {
   if (B.over) return;
   B.t += dt;
-  const grid = new Set(B.all.filter(f => !f.dead).map(f => f.c + ',' + f.r));
-  for (const f of B.all) {
+  const live = B.all.filter(f => !f.dead);
+  for (const f of live) {
     if (f.dead) continue;
     f.hurt = Math.max(0, f.hurt - dt);
-    const foes = B.all.filter(o => !o.dead && o.side !== f.side);
+    const foes = live.filter(o => !o.dead && o.side !== f.side);
     if (!foes.length) break;
-    if (!f.target || f.target.dead || hexDist(f, f.target) > f.range + 1) f.target = foes.reduce((a, b) => hexDist(b, f) < hexDist(a, f) ? b : a);
-    const t = f.target;
-    if (hexDist(f, t) <= f.range) {
+    if (!f.target || f.target.dead || dist(f, f.target) > f.range + 1.5) f.target = foes.reduce((a, b) => dist(b, f) < dist(a, f) ? b : a);
+    const t = f.target, d = dist(f, t);
+    f.moving = false;
+    if (d <= f.range + .15) {
       f.atkT -= dt;
       if (f.mana >= f.maxMana) { cast(B, f, t); f.atkT = Math.max(f.atkT, .3); continue; }
       if (f.atkT <= 0) {
@@ -572,15 +577,20 @@ function stepBattle(B, dt) {
         (f.pending = f.pending || []).push([delay, () => dealDamage(B, f, tt, f.ad, false)]);
       }
     } else {
-      f.moveT -= dt;
-      if (f.moveT <= 0) {
-        f.moveT = .45;
-        let best = null, bd = hexDist(f, t);
-        for (const [c, r] of neighbors(f.c, f.r)) { if (grid.has(c + ',' + r)) continue; const d = hexDist({ c, r }, t); if (d < bd) { bd = d; best = [c, r]; } }
-        if (best) { grid.delete(f.c + ',' + f.r); f.c = best[0]; f.r = best[1]; grid.add(f.c + ',' + f.r); f.moving = .45; }
-      }
+      // walk straight at the target; spacing below keeps bodies from overlapping
+      const step = Math.min(MOVE_SPEED * dt, (d - f.range) * HEX), k = step / (d * HEX);
+      f.x += (t.x - f.x) * k; f.z += (t.z - f.z) * k; f.moving = true;
     }
   }
+  for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
+    const a = live[i], b = live[j]; if (a.dead || b.dead) continue;
+    let dx = b.x - a.x, dz = b.z - a.z, dd = Math.hypot(dx, dz);
+    if (dd >= BODY) continue;
+    if (dd < 1e-4) { dx = Math.random() - .5; dz = Math.random() - .5; dd = Math.hypot(dx, dz); }
+    const push = (BODY - dd) / 2 / dd;
+    a.x -= dx * push; a.z -= dz * push; b.x += dx * push; b.z += dz * push;
+  }
+  for (const f of live) { f.x = clamp(f.x, -4.2, 4.2); f.z = clamp(f.z, -4.1, 4.1); }
   for (const f of B.all) if (f.pending) { for (const p of f.pending) p[0] -= dt; const due = f.pending.filter(p => p[0] <= 0); f.pending = f.pending.filter(p => p[0] > 0); if (!f.dead) for (const p of due) p[1](); }
   const aAlive = B.A.some(f => !f.dead), bAlive = B.B.some(f => !f.dead);
   if (!aAlive || !bAlive || B.t > 35) { B.over = true; B.winner = aAlive && !bAlive ? 'A' : bAlive && !aAlive ? 'B' : 'draw'; }
@@ -595,26 +605,24 @@ function simulateHeadless(pa, pb) {
 /* ---------- battle visuals ---------- */
 let battleActors = [];
 function beginBattleView(B) {
-  clearView();
+  clearView(); setArena(true);
   battleActors = B.all.map(f => { const a = makeActor(f.key, f.star); a.root.position.set(f.x, 0, f.z); a.root.rotation.y = f.side === 'A' ? Math.PI : 0; a.f = f; return a; });
   // bench stays visible
   G.me.bench.forEach((u, i) => { if (u) { const a = makeActor(u.key, u.star); const [x, z] = benchPos(i); a.root.position.set(x, 0, z); a.root.rotation.y = Math.PI; a.benchOnly = true; battleActors.push(a); } });
 }
-function endBattleView() { for (const a of battleActors) killActor(a); battleActors = []; for (const o of fxObjs) scene.remove(o.obj); fxObjs = []; }
+function endBattleView() { setArena(false); for (const a of battleActors) killActor(a); battleActors = []; for (const o of fxObjs) scene.remove(o.obj); fxObjs = []; }
 let fxObjs = [];
 function battleFrame(B, dt) {
   for (const a of battleActors) {
     const f = a.f;
     if (!f) { a.mixer.update(dt); continue; }
     if (f.dead) { if (!a.died) { a.died = true; play(a, a.A.death, { once: true }); a.fadeT = 1.2; } a.fadeT -= dt; if (a.fadeT < 0) a.root.visible = false; a.mixer.update(dt); continue; }
-    const [x, z] = hexPos(f.c, f.r);
-    const p = a.root.position, k = Math.min(1, dt * (f.leaped ? 20 : 6)); f.leaped = false;
-    p.x += (x - p.x) * k; p.z += (z - p.z) * k;
-    f.x = p.x; f.z = p.z;
+    const p = a.root.position, k = Math.min(1, dt * 14);
+    p.x += (f.x - p.x) * k; p.z += (f.z - p.z) * k;
     if (f.target && !f.target.dead) a.root.rotation.y = lerpAng(a.root.rotation.y, Math.atan2(f.target.x - p.x, f.target.z - p.z), Math.min(1, dt * 10));
     a.lock -= dt;
     if (f.anim === 'atk') { f.anim = null; const nm = a.A.atk[a.atkI++ % a.A.atk.length], clip = CLIPS[nm]; if (clip) play(a, nm, { once: true, speed: clamp(clip.duration * f.as, 1, 3) }); }
-    else if (a.lock <= 0) play(a, Math.hypot(x - p.x, z - p.z) > .05 ? a.A.run : a.A.idle);
+    else if (a.lock <= 0) play(a, f.moving ? a.A.run : a.A.idle);
     const hurt = f.hurt > .05;
     if (hurt !== a.fl) { a.fl = hurt; for (const m of a.mats) { if (hurt) { m.emissive.setRGB(.9, .15, .08); m.emissiveIntensity = .8; } else { m.emissive.copy(m.userData.baseE); m.emissiveIntensity = m.userData.baseI; } } }
     a.mixer.update(dt);
