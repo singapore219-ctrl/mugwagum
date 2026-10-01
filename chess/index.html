@@ -495,10 +495,10 @@ function makeFighters(p, side, visual) {
     if (f.cls === '사냥꾼' && tier('사냥꾼')) f.as *= 1 + [0, .25, .6][tier('사냥꾼')];
     if (f.cls === '암살자' && tier('암살자')) { f.crit = [0, .25, .45][tier('암살자')]; f.leap = true; }
     if (tier('인간')) f.mpMul = 1 + [0, .3, .6][tier('인간')];
-    if (f.org === '오크' && tier('오크')) { f.maxHp *= 1.3; f.hp = f.maxHp; }
+    if (f.org === '오크' && tier('오크')) { f.maxHp = Math.round(f.maxHp * 1.3); f.hp = f.maxHp; }
     if (f.org === '불꽃' && tier('불꽃')) f.dmgMul *= 1 + [0, .15, .3][tier('불꽃')];
     if (f.org === '심연' && tier('심연')) f.ls = [0, .15, .3][tier('심연')];
-    if (tier('빛')) f.shield = f.maxHp * [0, .15, .3][tier('빛')];
+    if (tier('빛')) f.shield = Math.round(f.maxHp * [0, .15, .3][tier('빛')]);
   }
   list.debuff = { armor: [0, 20, 40][tier('언데드')], slow: [0, .15, .25][tier('서리')] };
   return list;
@@ -534,10 +534,10 @@ function dealDamage(B, src, tgt, dmg, magic) {
   dmg *= src.dmgMul;
   if (!magic) dmg *= 100 / (100 + tgt.armor);
   dmg = Math.round(dmg);
-  if (tgt.shield > 0) { const s = Math.min(tgt.shield, dmg); tgt.shield -= s; dmg -= s; }
+  if (tgt.shield > 0) { const s = Math.min(tgt.shield, dmg); tgt.shield -= s; dmg = Math.round(dmg - s); }
   tgt.hp -= dmg; tgt.hurt = .12;
   tgt.mana = Math.min(tgt.maxMana, tgt.mana + 6 * tgt.mpMul);
-  if (src.ls) src.hp = Math.min(src.maxHp, src.hp + dmg * src.ls);
+  if (src.ls) src.hp = Math.min(src.maxHp, src.hp + Math.round(dmg * src.ls));
   if (B.visual && dmg > 0) B.fx.push({ k: 'txt', f: tgt, txt: String(dmg), col: magic ? '#c8a8ff' : '#fff', t: 0 });
   if (tgt.hp <= 0) { tgt.dead = true; tgt.hp = 0; }
 }
@@ -545,7 +545,7 @@ function cast(B, f, t) {
   f.mana = 0;
   const foes = B.all.filter(o => !o.dead && o.side !== f.side), U = ALLU[f.key], st = f.star;
   if (B.visual) B.fx.push({ k: 'cast', f, t: 0 });
-  if (f.cls === '수호자') { f.shield += f.maxHp * (.2 + .05 * U.c) * (1 + (st - 1) * .3); }
+  if (f.cls === '수호자') { f.shield += Math.round(f.maxHp * (.2 + .05 * U.c) * (1 + (st - 1) * .3)); }
   else if (f.cls === '야만족') { for (const o of foes) if (hexDist(o, f) <= 1) dealDamage(B, f, o, f.ad * 2.2, false); if (B.visual) B.fx.push({ k: 'ring', x: f.x, z: f.z, col: 0xffa060, t: 0 }); }
   else if (f.cls === '마법사') { const dmg = (150 + 70 * U.c) * [0, 1, 1.6, 2.6][st] * f.abilMul; dealDamage(B, f, t, dmg, true); for (const o of foes) if (o !== t && hexDist(o, t) <= 1) dealDamage(B, f, o, dmg * .5, true); if (B.visual) B.fx.push({ k: 'boom', x: t.x, z: t.z, col: U.org === '서리' ? 0x8fd0ff : U.org === '심연' ? 0xb060ff : U.org === '빛' ? 0xffe080 : 0xff8a3a, t: 0 }); }
   else if (f.cls === '사냥꾼') { const near = foes.sort((a, b) => hexDist(a, f) - hexDist(b, f)).slice(0, 3); for (const o of near) dealDamage(B, f, o, f.ad * 1.6, false); if (B.visual) for (const o of near) B.fx.push({ k: 'arrow', x: f.x, z: f.z, to: o, t: 0 }); }
