@@ -88,6 +88,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
 #bAtk{right:0;bottom:0;width:84px;height:84px;font-size:15px;font-family:var(--serif);border-color:var(--gold);background:radial-gradient(circle at 50% 35%,#5a2a1c,#1d0e09 75%)}
 .act.sk{width:52px;height:52px;font-size:11px;letter-spacing:-.02em}
 .seg.four{grid-template-columns:repeat(4,1fr)}
+.seg.three{grid-template-columns:repeat(3,1fr)}
+.tog:disabled{opacity:.35;cursor:default}
 .row.pick{cursor:pointer}
 .row.pick .chk{width:22px;height:22px;flex:none;border-radius:6px;border:1.5px solid var(--line2);display:grid;place-items:center;font-size:14px;color:#1d160c}
 .row.pick.sel .chk{background:var(--gold);border-color:var(--gold2)}
@@ -383,17 +385,17 @@ const SLOTS = ['weapon', 'helm', 'armor', 'gloves', 'boots'];
 const SLOTN = { weapon: '무기', helm: '투구', armor: '갑옷', gloves: '장갑', boots: '부츠' };
 const GEAR = {};
 const WPN = {
-  sword: [['단검', 2, 5], ['롱소드', 4, 9], ['대검', 6, 14], ['흑기사의 검', 9, 18], ['용살자의 검', 12, 24], ['여명의 대검', 15, 30]],
-  bow: [['사냥꾼의 활', 2, 5], ['장궁', 4, 8], ['요정족 활', 6, 12], ['바람의 활', 8, 16], ['천공의 활', 11, 22], ['여명의 활', 14, 28]],
-  staff: [['나무 지팡이', 1, 4], ['수정 지팡이', 3, 7], ['마나의 지팡이', 5, 10], ['대마법사의 지팡이', 7, 14], ['천상의 지팡이', 10, 20], ['여명의 지팡이', 13, 26]],
+  sword: [['단검', 2, 5], ['롱소드', 4, 9], ['대검', 6, 14], ['흑기사의 검', 9, 18], ['용살자의 검', 12, 24], ['여명의 대검', 15, 30], ['태초의 검', 19, 38]],
+  bow: [['사냥꾼의 활', 2, 5], ['장궁', 4, 8], ['요정족 활', 6, 12], ['바람의 활', 8, 16], ['천공의 활', 11, 22], ['여명의 활', 14, 28], ['태초의 활', 17, 35]],
+  staff: [['나무 지팡이', 1, 4], ['수정 지팡이', 3, 7], ['마나의 지팡이', 5, 10], ['대마법사의 지팡이', 7, 14], ['천상의 지팡이', 10, 20], ['여명의 지팡이', 13, 26], ['태초의 지팡이', 16, 33]],
 };
 for (const wt in WPN) WPN[wt].forEach((d, i) => GEAR[wt + (i + 1)] = { n: d[0], slot: 'weapon', wt, tier: i + 1, min: d[1], max: d[2] });
-const ARM = { helm: ['투구', [1, 2, 3, 4, 5, 6], 100], armor: ['갑옷', [2, 4, 6, 8, 10, 12], 200], gloves: ['장갑', [1, 1, 2, 3, 4, 5], 80], boots: ['부츠', [1, 2, 2, 3, 4, 5], 100] };
-const TIERN = ['가죽', '청동', '강철', '미스릴', '용비늘', '여명'];
+const ARM = { helm: ['투구', [1, 2, 3, 4, 5, 6, 8], 100], armor: ['갑옷', [2, 4, 6, 8, 10, 12, 15], 200], gloves: ['장갑', [1, 1, 2, 3, 4, 5, 7], 80], boots: ['부츠', [1, 2, 2, 3, 4, 5, 7], 100] };
+const TIERN = ['가죽', '청동', '강철', '미스릴', '용비늘', '여명', '태초'];
 for (const s in ARM) ARM[s][1].forEach((def, i) => GEAR[s + (i + 1)] = { n: TIERN[i] + ' ' + ARM[s][0], slot: s, tier: i + 1, def });
 const WGLYPH = { sword: '검', bow: '활', staff: '봉' };
 const AGLYPH = { helm: '투', armor: '갑', gloves: '장', boots: '부' };
-function gearPrice(b) { const g = GEAR[b]; if (g.slot === 'weapon') return [0, 300, 4000, 30000, 120000, 400000, 1200000][g.tier]; return ARM[g.slot][2] * [0, 1, 12, 60, 250, 800, 2400][g.tier]; }
+function gearPrice(b) { const g = GEAR[b]; if (g.slot === 'weapon') return [0, 300, 4000, 30000, 120000, 400000, 1200000, 3600000][g.tier]; return ARM[g.slot][2] * [0, 1, 12, 60, 250, 800, 2400, 7200][g.tier]; }
 const gearSell = g => Math.floor(gearPrice(g.b) * .2 * (1 + g.e * g.e * .4));
 
 const ITEMS = {
@@ -410,7 +412,25 @@ const ITEMS = {
   pticket: { n: '변신 카드 1회권', sell: 5000, ic: ['#c98bff', '변'] },
   bew: { n: '축복받은 무기 마법 주문서', sell: 6000, ic: ['#f6d45a', '축'] },
   bea: { n: '축복받은 갑옷 마법 주문서', sell: 4000, ic: ['#f0e08a', '축'] },
+  pew: { n: '무기 보호 주문서', sell: 20000, ic: ['#7fd4ff', '보'] },
+  pea: { n: '갑옷 보호 주문서', sell: 12000, ic: ['#a8e8d0', '보'] },
 };
+// 합성: turn piles of spare potions and scrolls into something useful
+const CRAFT = [
+  { out: 'pew', n: 1, cost: { ew: 10 }, desc: '강화 실패 시 장비 증발을 막아요' },
+  { out: 'pea', n: 1, cost: { ea: 10 }, desc: '강화 실패 시 장비 증발을 막아요' },
+  { out: 'bew', n: 1, cost: { ew: 5, clear: 50 } },
+  { out: 'bea', n: 1, cost: { ea: 5, clear: 50 } },
+  { out: 'pticket', n: 1, cost: { orange: 100, blue: 50 } },
+  { out: 'elixir', n: 10, cost: { clear: 20 } },
+];
+const craftMax = c => Math.min(...Object.entries(c.cost).map(([k, n]) => Math.floor(cnt(k) / n)));
+function craft(i, times) {
+  const c = CRAFT[i]; times = Math.min(times, craftMax(c)); if (times < 1) return;
+  for (const [k, n] of Object.entries(c.cost)) S.stack[k] -= n * times;
+  addItem(c.out, c.n * times);
+  log(`${ITEMS[c.out].n} ${c.n * times}개를 합성했습니다.`, 'loot'); SFX.win(); save();
+}
 const SHOP_ITEMS = ['red', 'orange', 'clear', 'elixir', 'blue', 'green', 'tele', 'ret', 'ew', 'ea'];
 
 // st: 1h / 2h / bow / magic / xbow
@@ -485,6 +505,7 @@ const MON = {
   duskking: { n: '황혼의 왕', lv: 135, m: 'Knight', tint: '#c03040', s: 2.4, r: 'sword_2handed_color', st: '2h', ag: 1, boss: 1, glow: '#ff2040', j: ['황혼의 왕관', 52000] },
   raid0: { n: '고대 거신', lv: 78, m: 'Barbarian', tint: '#8a6a50', s: 3, r: 'axe_2handed', st: '2h', ag: 1, glow: '#ff7a30', j: ['거신의 파편', 20000] },
   raid1: { n: '멸망의 기사', lv: 102, m: 'Knight', tint: '#3a3a55', s: 3.1, r: 'sword_2handed_color', st: '2h', ag: 1, glow: '#6a8aff', j: ['멸망의 문장', 30000] },
+  raid3: { n: '태초의 용기사', lv: 140, m: 'Knight', tint: '#ffe2a0', s: 3.3, r: 'sword_2handed_color', st: '2h', ag: 1, glow: '#ffc030', j: ['태초의 비늘', 70000] },
   raid2: { n: '심연의 대마녀', lv: 126, m: 'Mage', tint: '#402060', s: 3.2, r: 'staff', l: 'spellbook_open', st: 'magic', rg: 6, ag: 1, glow: '#c040ff', j: ['대마녀의 눈', 45000] },
   lord: { n: '화염의 군주', lv: 54, m: 'Barbarian', tint: '#ff7a50', s: 2.1, r: 'axe_2handed', st: '2h', ag: 1, boss: 1, glow: '#ff5a20', j: ['군주의 심장', 6000] },
 };
@@ -538,7 +559,8 @@ const P = { kind: 'p', x: 13, y: 13, rot: 0, moving: false, target: null, engage
   lastCombat: -99, moveTo: null, queue: null, cds: {}, buffs: {}, hurt: 0 };
 const MAXLV = 120;
 const CHESS_URL = location.protocol.startsWith('http') && !/claude/.test(location.host) ? 'chess/' : 'https://singapore219-ctrl.github.io/mugwagum/chess/';
-const need = L => Math.floor(30 + 18 * Math.pow(L, 2.4));
+// each rebirth makes the next 120 levels take longer
+const need = L => Math.floor((30 + 18 * Math.pow(L, 2.4)) * (1 + .4 * (S && S.reb || 0)));
 const SAVE_KEY = 'mugwagum-hunt-v1';
 function save() { if (!S) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} }
 function load() { try { const s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
@@ -567,9 +589,9 @@ function recalc() {
   D.dmgMul = buffOn('rage') ? 1.2 : 1; D.taken = buffOn('iron') ? .65 : 1; D.dodge = buffOn('wind') ? .15 : 0;
   D.hpReg = (.6 + L * .12) * c.hpR; D.mpReg = c.mpR[0] + c.mpR[1] * L;
   D.crit = .06; D.cdr = 0;
-  const rb = S.reb || 0; // each rebirth: +6% max HP and damage, +2% attack speed, +25% exp
+  const rb = S.reb || 0; // each rebirth: +6% max HP and damage, +2% attack speed, +10% exp (levels need +40% exp)
   if (rb) { D.maxHp = Math.round(D.maxHp * (1 + .06 * rb)); D.dmgMul *= 1 + .06 * rb; D.aspd /= 1 + .02 * rb; }
-  D.expMul = 1 + .25 * rb;
+  D.expMul = 1 + .1 * rb;
   const pb = polyBonus();
   if (pb) {
     const o = pb.stats;
@@ -652,7 +674,7 @@ function toast(txt, cls = '') { const t = el('toast'); t.textContent = txt; t.cl
 function flashHurt() { const h = el('hurt'); h.classList.add('on'); setTimeout(() => h.classList.remove('on'), 60); }
 const icoHtml = (bg, g) => `<span class="ico" style="background:${bg}">${g}</span>`;
 function gearIco(g, big) {
-  const b = GEAR[g.b], bg = b.slot === 'weapon' ? '#a9b4c4' : ['#9a7a52', '#b08850', '#8e98a4', '#b8d4e6', '#6fc49a', '#f3d98a'][b.tier - 1];
+  const b = GEAR[g.b], bg = b.slot === 'weapon' ? '#a9b4c4' : ['#9a7a52', '#b08850', '#8e98a4', '#b8d4e6', '#6fc49a', '#f3d98a', '#ff9a6a'][b.tier - 1];
   const glyph = b.slot === 'weapon' ? WGLYPH[b.wt] : AGLYPH[b.slot];
   const glow = g.e >= 7 ? ecol(g.e) : '';
   return `<span class="ico${big ? ' big' : ''}" style="background:${bg}${glow ? `;box-shadow:0 0 14px ${glow}` : ''}">${glyph}</span>`;
@@ -1437,6 +1459,19 @@ function aiEnchant(r) {
     if (Math.random() < .5) setTimeout(() => sayAs(r.name, pick(['와 떴다!!', '손 떨려요 ㅋㅋ', `+${r.we} 가즈아`, '오늘 운 좋네요'])), 700);
   } else if (Math.random() < .25) sayAs(r.name, pick([`+${r.we} 완료`, '안전 강화 끝', '다음은 축복 주문서로 가야지']));
 }
+/* AI users grow faster the further the player is ahead of them (counting rebirths),
+   and rebirth themselves at max level, so the top of the server stays contested. */
+const powerLv = (lv, reb) => (reb || 0) * MAXLV + lv;
+const aiWtCap = r => Math.min((r.reb || 0) >= 3 ? 7 : 6, 1 + Math.floor(r.lv / 18) + (r.reb || 0));
+function aiGrow(r, inParty, quiet) {
+  const gap = powerLv(S.lv, S.reb) - powerLv(r.lv, r.reb);
+  if (Math.random() >= .08 + clamp(gap / 600, 0, .5)) return;
+  if (r.lv < MAXLV) { r.lv = Math.min(MAXLV, r.lv + (gap > 240 ? ri(1, 3) : 1)); return; }
+  // at max level: rebirth, but never pull ahead of the player by more than one rebirth, and never mid-party
+  if (inParty || (r.reb || 0) > (S.reb || 0)) return;
+  r.reb = (r.reb || 0) + 1; r.lv = 1;
+  if (!quiet) { log(`${r.name}님이 ${r.reb}번째 환생에 성공했습니다!`, 'ann'); if (Math.random() < .5) setTimeout(() => sayAs(r.name, pick(['환생 완료! 다시 1렙 ㅋㅋ', '드디어 환생했다', `✦${r.reb} 달성`])), 800); }
+}
 // AI users keep playing in the background: they level, find scrolls and sometimes a better weapon
 function aiProgress() {
   const all = roster(), inParty = new Set((S.party || []).map(x => x.name));
@@ -1457,12 +1492,12 @@ function aiProgress() {
   }
   for (let k = 0; k < 3; k++) {
     const r = pick(all);
-    if (Math.random() < .08 && r.lv < MAXLV) r.lv++;
+    aiGrow(r, inParty.has(r.name), false);
     if (Math.random() < .3) r.ew++;
     if (Math.random() < .04) r.bew++;
   }
   if (Math.random() < .05) {
-    const r = pick(all.filter(x => x.wt < Math.min(6, 1 + Math.floor(x.lv / 18)) && !inParty.has(x.name)));
+    const r = pick(all.filter(x => x.wt < aiWtCap(x) && !inParty.has(x.name)));
     if (r) {
       r.wt++; r.we = 0; refreshBotWeapon(r);
       const z = clamp(1 + Math.floor(r.lv / 12), 1, 4), nm = GEAR[WTYPE[r.cls] + r.wt].n;
@@ -1539,13 +1574,15 @@ const RAIDS = [
   { k: 'raid0', diff: '일반', minLv: 50, hpMul: 14, time: 300, adds: ['sandskel', 'nomad', 'mummy', 'dgiant'], tier: 5, cd: 20 },
   { k: 'raid1', diff: '어려움', minLv: 85, hpMul: 19, time: 300, adds: ['cavewar', 'stalker', 'crystalmage', 'cgiant'], tier: 6, cd: 20 },
   { k: 'raid2', diff: '지옥', minLv: 105, hpMul: 22, time: 330, adds: ['voidknight', 'voidwitch', 'voidskel', 'voidbeast'], tier: 6, cd: 25 },
+  { k: 'raid3', diff: '태초', minLv: 100, reb: 3, hpMul: 24, time: 360, adds: ['duskknight', 'duskarcher', 'bloodmage', 'castleguard'], tier: 7, cd: 30 },
 ];
+const raidLocked = rd => rd.reb ? (S.reb || 0) < rd.reb || S.lv < rd.minLv : S.lv < rd.minLv && !S.reb;
 const RAID_Z = () => ZONES.findIndex(z => z.raid);
 const monHpBase = lv => Math.floor(14 + lv * 6 + Math.min(lv, 60) ** 2 * .6 + Math.max(0, lv - 60) * 45);
 const RAID_DISC = new THREE.CircleGeometry(1, 40);
 function startRaid(i) {
   const def = RAIDS[i], cd = (S.raidCd || {})[i] || 0;
-  if (S.lv < def.minLv && !(S.reb > 0)) { toast(`Lv.${def.minLv}부터 입장할 수 있어요`); return; }
+  if (raidLocked(def)) { toast(def.reb ? `✦${def.reb} 환생 이상, Lv.${def.minLv}부터 입장할 수 있어요` : `Lv.${def.minLv}부터 입장할 수 있어요`); return; }
   if (Date.now() < cd) { toast(`${Math.ceil((cd - Date.now()) / 60000)}분 뒤에 다시 도전할 수 있어요`); return; }
   S.raidCd = S.raidCd || {}; S.raidCd[i] = Date.now() + def.cd * 60000;
   R.raidDef = i; closeSheet(); enterZone(RAID_Z());
@@ -1557,7 +1594,7 @@ function setupRaid() {
   bm.x = Z.N / 2; bm.y = Z.N / 2 - 2; bm.raid = true; bm.boss = false;
   bm.maxHp = bm.hp = monHpBase(d.lv) * def.hpMul; bm.dmg = (1.5 + d.lv * 1.05) * 2.4; bm.spd = 2; bm.target = P;
   const inParty = new Set((S.party || []).map(x => x.name));
-  const pool = roster().filter(r => !inParty.has(r.name)).sort((a, b) => b.lv - a.lv).slice(0, 10).sort(() => Math.random() - .5).slice(0, 4);
+  const pool = roster().filter(r => !inParty.has(r.name)).sort((a, b) => powerLv(b.lv, b.reb) - powerLv(a.lv, a.reb)).slice(0, 10).sort(() => Math.random() - .5).slice(0, 4);
   for (const r of pool) { const b = makePartyBot({ name: r.name, cls: r.cls }); b.raider = true; b.x = P.x + rnd(-3, 3); b.y = P.y + rnd(-1, 1.5); R.bots.push(b); }
   R.raidState = { def, boss: bm, t0: R.t, end: R.t + def.time, slamT: R.t + 7, addT: R.t + 20, marks: [], done: false };
   el('raidName').textContent = `[${def.diff}] ${d.n}`; el('raidbar').hidden = false;
@@ -1575,7 +1612,7 @@ function updateRaid(dt) {
   if (R.t >= st.slamT) {
     st.slamT = R.t + rnd(7, 10);
     const allies = partyBots().filter(b => !b.dead);
-    const n = 1 + (st.def.diff === '지옥' ? 2 : st.def.diff === '어려움' ? 1 : 0);
+    const n = 1 + (st.def.diff === '지옥' || st.def.diff === '태초' ? 2 : st.def.diff === '어려움' ? 1 : 0);
     for (let k = 0; k < n; k++) {
       const tgt = k === 0 || !allies.length ? P : pick(allies), r = 2.6;
       const mesh = new THREE.Mesh(RAID_DISC, new THREE.MeshBasicMaterial({ color: 0xff2a10, transparent: true, opacity: .3, depthWrite: false }));
@@ -1613,9 +1650,11 @@ function raidWin(m) {
   const def = st.def, sec = Math.round(R.t - st.t0), d = MON[def.k];
   gainExp(Math.floor((3 + 1.4 * Math.pow(d.lv, 2.1)) * 60 * D.expMul));
   const ad = d.lv * 900; S.adena += ad;
-  const got = [['ew', ri(4, 7)], ['ea', ri(4, 7)], ['bew', ri(1, 3)], ['bea', ri(1, 3)], ['pticket', ri(2, 4)], ['elixir', ri(20, 40)]];
+  const top = def.tier >= 7;
+  const got = [['ew', ri(4, 7)], ['ea', ri(4, 7)], ['bew', ri(1, 3) + (top ? 2 : 0)], ['bea', ri(1, 3) + (top ? 2 : 0)], ['pticket', ri(2, 4)], ['elixir', ri(20, 40)]];
+  if (top) got.push(['pew', ri(1, 2)], ['pea', ri(1, 2)]);
   for (const [k, n] of got) addItem(k, n);
-  const gears = [makeGear(def.tier), makeGear(def.tier)];
+  const gears = top ? [makeGear(7, true), makeGear(6)] : [makeGear(def.tier), makeGear(def.tier)];
   const i = RAIDS.indexOf(def); S.raidBest = S.raidBest || {}; const best = S.raidBest[i]; if (!best || sec < best) S.raidBest[i] = sec;
   log(`${S.name}님 일행이 레이드 보스 ${d.n}${J(d.n, '을', '를')} 처치했습니다! (${Math.floor(sec / 60)}분 ${sec % 60}초)`, 'ann');
   log(`보상: ${fmt(ad)} 아데나, ${got.map(([k, n]) => `${ITEMS[k].n} ${n}`).join(', ')}, ${gears.map(gname).join(', ')}`, 'loot');
@@ -1909,8 +1948,11 @@ function gainExp(n) {
     R.dirty = true; save();
   }
 }
-function makeGear(tier) {
-  tier = Math.min(6, tier); let b;
+// tier 7 (태초) only comes from the 태초 raid, or rarely from awakened monsters after 3+ rebirths
+function makeGear(tier, sure) {
+  let t = Math.min(6, tier);
+  if (tier >= 7 && (sure || (tier >= 8 && (S.reb || 0) >= 3 && Math.random() < .08))) t = 7;
+  tier = t; let b;
   if (Math.random() < .35) { const wt = Math.random() < .55 ? CLS[S.cls].wt : pick(['sword', 'bow', 'staff']); b = wt + tier; }
   else b = pick(['helm', 'armor', 'gloves', 'boots']) + tier;
   return addGear(b, Math.random() < .1 ? ri(1, 3) : 0);
@@ -2283,7 +2325,7 @@ function updateMon(m, dt) {
    While the player is elsewhere, a group of AI users that is strong enough fights the boss second by
    second: their damage comes from their level, weapon tier and enchant, and the boss can kill them. */
 const bossHp = d => Math.floor(14 + d.lv * 6 + Math.min(d.lv, 60) ** 2 * .6 + Math.max(0, d.lv - 60) * 45) * 25;
-const aiDps = r => (r.lv * .85 + 4 + r.wt * 3 + r.we * 1.5) / 1.1;
+const aiDps = r => (r.lv * .85 + 4 + r.wt * 3 + r.we * 1.5) / 1.1 * (1 + .06 * (r.reb || 0));
 function rewardBossKill(r, bossName) {
   r.ew += 2; if (Math.random() < .35) r.bew++;
   log(`${r.name}님이 ${bossName}${J(bossName, '을', '를')} 처치했습니다!`, 'ann');
@@ -2576,7 +2618,7 @@ const VIEWS = {
     const near = R.bots.filter(b => !b.party && !b.dead).sort((a, b) => (b.name === R.partyPick) - (a.name === R.partyPick) || dist(a, P) - dist(b, P)).slice(0, 8);
     h += `<div class="sec">근처 유저</div>`;
     if (!near.length) h += `<p class="note">근처에 초대할 유저가 없어요.</p>`;
-    for (const b of near) h += `<div class="row ${b.name === R.partyPick ? 'sel' : ''}">${icoHtml('#6f8fc4', CLS[b.cls].n[0])}<div class="info"><div class="n">${b.name}</div><div class="s">${CLS[b.cls].n} · Lv.${b.lv} · ${rosterOf(b.name) ? aiWeapon(rosterOf(b.name)) : ''} · ${Math.round(dist(b, P))}m</div></div><div class="btns"><button class="btn pri" data-a="invite" data-v="${b.name}" ${mem.length >= PARTY_MAX ? 'disabled' : ''}>초대</button>${ZONES[S.zone].town ? '' : `<button class="btn danger" data-a="pkattack" data-v="${b.name}">공격</button>`}</div></div>`;
+    for (const b of near) h += `<div class="row ${b.name === R.partyPick ? 'sel' : ''}">${icoHtml('#6f8fc4', CLS[b.cls].n[0])}<div class="info"><div class="n">${b.name}</div><div class="s">${CLS[b.cls].n} · Lv.${b.lv}${rosterOf(b.name) && rosterOf(b.name).reb ? ` ✦${rosterOf(b.name).reb}` : ''} · ${rosterOf(b.name) ? aiWeapon(rosterOf(b.name)) : ''} · ${Math.round(dist(b, P))}m</div></div><div class="btns"><button class="btn pri" data-a="invite" data-v="${b.name}" ${mem.length >= PARTY_MAX ? 'disabled' : ''}>초대</button>${ZONES[S.zone].town ? '' : `<button class="btn danger" data-a="pkattack" data-v="${b.name}">공격</button>`}</div></div>`;
     return h + `<p class="note">파티원은 나를 따라다니며 같이 싸우고, 마법사는 체력이 낮을 때 힐을 해줘요. 파티원이 준 피해도 내 몫이라 경험치와 드랍은 모두 내가 받아요. 파티원 레벨은 내 레벨을 따라가고, 순간이동이나 사냥터 이동 때도 함께 와요.</p>`;
   },
   bag() {
@@ -2589,10 +2631,10 @@ const VIEWS = {
     }
     h += `<p class="note">합계 · 공격 ${D.wmin}-${D.wmax}${D.wbonus ? ' +' + D.wbonus : ''} · 방어 ${D.def} (AC ${D.ac})</p>`;
     h += `<div class="sec">소모품</div>`;
-    const cons = ['red', 'orange', 'clear', 'elixir', 'blue', 'green', 'tele', 'ret', 'ew', 'ea', 'bew', 'bea'].filter(k => cnt(k) > 0);
+    const cons = ['red', 'orange', 'clear', 'elixir', 'blue', 'green', 'tele', 'ret', 'ew', 'ea', 'bew', 'bea', 'pew', 'pea'].filter(k => cnt(k) > 0);
     if (!cons.length) h += `<p class="note">소모품이 없어요.</p>`;
     for (const k of cons) {
-      const it = ITEMS[k], usable = it.heal || it.mp || it.haste || k === 'tele' || k === 'ret', enc = /e[wa]$/.test(k);
+      const it = ITEMS[k], usable = it.heal || it.mp || it.haste || k === 'tele' || k === 'ret', enc = /e[wa]$/.test(k) && k[0] !== 'p';
       h += `<div class="row">${itemIco(k)}<div class="info"><div class="n">${it.n}</div><div class="s">${fmt(cnt(k))}개${it.heal ? ` · HP +${it.heal}` : it.mp ? ` · MP +${it.mp}` : it.haste ? ' · 5분간 공격·이동 속도 증가' : ''}</div></div>
         <div class="btns">${usable ? `<button class="btn" data-a="use" data-v="${k}">사용</button>` : ''}${enc ? `<button class="btn" data-a="goenc">강화</button>` : ''}${town && it.sell ? `<button class="btn" data-a="sellst" data-v="${k}">판매</button>` : ''}</div></div>`;
     }
@@ -2616,8 +2658,9 @@ const VIEWS = {
     return h;
   },
   enc() {
-    const modeSeg = `<div class="seg" style="margin-top:6px"><button data-a="encmode" data-v="one" class="${R.encMode === 'multi' ? '' : 'on'}">하나씩</button><button data-a="encmode" data-v="multi" class="${R.encMode === 'multi' ? 'on' : ''}">여러 개 한 번에</button></div>`;
+    const modeSeg = `<div class="seg three" style="margin-top:6px"><button data-a="encmode" data-v="one" class="${R.encMode === 'multi' || R.encMode === 'craft' ? '' : 'on'}">하나씩</button><button data-a="encmode" data-v="multi" class="${R.encMode === 'multi' ? 'on' : ''}">여러 개 한 번에</button><button data-a="encmode" data-v="craft" class="${R.encMode === 'craft' ? 'on' : ''}">합성</button></div>`;
     if (R.encMode === 'multi') return modeSeg + encMultiView();
+    if (R.encMode === 'craft') return modeSeg + craftView();
     const cands = sortedGear();
     if (R.encSel != null && !gearById(R.encSel)) R.encSel = null;
     if (R.encSel == null) { const w = S.eq.weapon; R.encSel = w != null ? w : (cands[0] && cands[0].id); }
@@ -2628,12 +2671,14 @@ const VIEWS = {
       const nN = cnt(isW ? 'ew' : 'ea'), nB = cnt(isW ? 'bew' : 'bea');
       let odds;
       if (g.e < safe) odds = `<span style="color:var(--good)">안전 구간 · 100% 성공${R.encBless ? ` · +1~3 상승 (최대 +${g.e + 3}, 안전 수치를 넘을 수 있어요)` : ''}</span>`;
-      else { const p = encOdds(g.e + 1 - safe, R.encBless); odds = `<span style="color:${p < .2 ? 'var(--bad)' : 'var(--gold2)'}">성공 ${Math.round(p * 100)}% · 실패 시 증발</span>`; }
+      else { const p = encOdds(g.e + 1 - safe, R.encBless), prot = R.encProt && cnt(isW ? 'pew' : 'pea'); odds = `<span style="color:${prot ? 'var(--good)' : p < .2 ? 'var(--bad)' : 'var(--gold2)'}">성공 ${Math.round(p * 100)}% · ${prot ? '실패해도 보호 주문서가 장비를 지켜요' : '실패 시 증발'}</span>`; }
+      const pk = isW ? 'pew' : 'pea', protSeg = `<div class="set" style="margin-top:6px"><span>${ITEMS[pk].n} 사용 (${cnt(pk)}개)</span><button class="tog ${R.encProt ? 'on' : ''}" data-a="encprot" aria-pressed="${!!R.encProt}" ${cnt(pk) ? '' : 'disabled'}></button></div>`;
       const res = R.encRes, flash = res && !res.shown ? res.cls : ''; if (res) res.shown = true;
       h += `<div class="enc ${flash}" id="encBox">${gearIco(g, true)}<div class="en" style="color:${ecol(g.e)}">${gname(g)}</div>
         <div class="es">${gearStat(g)} · 안전 강화 +${safe}${isEq(g.id) ? ' · 착용 중' : ''}</div>
         <div class="odds">${odds}</div>
         <div class="seg"><button data-a="bless" data-v="0" class="${R.encBless ? '' : 'on'}">${isW ? '무기' : '갑옷'} 주문서 ${nN}</button><button data-a="bless" data-v="1" class="${R.encBless ? 'on' : ''}">축복 주문서 ${nB}</button></div>
+        ${protSeg}
         <button class="btn pri wide" data-a="encgo" ${cnt(k) ? '' : 'disabled'}>${cnt(k) ? '강화하기' : '주문서가 없어요'}</button>
         <div class="res" style="color:${res ? res.col : 'var(--dim)'}">${res ? res.text : '안전 강화 수치를 넘기면 실패 시 장비가 증발합니다.'}</div></div>`;
     } else h += `<p class="note">강화할 장비가 없어요.</p>`;
@@ -2654,7 +2699,7 @@ const VIEWS = {
       <div><span>사망</span><b>${S.deaths || 0}회</b></div><div><span>아데나</span><b>${fmt(S.adena)}</b></div></div>
       <div class="sec">스킬</div>${mySkills().map(k => `<div class="row" style="${S.lv < k.lv ? 'opacity:.5' : ''}"><span class="ico" style="background:#d8ae4f">${k.n[0]}</span><div class="info"><div class="n">${k.n}${S.lv < k.lv ? `<span class="tag">Lv.${k.lv}</span>` : ''}</div><div class="s">${k.desc} · MP ${skCost(k)} · 재사용 ${k.cd}초</div></div></div>`).join('')}
       <div class="sec">환생 ${S.reb ? `<span style="color:var(--gold2)">✦${S.reb}</span>` : ''}</div>
-      <p class="note" style="margin-top:0">Lv.${MAXLV}에 도달하면 Lv.1로 돌아가는 대신 영구 능력치를 얻어요. 장비, 아이템, 아데나, 변신, 펫은 그대로예요. 환생하면 사냥터 몬스터가 ★각성해서 환생 1회당 레벨 +15, 장비 드랍 등급 +1(최대 +3), 주문서 드랍이 늘어요.<br>환생 1회마다 최대 HP +6%, 피해 +6%, 공격 속도 +2%, 경험치 +25%${S.reb ? ` (지금: HP·피해 +${6 * S.reb}%, 공속 +${2 * S.reb}%, 경험치 +${25 * S.reb}%)` : ''}.</p>
+      <p class="note" style="margin-top:0">Lv.${MAXLV}에 도달하면 Lv.1로 돌아가는 대신 영구 능력치를 얻어요. 장비, 아이템, 아데나, 변신, 펫은 그대로예요. 환생하면 사냥터 몬스터가 ★각성해서 환생 1회당 레벨 +15, 장비 드랍 등급 +1(최대 +3), 주문서 드랍이 늘어요.<br>환생 1회마다 최대 HP +6%, 피해 +6%, 공격 속도 +2%, 경험치 +10%. 대신 레벨업에 필요한 경험치가 환생 1회당 40%씩 늘어요.${S.reb ? ` (지금: HP·피해 +${6 * S.reb}%, 공속 +${2 * S.reb}%, 경험치 +${10 * S.reb}%, 필요 경험치 +${40 * S.reb}%)` : ''} ✦3 환생부터 [태초] 레이드에 들어갈 수 있어요.</p>
       <button class="btn wide ${S.lv >= MAXLV ? 'pri' : ''}" data-a="rebirth" ${S.lv >= MAXLV ? '' : 'disabled'}>${S.lv < MAXLV ? `Lv.${MAXLV}부터 환생할 수 있어요` : R.confirmReb ? '정말 환생할까요? 한 번 더 누르면 Lv.1이 됩니다' : '환생하기'}</button>
       <div class="sec">사냥터 안내</div>
       ${ZONES.slice(1).filter(z => !z.raid).sort((a, b) => parseInt(a.lv) - parseInt(b.lv)).map(z => `<div class="row"><div class="info"><div class="n">${z.n}</div><div class="s">권장 Lv.${z.lv}${z.boss ? ` · 보스 ${MON[z.boss].n}` : ''} · ${z.mons.map(k => MON[k].n).join(', ')}</div></div></div>`).join('')}
@@ -2704,10 +2749,10 @@ const VIEWS = {
     h += `<div class="sec">레이드</div>`;
     RAIDS.forEach((rd, i) => {
       const cd = (S.raidCd || {})[i] || 0, wait = cd > Date.now(), best = (S.raidBest || {})[i];
-      h += `<div class="row"><div class="info"><div class="n">[${rd.diff}] ${MON[rd.k].n}</div><div class="s">Lv.${rd.minLv}+ · 제한 ${Math.round(rd.time / 60)}분 · AI 레이더 4명 합류${best ? ` · 최고 ${Math.floor(best / 60)}분 ${best % 60}초` : ''}${wait ? ` · <b style="color:var(--bad)">${Math.ceil((cd - Date.now()) / 60000)}분 대기</b>` : ''}</div></div>
-        <div class="btns"><button class="btn danger" data-a="raid" data-v="${i}" ${wait || (S.lv < rd.minLv && !S.reb) ? 'disabled' : ''}>입장</button></div></div>`;
+      h += `<div class="row"><div class="info"><div class="n">[${rd.diff}] ${MON[rd.k].n}</div><div class="s">${rd.reb ? `✦${rd.reb} 환생 · ` : ''}Lv.${rd.minLv}+ · 제한 ${Math.round(rd.time / 60)}분 · AI 레이더 4명 합류${best ? ` · 최고 ${Math.floor(best / 60)}분 ${best % 60}초` : ''}${wait ? ` · <b style="color:var(--bad)">${Math.ceil((cd - Date.now()) / 60000)}분 대기</b>` : ''}</div></div>
+        <div class="btns"><button class="btn danger" data-a="raid" data-v="${i}" ${wait || raidLocked(rd) ? 'disabled' : ''}>입장</button></div></div>`;
     });
-    h += `<p class="note">빨간 원이 뜨면 1.7초 안에 밖으로 피하세요. 자동 사냥 중이면 알아서 피해요. 처치하면 축복 주문서, 변신 카드 1회권, 최상급 장비를 얻어요.</p><div class="sec">사냥터</div>`;
+    h += `<p class="note">빨간 원이 뜨면 1.7초 안에 밖으로 피하세요. 자동 사냥 중이면 알아서 피해요. 처치하면 축복 주문서, 변신 카드 1회권, 최상급 장비를 얻어요. [태초] 레이드는 7등급 태초 장비 1개와 보호 주문서를 반드시 줘요.</p><div class="sec">사냥터</div>`;
     ZONES.map((z, i) => [z, i]).filter(([z]) => !z.town && !z.raid).sort((a, b) => parseInt(a[0].lv) - parseInt(b[0].lv)).forEach(([z, i]) => {
       const B = R.boss[i];
       h += `<div class="row"><div class="info"><div class="n">${z.n}</div><div class="s">권장 Lv.${z.lv}${z.boss ? ` · 보스 ${MON[z.boss].n}${B && B.alive ? ' <b style="color:var(--bad)">출현 중</b>' : ''}` : ''}</div></div>
@@ -2720,6 +2765,15 @@ const VIEWS = {
    Enchants every chosen item in turn up to a target measured from its own safe line
    (weapon +6, armor +4), using the same rules and odds as a single enchant. */
 const encSafe = g => GEAR[g.b].slot === 'weapon' ? 6 : 4;
+function craftView() {
+  let h = `<p class="note" style="margin-top:8px">남는 물약과 주문서를 합쳐서 다른 아이템으로 바꿔요.</p>`;
+  CRAFT.forEach((c, i) => {
+    const mx = craftMax(c), cost = Object.entries(c.cost).map(([k, n]) => `${ITEMS[k].n} ${n}${cnt(k) < n ? ` <b style="color:var(--bad)">(${fmt(cnt(k))})</b>` : ''}`).join(' + ');
+    h += `<div class="row">${itemIco(c.out)}<div class="info"><div class="n">${ITEMS[c.out].n}${c.n > 1 ? ` ×${c.n}` : ''} <span style="color:var(--dim);font-weight:400">· 보유 ${fmt(cnt(c.out))}</span></div><div class="s">${cost}${c.desc ? ` · ${c.desc}` : ''}</div></div>
+      <div class="btns"><button class="btn" data-a="craft" data-v="${i}:1" ${mx ? '' : 'disabled'}>1회</button><button class="btn" data-a="craft" data-v="${i}:10" ${mx >= 10 ? '' : 'disabled'}>10회</button></div></div>`;
+  });
+  return h;
+}
 function encMultiView() {
   const sel = R.encMulti || (R.encMulti = new Set());
   for (const id of [...sel]) if (!gearById(id)) sel.delete(id);
@@ -2730,6 +2784,7 @@ function encMultiView() {
     <div class="sec">목표 수치</div>
     <div class="seg four">${tl.map((x, i) => `<button data-a="enctarget" data-v="${i}" class="${t === i ? 'on' : ''}">${x}</button>`).join('')}</div>
     <p class="note" style="color:${t ? 'var(--bad)' : 'var(--good)'}">${t ? `무기는 +${6 + t}, 방어구는 +${4 + t}까지 올려요. 안전 수치를 넘는 단계에서 실패하면 그 장비는 증발하고 다음 장비로 넘어가요.` : '무기는 +6, 방어구는 +4까지 올려요. 실패가 없어요.'}</p>
+    ${t ? `<div class="set"><span>보호 주문서 사용 · 무기 ${cnt('pew')} · 갑옷 ${cnt('pea')}<br><span style="color:var(--dim);font-size:11.5px">실패하면 보호 주문서 1장으로 장비를 지키고 계속 강화해요</span></span><button class="tog ${R.encProt ? 'on' : ''}" data-a="encprot" aria-pressed="${!!R.encProt}"></button></div>` : ''}
     <div class="sec"><span>강화할 장비 (${sel.size}개 선택)</span><span style="display:flex;gap:6px"><button class="btn" data-a="encmall">목표 미만 모두</button><button class="btn" data-a="encmnone">해제</button></span></div>`;
   for (const g of sortedGear()) {
     const on = sel.has(g.id), done = g.e >= encSafe(g) + t;
@@ -2742,17 +2797,19 @@ function encMultiView() {
 function batchEnchant() {
   const sel = R.encMulti; if (!sel || !sel.size) return;
   const t = R.encTarget || 0, bl = R.encBless, lines = [];
-  let used = 0, evap = 0, up = 0;
+  let used = 0, evap = 0, up = 0, protUsed = 0;
   for (const id of [...sel]) {
     const g = gearById(id); if (!g) continue;
     const isW = GEAR[g.b].slot === 'weapon', safe = encSafe(g), target = safe + t, key = (bl ? 'b' : '') + (isW ? 'ew' : 'ea');
-    const before = gname(g), e0 = g.e; let n = 0, gone = false;
+    const before = gname(g), e0 = g.e, pk = isW ? 'pew' : 'pea'; let n = 0, gone = false, saved = 0;
     while (g.e < target && cnt(key) > 0) {
       S.stack[key]--; n++;
       if (g.e < safe) g.e += bl ? ri(1, 3) : 1;
       else if (Math.random() < encOdds(g.e + 1 - safe, bl)) g.e++;
+      else if (R.encProt && cnt(pk) > 0) { S.stack[pk]--; saved++; }
       else { gone = true; break; }
     }
+    protUsed += saved;
     used += n;
     if (gone) {
       evap++;
@@ -2765,7 +2822,7 @@ function batchEnchant() {
       if (g.e >= 7 && e0 < g.e) log(`${S.name}님이 ${gname(g)} 강화에 성공했습니다!`, 'ann');
     } else lines.push(`<span class="dim">${before} · ${g.e >= target ? '이미 목표 수치' : (isW ? '무기' : '갑옷') + ' 주문서 부족'}</span>`);
   }
-  R.encBatchRes = `<b>결과</b> · 성공 ${up} · 증발 ${evap} · 주문서 ${used}장 사용<br>` + lines.join('<br>');
+  R.encBatchRes = `<b>결과</b> · 성공 ${up} · 증발 ${evap} · 주문서 ${used}장 사용${protUsed ? ` · 보호 주문서 ${protUsed}장으로 장비 보호` : ''}<br>` + lines.join('<br>');
   log(`일괄 강화: ${up}개 성공, ${evap}개 증발, 주문서 ${used}장 사용`, evap ? 'warn' : 'sys');
   if (evap) SFX.fail(); else if (up) SFX.win();
   recalc(); save(); renderSheet();
@@ -2830,6 +2887,13 @@ function doEnchant() {
     if (g.e < safe) { inc = R.encBless ? ri(1, 3) : 1; g.e += inc; }
     else if (Math.random() < encOdds(g.e + 1 - safe, R.encBless)) g.e++;
     else ok = false;
+    const pk = isW ? 'pew' : 'pea';
+    if (!ok && R.encProt && cnt(pk) > 0) {
+      S.stack[pk]--;
+      R.encRes = { cls: 'fail', col: '#a8e8d0', text: `강화에 실패했지만 ${ITEMS[pk].n}${J(ITEMS[pk].n, '이', '가')} ${before}${J(before, '을', '를')} 지켰습니다.` };
+      SFX.fail(); log(`${before} 강화 실패 · 보호 주문서로 장비를 지켰습니다.`, 'sys');
+      recalc(); save(); R.encBusy = false; renderSheet(); return;
+    }
     if (ok) {
       R.encRes = { cls: 'ok', col: '#bcd9ff', text: `${before}${J(before, '이', '가')} ${R.encBless && inc > 1 ? '한동안' : '한순간'} ${color} 빛납니다.` };
       SFX.win(); if (g.e > (S.best || 0)) S.best = g.e;
@@ -2880,6 +2944,8 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'encmnone') { R.encMulti = new Set(); }
   else if (a === 'encbatch') { batchEnchant(); return; }
   else if (a === 'bless') { R.encBless = v === '1'; R.encRes = null; }
+  else if (a === 'encprot') { R.encProt = !R.encProt; }
+  else if (a === 'craft') { const [i, n] = v.split(':'); craft(+i, +n); }
   else if (a === 'encgo') { doEnchant(); return; }
   else if (a === 'camreset') camReset();
   else if (a === 'skauto') { const sk = mySkills().find(k => k.id === v); if (sk) toggleAuto(sk); }
@@ -3141,6 +3207,9 @@ function simAway(sec) {
   }
   S.hasteLeft = Math.max(0, haste);
   r.sec = Math.min(t, sec);
+  // other AI users kept playing too
+  const all = roster(), inParty = new Set((S.party || []).map(x => x.name));
+  for (let i = Math.min(7200, Math.floor(r.sec / 6)); i > 0; i--) { const x = pick(all); aiGrow(x, inParty.has(x.name), true); if (Math.random() < .3) x.ew++; }
   recalc(); S.hp = Math.max(S.hp, D.maxHp * .7); S.mp = D.maxMp;
   return r;
 }
