@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e0c09">
+<title>무과금 영토전쟁</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@700;800&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="../lib/three.min.js"></script>
+<script src="../lib/GLTFLoader.js"></script>
+<script src="../lib/SkeletonUtils.js"></script>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0e0c09; --panel:#191510; --panel2:#231d15; --line:#43361f; --line2:#6d5733;
+  --gold:#d8ae4f; --gold2:#f1d58c; --text:#efe4c8; --dim:#a6977a; --good:#7fc682; --bad:#e25a4b; --blue:#8fc0ff;
+  --serif:'Nanum Myeongjo', 'Batang', serif;
+  --sans:'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+#game{position:relative;width:100%;height:100%;overflow:hidden;display:flex;flex-direction:column}
+#view{position:relative;flex:1;min-height:0;touch-action:none}
+#gl,#ov{position:absolute;inset:0;width:100%;height:100%;display:block}
+#ov{pointer-events:none}
+button{font-family:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
+
+#hud{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 8px) 10px 0;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.hrow{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.box{background:rgba(14,11,8,.82);border:1px solid rgba(216,174,79,.35);border-radius:10px;padding:6px 10px}
+#region{font-family:var(--serif);font-weight:800;color:var(--gold2);font-size:15px}
+#waveTxt{font-size:12px;margin-top:2px;font-variant-numeric:tabular-nums}
+.bar{height:6px;border-radius:3px;background:rgba(0,0,0,.6);overflow:hidden;margin-top:4px;border:1px solid rgba(0,0,0,.4)}
+.bar i{display:block;height:100%;width:0}
+#goldBox{text-align:right}
+#gold{font-family:var(--serif);font-weight:800;color:var(--gold2);font-size:18px;font-variant-numeric:tabular-nums}
+#income{font-size:11px;color:var(--dim)}
+#wallBox{display:flex;align-items:center;gap:8px}
+#wallBox .lab{font-size:11px;font-weight:700;white-space:nowrap}
+#wallBox .bar{flex:1;height:9px;margin:0}
+#wallHp{background:linear-gradient(90deg,#c0462f,#e8a050)}
+#wallTxt{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
+#bossBox .bar{height:8px}
+#bossHp{background:linear-gradient(90deg,#8a2bd0,#e050a0)}
+#ctl{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:6px;pointer-events:auto}
+.chip{background:rgba(14,11,8,.85);border:1px solid var(--line2);color:var(--gold2);border-radius:18px;padding:7px 12px;font-size:12px;font-weight:700;min-width:64px}
+.chip.on{background:linear-gradient(#e2bb5f,#a67f2c);color:#1d160c;border-color:#f1d58c}
+#toast{position:absolute;left:50%;top:40%;transform:translateX(-50%);font-family:var(--serif);font-weight:800;font-size:22px;color:var(--gold2);text-shadow:0 2px 6px #000,0 0 18px rgba(216,174,79,.5);pointer-events:none;opacity:0;transition:opacity .4s;width:max-content;max-width:90%;text-align:center}
+#toast.show{opacity:1;transition:none}
+
+#panel{flex:none;height:min(42vh,360px);background:var(--panel);border-top:1px solid var(--line2);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)}
+#tabs{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--line)}
+#tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:10px 4px;font-size:13px;font-weight:700;color:var(--dim)}
+#tabs button.on{color:var(--gold2);border-bottom-color:var(--gold)}
+#list{flex:1;overflow-y:auto;padding:4px 10px 10px;touch-action:pan-y}
+.row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(67,54,31,.6)}
+.ico{width:38px;height:38px;border-radius:9px;flex:none;display:grid;place-items:center;font-family:var(--serif);font-weight:800;font-size:16px;color:#1d160c}
+.info{flex:1;min-width:0}
+.info .n{font-weight:700;font-size:13.5px}
+.info .n small{color:var(--dim);font-weight:500;font-size:11.5px;margin-left:4px}
+.info .s{font-size:11.5px;color:var(--dim);line-height:1.45;margin-top:1px}
+.btns{display:flex;gap:5px;flex:none}
+.btn{background:linear-gradient(#3b2f1f,#261e14);border:1px solid var(--line2);color:var(--gold2);border-radius:8px;padding:7px 9px;font-size:12px;font-weight:700;white-space:nowrap;min-width:64px;line-height:1.25}
+.btn small{display:block;font-size:10.5px;font-weight:500;color:var(--text)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.pri{background:linear-gradient(#e2bb5f,#a67f2c);color:#1d160c;border-color:#f1d58c}
+.btn.pri small{color:#3a2a10}
+.note{font-size:11.5px;color:var(--dim);line-height:1.55;margin:8px 0}
+.map{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.reg{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel2)}
+.reg.cur{border-color:var(--gold)}
+.reg.lock{opacity:.4}
+.reg .dot{width:12px;height:12px;border-radius:50%;flex:none}
+.reg .rn{font-weight:700;font-size:13px}
+.reg .rs{font-size:11px;color:var(--dim)}
+.reg .rt{margin-left:auto;font-size:11.5px;font-weight:700;white-space:nowrap}
+
+.ovl{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:20px 16px;background:radial-gradient(ellipse at 50% 40%,rgba(40,30,16,.92),rgba(8,6,4,.97))}
+.card{width:min(440px,100%);text-align:center;max-height:100%;overflow-y:auto}
+.logo{font-family:var(--serif);font-weight:800;font-size:clamp(28px,9vw,42px);color:var(--gold2);line-height:1.15;text-shadow:0 2px 0 #5a4219,0 0 30px rgba(216,174,79,.35)}
+.sub{color:var(--dim);font-size:13px;line-height:1.65;margin:10px 0 16px}
+.rules{text-align:left;font-size:12.5px;line-height:1.7;background:rgba(35,29,21,.85);border:1px solid var(--line2);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.rules b{color:var(--gold2)}
+.wide{width:100%;padding:13px;font-size:15px}
+.loadbar{height:6px;border-radius:3px;background:#2a2217;overflow:hidden;margin-top:16px;border:1px solid var(--line)}
+.loadbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#a67f2c,#f1d58c)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0 16px;text-align:left}
+.stats div{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--dim)}
+.stats b{display:block;color:var(--gold2);font-size:15px;margin-top:2px}
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="view">
+    <canvas id="gl"></canvas>
+    <canvas id="ov"></canvas>
+    <div id="hud">
+      <div class="hrow">
+        <div class="box"><div id="region">고블린 숲</div><div id="waveTxt">웨이브 1 / 10</div><div class="bar" style="width:130px"><i id="waveBar" style="background:var(--gold)"></i></div></div>
+        <div class="box" id="goldBox"><div id="gold">0</div><div id="income">영토 수입 0/초</div></div>
+      </div>
+      <div class="box" id="wallBox"><span class="lab">성벽</span><div class="bar"><i id="wallHp"></i></div><span id="wallTxt">0</span></div>
+      <div class="box" id="bossBox" hidden><div style="font-size:12px;font-weight:700;color:#ffb0e0" id="bossName">보스</div><div class="bar"><i id="bossHp"></i></div></div>
+    </div>
+    <div id="ctl">
+      <button class="chip" id="bSpeed">속도 ×1</button>
+      <button class="chip on" id="bAuto">자동 진행</button>
+    </div>
+    <div id="toast"></div>
+  </div>
+  <div id="panel">
+    <div id="tabs"><button data-t="army" class="on">병사</button><button data-t="castle">성</button><button data-t="hero">영웅</button><button data-t="map">지도</button></div>
+    <div id="list"></div>
+  </div>
+  <div class="ovl" id="loading"><div class="card"><div class="logo">무과금 영토전쟁</div><p class="sub" id="loadMsg">군대를 모으고 있어요…</p><div class="loadbar"><i id="loadBar"></i></div></div></div>
+  <div class="ovl" id="title" hidden>
+    <div class="card">
+      <div class="logo">무과금 영토전쟁</div>
+      <p class="sub">성벽을 지키며 몰려오는 적을 막고,<br>보스를 쓰러뜨려 영토를 넓히세요.</p>
+      <div class="rules">
+        전투는 <b>자동</b>이에요. 적을 잡으면 <b>골드</b>가 들어와요.<br>
+        <b>병사</b> 탭에서 기사·궁수·마법사·사제를 고용하고 훈련하세요.<br>
+        <b>성</b> 탭에서 성벽, 수리, 금고를 올리고 <b>영웅</b>도 키우세요.<br>
+        웨이브 10마다 <b>보스</b>가 나와요. 이기면 다음 <b>영토</b>를 차지하고, 차지한 영토는 계속 골드를 줘요.<br>
+        성벽이 무너지면 한 웨이브 뒤로 물러났다가 다시 도전해요. <b>자동 진행</b>을 끄면 지금 웨이브만 반복해서 골드를 모아요.<br>
+        앱을 꺼 둬도 최대 <b>12시간</b>까지 전투가 이어져요.
+      </div>
+      <button class="btn pri wide" id="startBtn">전투 시작</button>
+    </div>
+  </div>
+  <div class="ovl" id="away" hidden>
+    <div class="card">
+      <div class="logo" style="font-size:28px">그동안의 전투</div>
+      <p class="sub" id="awayMsg"></p>
+      <div class="stats" id="awayStats"></div>
+      <button class="btn pri wide" id="awayOk">확인</button>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+'use strict';
+const el = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const ri = (a, b) => Math.floor(rnd(a, b + 1));
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const THREE = window.THREE;
+function fmt(n) {
+  n = Math.floor(n);
+  if (n < 1e4) return n.toLocaleString('ko-KR');
+  const u = [[1e16, '경'], [1e12, '조'], [1e8, '억'], [1e4, '만']];
+  for (const [v, s] of u) if (n >= v) { const x = n / v; return (x >= 100 ? Math.floor(x) : x.toFixed(x >= 10 ? 1 : 2).replace(/\.?0+$/, '')) + s; }
+  return String(n);
+}
+
+/* ================= DATA ================= */
+const ET = {
+  goblin: { n: '고블린', m: 'Rogue', tint: '#9ccf6a', s: .75, r: 'dagger', st: '1h', hp: .8, sp: 1.6 },
+  skmin: { n: '해골 졸개', m: 'Skeleton_Minion', r: 'Skeleton_Blade', st: '1h', sk: 1, hp: .9, sp: 1.3 },
+  orcw: { n: '오크 전사', m: 'Barbarian', tint: '#9ccf6a', r: 'axe_1handed', st: '1h', hp: 1.4, sp: 1.1 },
+  orca: { n: '오크 궁수', m: 'Ranger', tint: '#9ccf6a', l: 'bow_withString', st: 'bow', hp: .8, sp: 1.1, rg: 6 },
+  skel: { n: '해골 전사', m: 'Skeleton_Warrior', r: 'Skeleton_Axe', l: 'Skeleton_Shield_Small_A', st: '1h', sk: 1, hp: 1.5, sp: 1 },
+  skela: { n: '해골 석궁병', m: 'Skeleton_Rogue', r: 'Skeleton_Crossbow', st: 'xbow', sk: 1, hp: .8, sp: 1, rg: 6 },
+  skmage: { n: '해골 마법사', m: 'Skeleton_Mage', r: 'Skeleton_Staff', st: 'magic', sk: 1, hp: .7, sp: 1, rg: 6 },
+  dknight: { n: '흑기사', m: 'Knight', tint: '#6a6a88', r: 'sword_1handed', l: 'shield_spikes', st: '1h', hp: 1.9, sp: .9 },
+  bandit: { n: '암살자', m: 'Rogue_Hooded', tint: '#5a5a70', r: 'dagger', l: 'dagger', st: '1h', hp: .9, sp: 1.9 },
+  yeti: { n: '설인', m: 'Barbarian', tint: '#f2f7ff', s: 1.15, r: 'axe_2handed', st: '2h', hp: 2.3, sp: .8 },
+  frostm: { n: '서리 마녀', m: 'Mage', tint: '#bfe4ff', r: 'staff', st: 'magic', hp: .8, sp: 1, rg: 6, glow: '#4aa8ff' },
+  iceskel: { n: '얼음 해골', m: 'Skeleton_Warrior', tint: '#bfe4ff', r: 'Skeleton_Blade', st: '1h', sk: 1, hp: 1.3, sp: 1.1 },
+  flsk: { n: '화염 해골', m: 'Skeleton_Warrior', tint: '#ff9060', r: 'Skeleton_Blade', st: '1h', sk: 1, hp: 1.3, sp: 1.2, glow: '#ff5a20' },
+  berserk: { n: '용암 광전사', m: 'Barbarian', tint: '#e08070', r: 'axe_2handed', st: '2h', hp: 1.7, sp: 1.3 },
+  pyro: { n: '화염 술사', m: 'Skeleton_Mage', tint: '#ff9060', r: 'Skeleton_Staff', st: 'magic', sk: 1, hp: .8, sp: 1, rg: 6, glow: '#ff5a20' },
+  ghoul: { n: '늪 구울', m: 'Skeleton_Minion', tint: '#8aa070', sk: 1, r: 'Skeleton_Blade', st: '1h', hp: 1.1, sp: 1.5 },
+  hexer: { n: '독 주술사', m: 'Mage', tint: '#9a7ab8', r: 'staff', st: 'magic', hp: .8, sp: 1, rg: 6, glow: '#40c060' },
+  troll: { n: '늪 트롤', m: 'Barbarian', tint: '#7a9a6a', s: 1.2, r: 'axe_2handed', st: '2h', hp: 2.4, sp: .8 },
+  voidk: { n: '공허 기사', m: 'Knight', tint: '#4a3a6a', r: 'sword_2handed', st: '2h', hp: 2.1, sp: 1, glow: '#a040ff' },
+  voidw: { n: '공허 마녀', m: 'Mage', tint: '#4a3a6a', r: 'staff', st: 'magic', hp: .9, sp: 1, rg: 6, glow: '#a040ff' },
+  voids: { n: '공허 해골', m: 'Skeleton_Rogue', tint: '#6a5a8a', r: 'Skeleton_Blade', st: '1h', sk: 1, hp: 1.1, sp: 1.6 },
+  duskk: { n: '황혼 기사', m: 'Knight', tint: '#8a4050', r: 'sword_2handed_color', st: '2h', hp: 2.3, sp: 1 },
+  dusa: { n: '황혼 궁수', m: 'Ranger', tint: '#8a4050', l: 'bow_withString', st: 'bow', hp: 1, sp: 1.1, rg: 6 },
+  demon: { n: '마왕군 병사', m: 'Barbarian', tint: '#7a2020', r: 'axe_2handed', st: '2h', hp: 2.1, sp: 1.1, glow: '#ff3020' },
+};
+const REGIONS = [
+  { n: '고블린 숲', g: 0x4f7038, f: 0x6f8a6a, e: ['goblin', 'goblin', 'skmin'], boss: ['goblin', '고블린 대장', 2.4] },
+  { n: '오크 평원', g: 0x75773e, f: 0x8a8a60, e: ['orcw', 'orca', 'goblin'], boss: ['orcw', '오크 족장', 2.2] },
+  { n: '망자의 묘지', g: 0x3b3b46, f: 0x22222e, e: ['skel', 'skela', 'skmage', 'skmin'], boss: ['skel', '해골 군주', 2.3] },
+  { n: '흑기사 요새', g: 0x4f3d34, f: 0x3a1a14, e: ['dknight', 'bandit', 'skela'], boss: ['dknight', '타락한 영주', 2.2] },
+  { n: '서리 설원', g: 0xb7c6d4, f: 0xc9dcea, e: ['iceskel', 'yeti', 'frostm'], boss: ['yeti', '서리 거인', 2] },
+  { n: '화산 분화구', g: 0x4a2a1e, f: 0x2a0e08, e: ['flsk', 'berserk', 'pyro'], boss: ['berserk', '화염의 군주', 2.1] },
+  { n: '썩은 늪', g: 0x46553a, f: 0x4a5a40, e: ['ghoul', 'hexer', 'troll'], boss: ['troll', '늪의 왕', 1.9] },
+  { n: '심연의 균열', g: 0x2b2040, f: 0x120a1e, e: ['voidk', 'voidw', 'voids'], boss: ['voidk', '심연의 군주', 2.2] },
+  { n: '황혼의 성', g: 0x5a3038, f: 0x2a1018, e: ['duskk', 'dusa', 'bandit'], boss: ['duskk', '황혼의 왕', 2.2] },
+  { n: '마왕성', g: 0x3a1616, f: 0x1a0606, e: ['demon', 'voidw', 'duskk', 'pyro'], boss: ['demon', '마왕', 2.6] },
+];
+const regionOf = r => REGIONS[r % REGIONS.length];
+const regionName = r => regionOf(r).n + (r >= REGIONS.length ? ` ★${Math.floor(r / REGIONS.length) + 1}` : '');
+const UNITS = {
+  knight: { n: '기사', m: 'Knight', r: 'sword_1handed', l: 'shield_round', st: '1h', col: '#9fb6d8', max: 6, hire: 40, train: 30, hp: 90, dmg: 7, as: 1, range: 1.15, desc: '성벽 앞에서 적을 막아요' },
+  archer: { n: '궁수', m: 'Ranger', l: 'bow_withString', st: 'bow', col: '#8fd08a', max: 6, hire: 30, train: 25, dmg: 5, as: .85, range: 9.5, desc: '성벽 위에서 화살을 쏴요' },
+  mage: { n: '마법사', m: 'Mage', r: 'staff', st: 'magic', col: '#c8a0ff', max: 4, hire: 160, train: 70, dmg: 8, as: 1.7, range: 9, aoe: 1.6, desc: '적 무리에 범위 마법을 쏴요' },
+  priest: { n: '사제', m: 'Mage', tint: '#fff0c0', r: 'wand', l: 'spellbook_open', st: 'magic', col: '#ffe9a0', max: 2, hire: 400, train: 140, heal: 6, as: 2.2, desc: '성벽과 기사를 치료해요' },
+};
+const HERO = { n: '영웅 레오', m: 'Knight', tint: '#ffe8b0', s: 1.3, r: 'sword_2handed_color', st: '2h', glow: '#ffc040', hp: 260, dmg: 14, as: .9, range: 1.3, train: 60 };
+const CASTLE = {
+  wall: { n: '성벽 강화', col: '#c8a878', base: 50, k: 1.16, desc: lv => `최대 체력 ${fmt(wallMax(lv))}` },
+  repair: { n: '석공 수리', col: '#a8c8a0', base: 80, k: 1.22, desc: lv => `초당 성벽 ${(lv * .4).toFixed(1)}% 회복` },
+  vault: { n: '금고', col: '#f1d58c', base: 100, k: 1.24, desc: lv => `골드 획득 +${lv * 10}%` },
+};
+const wallMax = lv => Math.round(400 * Math.pow(1.14, lv));
+const hireCost = (k, n) => Math.round(UNITS[k].hire * Math.pow(2.3, n));
+const trainCost = (k, lv) => Math.round(UNITS[k].train * Math.pow(1.15, lv - 1));
+const heroCost = lv => Math.round(HERO.train * Math.pow(1.17, lv - 1));
+const castleCost = (k, lv) => Math.round(CASTLE[k].base * Math.pow(CASTLE[k].k, lv));
+const lvMul = lv => Math.pow(1.12, lv - 1);
+const heroMul = lv => Math.pow(1.13, lv - 1);
+// global wave number W = region*10 + wave (1-based)
+const GW = () => S.region * 10 + S.wave;
+const enemyHp = W => 18 * Math.pow(1.118, W - 1);
+const enemyDmg = W => 3 * Math.pow(1.088, W - 1);
+const enemyGold = W => 1 + .7 * Math.pow(1.107, W - 1);
+const waveCount = (r, w) => Math.min(24, 6 + Math.floor(w * .9) + Math.min(r, 8));
+const goldMul = () => 1 + .1 * S.castle.vault;
+const territoryIncome = () => { let s = 0; for (let r = 0; r < S.conquered; r++) s += .4 * Math.pow(1.55, r); return s * goldMul(); };
+
+/* ================= SAVE ================= */
+const KEY = 'mug-war-v1';
+let S = null;
+function fresh() {
+  return { gold: 60, region: 0, wave: 1, conquered: 0, best: 1, auto: true, speed: 1, kills: 0,
+    units: { knight: { n: 1, lv: 1 }, archer: { n: 2, lv: 1 }, mage: { n: 0, lv: 1 }, priest: { n: 0, lv: 1 } },
+    hero: { lv: 1 }, castle: { wall: 0, repair: 0, vault: 0 }, lastT: Date.now(), started: false };
+}
+function save() { if (!S) return; S.lastT = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+function load() { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.units) return Object.assign(fresh(), s); } catch (e) {} return null; }
+
+/* ================= 3D ================= */
+const view = el('view'), glc = el('gl'), ovc = el('ov'), octx = ovc.getContext('2d');
+let W = 0, H = 0, dpr = 1, renderer, scene, camera, ground, MODELS = {}, CLIPS = {}, PROPS = {}, CHAR_SCALE = .5, GLOW_TEX, sun;
+const lin = h => new THREE.Color(h).convertSRGBToLinear();
+const WALL_Z = 4.6, WALL_FRONT = 3.95, WALL_TOP = 1.05, SPAWN_Z = -17, POST_Z = 2.5;
+function initGL() {
+  renderer = new THREE.WebGLRenderer({ canvas: glc, antialias: true });
+  renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(42, 1, .5, 90);
+  scene.add(new THREE.HemisphereLight(0xfff0e0, 0x30261a, .85));
+  sun = new THREE.DirectionalLight(0xfff0d8, 1.35); sun.position.set(5, 14, 8); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 14, bottom: -14 }); sun.target.position.set(0, 0, -5); scene.add(sun, sun.target);
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(.3, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); GLOW_TEX = new THREE.CanvasTexture(c);
+  buildWorld(); resize();
+}
+let decor = [];
+function buildWorld() {
+  ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ color: 0x445533, roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.z = -6; ground.receiveShadow = true; scene.add(ground);
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(9.4, 26), new THREE.MeshStandardMaterial({ color: lin(0x7a6a4e), roughness: 1, transparent: true, opacity: .55 }));
+  road.rotation.x = -Math.PI / 2; road.position.set(0, .01, -8); road.receiveShadow = true; scene.add(road);
+  // the wall: a long stone block with merlons and a tower at each end
+  const stone = new THREE.MeshStandardMaterial({ color: lin(0x8a8070), roughness: .95 }), dark = new THREE.MeshStandardMaterial({ color: lin(0x6a6256), roughness: .95 });
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(11.5, WALL_TOP, 1.3), stone); wall.position.set(0, WALL_TOP / 2, WALL_Z); wall.castShadow = wall.receiveShadow = true; scene.add(wall);
+  for (let i = 0; i < 12; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(.5, .35, .25), dark); m.position.set(-5.4 + i * .98, WALL_TOP + .17, WALL_FRONT + .12); m.castShadow = true; scene.add(m); }
+  for (const x of [-6.2, 6.2]) {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(.85, .95, 2.4, 10), stone); t.position.set(x, 1.2, WALL_Z); t.castShadow = true; scene.add(t);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(1.05, 1.1, 10), new THREE.MeshStandardMaterial({ color: lin(0x8a3a2a), roughness: .8 })); roof.position.set(x, 2.95, WALL_Z); roof.castShadow = true; scene.add(roof);
+  }
+  const keep = new THREE.Mesh(new THREE.BoxGeometry(14, 2.2, 3), dark); keep.position.set(0, 1.1, WALL_Z + 2.3); scene.add(keep);
+}
+function setTheme(r) {
+  const R0 = regionOf(r);
+  ground.material.color.copy(lin(R0.g));
+  scene.background = lin(R0.f); scene.fog = new THREE.Fog(lin(R0.f), 26, 48);
+  for (const d of decor) scene.remove(d); decor = [];
+  // simple trees / rocks on both sides
+  const snow = R0.n.includes('서리'), dead = /묘지|균열|마왕|화산|황혼/.test(R0.n);
+  for (let i = 0; i < 22; i++) {
+    const side = i % 2 ? 1 : -1, x = side * rnd(6.5, 12), z = rnd(-24, 2);
+    const g = new THREE.Group();
+    if (dead && Math.random() < .6) {
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rnd(.4, .9)), new THREE.MeshStandardMaterial({ color: lin(0x4a4040), roughness: 1 })); rock.position.y = .3; g.add(rock);
+    } else {
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(.12, .16, .8, 6), new THREE.MeshStandardMaterial({ color: lin(0x5a4030) })); trunk.position.y = .4; g.add(trunk);
+      const top = new THREE.Mesh(new THREE.ConeGeometry(rnd(.6, .9), rnd(1.4, 2.1), 7), new THREE.MeshStandardMaterial({ color: lin(snow ? 0xe8f0f8 : dead ? 0x3a2a2a : 0x3f6a34), roughness: .9 })); top.position.y = 1.5; g.add(top);
+    }
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    g.position.set(x, 0, z); scene.add(g); decor.push(g);
+  }
+}
+function resize() {
+  W = view.clientWidth; H = view.clientHeight; dpr = Math.min(devicePixelRatio || 1, 2);
+  if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); }
+  ovc.width = W * dpr; ovc.height = H * dpr;
+  // keep the whole road width in view on narrow phones
+  const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(6.4 / (half * camera.aspect), 9 / half);
+  const tilt = .9;
+  camera.position.set(0, Math.cos(tilt) * need, -5 + Math.sin(tilt) * need + 1.5); camera.lookAt(0, 0, -5);
+  camera.far = need + 50; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+async function loadAssets() {
+  const loader = new THREE.GLTFLoader(), files = ['chars', 'anims', 'props'], prog = [0, 0, 0];
+  const fetchModel = (f, i) => new Promise((ok, bad) => {
+    const x = new XMLHttpRequest(); x.open('GET', `../assets/${f}.txt?v=2`);
+    x.onprogress = e => { prog[i] = e.loaded; el('loadBar').style.width = Math.min(100, (prog[0] + prog[1] + prog[2]) / 7e6 * 100) + '%'; };
+    x.onerror = () => bad(new Error(f));
+    x.onload = () => {
+      try {
+        const bin = atob(x.responseText.trim()), u8 = new Uint8Array(bin.length);
+        for (let k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k);
+        const cib = window.createImageBitmap; window.createImageBitmap = undefined;
+        try { loader.parse(u8.buffer, '', ok, bad); } finally { window.createImageBitmap = cib; }
+      } catch (e) { bad(e); }
+    };
+    x.send();
+  });
+  const [chars, anims, props] = await Promise.all(files.map(fetchModel));
+  const names = new Set(); anims.scene.traverse(o => names.add(o.name));
+  for (const c of chars.scene.children) { c.traverse(o => { const m = /^(.*)_(\d+)$/.exec(o.name); if (m && names.has(m[1])) o.name = m[1]; }); MODELS[c.name] = c; }
+  for (const a of anims.animations) CLIPS[a.name] = a;
+  for (const p of props.scene.children) PROPS[p.name] = p;
+  const kb = new THREE.Box3().setFromObject(MODELS.Knight); CHAR_SCALE = 1.05 / (kb.max.y - kb.min.y);
+}
+function styleAnims(st, sk) {
+  return {
+    idle: sk ? 'Skeletons_Idle' : st === 'bow' ? 'Ranged_Bow_Idle' : st === '2h' ? 'Idle_B' : 'Idle_A',
+    run: sk ? 'Skeletons_Walking' : st === 'bow' ? 'Running_HoldingBow' : 'Running_A',
+    atk: { '1h': ['Melee_1H_Attack_Chop', 'Melee_1H_Attack_Slice_Diagonal'], '2h': ['Melee_2H_Attack_Chop'], bow: ['Ranged_Bow_Release'], magic: ['Ranged_Magic_Shoot'], xbow: ['Ranged_1H_Shoot'] }[st] || ['Melee_1H_Attack_Chop'],
+    death: sk ? 'Skeletons_Death' : 'Death_A',
+  };
+}
+function propClone(name, glow) {
+  const p = PROPS[name]; if (!p) return null; const c = p.clone(true);
+  if (glow) c.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(glow); o.material.emissiveIntensity = .9; } });
+  return c;
+}
+function makeActor(d, sc = 1) {
+  const root = new THREE.Group(), m = THREE.SkeletonUtils.clone(MODELS[d.m]);
+  m.scale.setScalar(CHAR_SCALE * (d.s || 1) * sc);
+  const mats = [];
+  m.traverse(n => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; n.material = n.material.clone(); mats.push(n.material); if (d.tint) n.material.color.multiply(new THREE.Color(d.tint)); if (d.glow) { n.material.emissive = new THREE.Color(d.glow); n.material.emissiveIntensity = .3; } n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity; } });
+  root.add(m);
+  const a = { root, m, mats, mixer: new THREE.AnimationMixer(m), acts: {}, cur: null, curName: '', lock: 0, A: styleAnims(d.st, d.sk), h: 1.05 * (d.s || 1) * sc, atkI: 0 };
+  const hr = m.getObjectByName('handslotr'), hl = m.getObjectByName('handslotl');
+  if (d.r && hr) { const w = propClone(d.r, d.wglow); if (w) hr.add(w); }
+  if (d.l && hl) { const w = propClone(d.l); if (w) hl.add(w); }
+  play(a, a.A.idle); a.mixer.update(Math.random() * 2);
+  scene.add(root);
+  return a;
+}
+function play(a, name, opt = {}) {
+  const clip = CLIPS[name] || (/Idle/.test(name) ? CLIPS.Idle_A : null); if (!clip) return;
+  if (a.curName === name && !opt.once) return;
+  let act = a.acts[name]; if (!act) act = a.acts[name] = a.mixer.clipAction(clip);
+  act.reset(); act.setEffectiveTimeScale(opt.speed || 1); act.setEffectiveWeight(1);
+  act.setLoop(opt.once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity); act.clampWhenFinished = !!opt.once;
+  if (a.cur && a.cur !== act) act.crossFadeFrom(a.cur, .12, false);
+  act.play(); a.cur = act; a.curName = name; a.lock = opt.once ? clip.duration / (opt.speed || 1) * .85 : 0;
+}
+function killActor(a) { if (!a) return; scene.remove(a.root); a.mixer.stopAllAction(); for (const m of a.mats) m.dispose(); }
+const lerpAng = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; };
+
+/* ================= BATTLE ================= */
+// entities: {side:'ally'|'foe', x, z, y, hp, maxHp, dmg, as, range, atkT, act, ...}
+let allies = [], foes = [], shots = [], fxs = [], texts = [];
+const B = { wallHp: 0, toSpawn: [], spawnT: 0, total: 0, killed: 0, state: 'fight', nextT: 0, boss: null, t: 0 };
+const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+function wallMaxNow() { return wallMax(S.castle.wall); }
+function rampartSlots() {
+  const list = [];
+  for (const k of ['archer', 'mage', 'priest']) for (let i = 0; i < S.units[k].n; i++) list.push(k);
+  return list;
+}
+function makeAlly(k, x, z, y) {
+  const d = UNITS[k], L = S.units[k].lv, mul = lvMul(L);
+  const e = { side: 'ally', k, x, z, y, px: x, pz: z, hp: 0, maxHp: 1, dmg: (d.dmg || 0) * mul, as: d.as, range: d.range || 0, heal: (d.heal || 0) * mul, atkT: rnd(0, .6), dead: false, respT: 0, hurt: 0 };
+  if (k === 'knight') { e.maxHp = e.hp = Math.round(d.hp * mul); }
+  e.act = makeActor(d); e.act.root.position.set(x, y, z); e.act.root.rotation.y = Math.PI;
+  return e;
+}
+function makeHero() {
+  const L = S.hero.lv, mul = heroMul(L);
+  const e = { side: 'ally', k: 'hero', hero: true, x: 0, z: POST_Z - 1, y: 0, px: 0, pz: POST_Z - 1, maxHp: Math.round(HERO.hp * mul), dmg: HERO.dmg * mul, as: HERO.as, range: HERO.range, atkT: 0, skillT: 6, dead: false, respT: 0, hurt: 0 };
+  e.hp = e.maxHp; e.act = makeActor(HERO); e.act.root.position.set(0, 0, e.z); e.act.root.rotation.y = Math.PI;
+  return e;
+}
+function rebuildArmy() {
+  for (const a of allies) killActor(a.act); allies = [];
+  const slots = rampartSlots(), n = slots.length;
+  const gap = Math.min(1.1, 8.4 / Math.max(1, n - 1));
+  slots.forEach((k, i) => allies.push(makeAlly(k, (i - (n - 1) / 2) * gap, WALL_Z - .05, WALL_TOP)));
+  const kn = S.units.knight.n;
+  for (let i = 0; i < kn; i++) allies.push(makeAlly('knight', (i - (kn - 1) / 2) * 1.3, POST_Z, 0));
+  allies.push(makeHero());
+}
+function makeFoe(key, boss) {
+  const d = ET[key], w = GW(), R0 = regionOf(S.region);
+  const def = boss ? { ...d, s: R0.boss[2], glow: d.glow || '#ff4060' } : d;
+  const hp = enemyHp(w) * d.hp * (boss ? 34 : 1);
+  const e = { side: 'foe', key, boss: !!boss, name: boss ? R0.boss[1] : d.n, x: rnd(-3.8, 3.8), z: SPAWN_Z + rnd(-1, 1), y: 0, hp, maxHp: hp,
+    dmg: enemyDmg(w) * (boss ? 6 : d.rg ? .8 : 1), as: boss ? 1.6 : 1.2, range: d.rg || (boss ? 1.6 : 1.05), sp: d.sp * (boss ? .7 : 1) * .9, atkT: rnd(.2, .8), dead: false, hurt: 0,
+    gold: enemyGold(w) * (boss ? 25 : 1) * (d.hp > 1.6 ? 1.4 : 1) };
+  if (boss) { e.x = 0; }
+  e.act = makeActor(def); e.act.root.position.set(e.x, 0, e.z); e.act.root.rotation.y = 0;
+  if (boss) e.act.h *= 1;
+  foes.push(e);
+  return e;
+}
+function startWave() {
+  for (const f of foes) killActor(f.act); foes = []; clearShots();
+  const R0 = regionOf(S.region), n = waveCount(S.region, S.wave);
+  B.toSpawn = []; for (let i = 0; i < n; i++) B.toSpawn.push(pick(R0.e));
+  if (S.wave === 10) { B.toSpawn = B.toSpawn.slice(0, Math.ceil(n * .6)); B.toSpawn.splice(Math.floor(B.toSpawn.length / 2), 0, 'BOSS'); }
+  B.total = B.toSpawn.length; B.killed = 0; B.spawnT = .8; B.state = 'fight'; B.boss = null;
+  B.wallHp = Math.min(wallMaxNow(), Math.max(B.wallHp, wallMaxNow() * .35) + wallMaxNow() * .3);
+  // fallen knights and the hero come back for the new wave
+  for (const a of allies) if (a.dead || a.maxHp) { if (a.dead) revive(a); }
+  hud(); el('bossBox').hidden = true;
+}
+function revive(a) {
+  a.dead = false; a.hp = a.maxHp; a.x = a.px; a.z = a.pz; a.act.root.visible = true; a.act.died = false; a.act.curName = ''; play(a.act, a.act.A.idle);
+  a.act.root.position.set(a.x, a.y, a.z);
+}
+function clearShots() { timers = []; for (const s of shots) scene.remove(s.obj); shots = []; for (const f of fxs) scene.remove(f.obj); fxs = []; }
+function shoot(from, to, kind, onHit) {
+  let obj;
+  if (kind === 'arrow') { obj = propClone('arrow_bow'); if (obj) obj.scale.setScalar(CHAR_SCALE * 1.1); }
+  else obj = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: kind === 'heal' ? 0x9fffb0 : kind === 'foe' ? 0xff7050 : 0xb890ff, blending: THREE.AdditiveBlending, depthWrite: false }));
+  if (!obj) { onHit(); return; }
+  if (obj.isSprite) obj.scale.setScalar(kind === 'mage' ? .7 : .45);
+  const sx = from.x, sz = from.z, sy = (from.y || 0) + .7;
+  obj.position.set(sx, sy, sz); scene.add(obj);
+  shots.push({ obj, sx, sy, sz, to, tx: to.x, tz: to.z, ty: (to.y || 0) + .6, t: 0, dur: clamp(Math.hypot(to.x - sx, to.z - sz) / 16, .12, .5), onHit });
+}
+function ring(x, z, col, size = 1.5, y = .05) {
+  const o = new THREE.Mesh(new THREE.RingGeometry(.6, 1, 32), new THREE.MeshBasicMaterial({ color: col, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  o.rotation.x = -Math.PI / 2; o.position.set(x, y, z); scene.add(o); fxs.push({ obj: o, t: 0, dur: .45, grow: size });
+}
+function floatText(e, txt, col, big) { if (texts.length > 40) texts.shift(); texts.push({ x: e.x, z: e.z, y: (e.y || 0) + (e.act ? e.act.h : 1) + .2, txt, col, t: 0, big }); }
+function hurtFoe(f, dmg, src) {
+  if (f.dead) return;
+  const crit = src && src.hero ? Math.random() < .2 : Math.random() < .08;
+  if (crit) dmg *= 1.8;
+  f.hp -= dmg; f.hurt = .1;
+  if (crit || f.boss || (src && src.hero)) floatText(f, fmt(dmg), crit ? '#ffd070' : '#fff', crit);
+  if (f.hp <= 0) killFoe(f);
+}
+function killFoe(f) {
+  f.dead = true; f.hp = 0; B.killed++;
+  const g = f.gold * goldMul(); S.gold += g; S.kills++;
+  if (f.boss || Math.random() < .25) floatText(f, '+' + fmt(g), '#f1d58c');
+  play(f.act, f.act.A.death, { once: true }); f.fade = 1.2;
+}
+function hurtAlly(a, dmg) {
+  if (a.dead) return;
+  a.hp -= dmg; a.hurt = .1;
+  if (a.hp <= 0) { a.dead = true; a.hp = 0; a.respT = a.hero ? 10 : 7; play(a.act, a.act.A.death, { once: true }); }
+}
+function hurtWall(dmg) { B.wallHp -= dmg; if (B.wallHp <= 0 && B.state === 'fight') wallFall(); }
+function wallFall() {
+  B.state = 'fall'; B.nextT = 3; B.wallHp = 0;
+  if (S.cal) S.cal = Math.min(S.cal, relDiff(S.region, S.wave) * .97);
+  toast('성벽이 무너졌어요! 한 웨이브 뒤로');
+  B.newRegion = false; sfx('lose');
+  if (S.wave > 1) S.wave--;
+}
+function waveClear() {
+  B.state = 'clear'; B.nextT = 2.2;
+  S.cal = Math.max(S.cal || 0, relDiff(S.region, S.wave));
+  const bonus = enemyGold(GW()) * B.total * .5 * goldMul(); S.gold += bonus;
+  if (S.wave === 10) {
+    if (S.region >= S.conquered) { S.conquered = S.region + 1; toast(`${regionName(S.region)} 정복!`); sfx('win'); }
+    else toast(`${regionOf(S.region).boss[1]} 처치!`);
+    if (S.auto) { S.region++; S.wave = 1; B.newRegion = true; }
+  } else {
+    toast(`웨이브 ${S.wave} 클리어 +${fmt(bonus)}`); sfx('clear');
+    if (S.auto) S.wave++;
+  }
+  S.best = Math.max(S.best, GW());
+  save();
+}
+// hits land a moment after the swing, on game time so speed-ups and idle sims stay exact
+let timers = [];
+const later = (d, fn) => timers.push([d, fn]);
+function step(dt) {
+  B.t += dt;
+  if (timers.length) { for (const t of timers) t[0] -= dt; const due = timers.filter(t => t[0] <= 0); timers = timers.filter(t => t[0] > 0); for (const t of due) t[1](); }
+  // spawn
+  if (B.state === 'fight' && B.toSpawn.length && foes.filter(f => !f.dead).length < 22) {
+    B.spawnT -= dt;
+    if (B.spawnT <= 0) {
+      B.spawnT = rnd(.45, .9) * (S.wave === 10 ? 1.2 : 1);
+      const k = B.toSpawn.shift();
+      if (k === 'BOSS') { B.boss = makeFoe(regionOf(S.region).boss[0], true); el('bossBox').hidden = false; el('bossName').textContent = B.boss.name; toast(`보스 ${B.boss.name} 등장!`); sfx('boss'); }
+      else makeFoe(k);
+    }
+  }
+  const liveFoes = foes.filter(f => !f.dead), melee = allies.filter(a => !a.dead && a.maxHp);
+  // foes
+  for (const f of liveFoes) {
+    f.hurt = Math.max(0, f.hurt - dt); f.moving = false;
+    let tgt = null;
+    if (f.range <= 2) { for (const a of melee) if (dist(a, f) < f.range + .35) { tgt = a; break; } }
+    else if (f.z >= WALL_FRONT - .3 - f.range) { tgt = 'wall'; for (const a of melee) if (dist(a, f) < f.range * .6) { tgt = a; break; } }
+    if (!tgt && f.range <= 2 && f.z >= WALL_FRONT - .45) tgt = 'wall';
+    if (tgt) {
+      f.atkT -= dt; f.face = tgt === 'wall' ? null : tgt;
+      if (f.atkT <= 0) {
+        f.atkT = f.as; f.anim = 'atk';
+        const dmg = f.dmg * rnd(.85, 1.15);
+        if (f.range > 2) shoot(f, tgt === 'wall' ? { x: f.x, z: WALL_FRONT, y: .5 } : tgt, 'foe', () => tgt === 'wall' ? hurtWall(dmg) : hurtAlly(tgt, dmg));
+        else later(.18, () => { if (f.dead) return; tgt === 'wall' ? hurtWall(dmg) : hurtAlly(tgt, dmg); });
+      }
+    } else {
+      // march toward the wall, drifting toward a nearby knight that blocks the road
+      let tx = f.x, near = null, bd = 3;
+      for (const a of melee) { const d = dist(a, f); if (d < bd && a.z > f.z) { bd = d; near = a; } }
+      if (near) tx = near.x;
+      const dx = tx - f.x, dz = (near ? near.z : WALL_FRONT) - f.z, dd = Math.hypot(dx, dz) || 1, sp = f.sp * dt;
+      f.x += dx / dd * sp; f.z += dz / dd * sp; f.moving = true; f.face = null;
+    }
+  }
+  // allies
+  for (const a of allies) {
+    a.hurt = Math.max(0, a.hurt - dt); a.moving = false;
+    if (a.dead) { a.respT -= dt; if (a.respT <= 0 && B.state === 'fight') { revive(a); ring(a.x, a.z, 0xffe080, 1.2); } continue; }
+    a.atkT -= dt;
+    if (a.k === 'priest') {
+      if (a.atkT <= 0) {
+        a.atkT = a.as;
+        const hurt = melee.filter(m => m.hp < m.maxHp).sort((p, q) => p.hp / p.maxHp - q.hp / q.maxHp)[0];
+        if (hurt) { shoot(a, hurt, 'heal', () => { hurt.hp = Math.min(hurt.maxHp, hurt.hp + a.heal * 4); }); a.anim = 'atk'; }
+        if (B.wallHp < wallMaxNow()) { B.wallHp = Math.min(wallMaxNow(), B.wallHp + a.heal * 2.5); }
+      }
+      continue;
+    }
+    if (a.maxHp) {
+      // melee: hold the line in front of the wall, chase what comes close
+      let t = null, bd = 6.5;
+      for (const f of liveFoes) { const d = Math.hypot(f.x - a.px, f.z - a.pz); if (d < bd && f.z > -6) { bd = d; t = f; } }
+      a.face = t;
+      if (t) {
+        const d = dist(a, t);
+        if (d > a.range + (t.boss ? .6 : 0)) { const sp = (a.hero ? 2.6 : 2.3) * dt; a.x += (t.x - a.x) / d * sp; a.z += (t.z - a.z) / d * sp; a.moving = true; }
+        else if (a.atkT <= 0) { a.atkT = a.as; a.anim = 'atk'; const tt = t, dmg = a.dmg * rnd(.85, 1.15); later(.18, () => { if (!a.dead) hurtFoe(tt, dmg, a); }); }
+      } else {
+        const d = Math.hypot(a.px - a.x, a.pz - a.z);
+        if (d > .15) { const sp = 2.3 * dt; a.x += (a.px - a.x) / d * Math.min(sp, d); a.z += (a.pz - a.z) / d * Math.min(sp, d); a.moving = true; }
+      }
+      if (a.hero) {
+        a.skillT -= dt;
+        if (a.skillT <= 0 && liveFoes.some(f => dist(f, a) < 2.6)) {
+          a.skillT = 9; a.anim = 'atk';
+          ring(a.x, a.z, 0xffd060, 2.6); floatText(a, '검기 폭풍', '#ffe08a', true);
+          for (const f of liveFoes) if (dist(f, a) < 2.6) hurtFoe(f, a.dmg * 4, a);
+          sfx('skill');
+        }
+      }
+      continue;
+    }
+    // ranged on the rampart
+    if (a.atkT > 0) continue;
+    let t = null, bd = a.range;
+    for (const f of liveFoes) { const d = dist(f, a); if (d < bd) { bd = d; t = f; } }
+    if (B.boss && !B.boss.dead && dist(B.boss, a) < a.range && Math.random() < .5) t = B.boss;
+    if (!t) continue;
+    a.atkT = a.as; a.anim = 'atk'; a.face = t;
+    const dmg = a.dmg * rnd(.85, 1.15);
+    if (a.k === 'mage') shoot(a, t, 'mage', () => { ring(t.x, t.z, 0xb070ff, UNITS.mage.aoe); for (const f of foes) if (!f.dead && dist(f, t) < UNITS.mage.aoe) hurtFoe(f, dmg, a); });
+    else shoot(a, t, 'arrow', () => hurtFoe(t, dmg, a));
+  }
+  // spacing between bodies on the field
+  const bodies = [...liveFoes, ...melee];
+  for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {
+    const p = bodies[i], q = bodies[j]; let dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
+    const min = (p.boss || q.boss) ? 1.4 : .7; if (d >= min) continue;
+    if (d < 1e-4) { dx = rnd(-1, 1); dz = rnd(-1, 1); d = Math.hypot(dx, dz); }
+    const push = (min - d) / 2 / d; p.x -= dx * push; p.z -= dz * push; q.x += dx * push; q.z += dz * push;
+  }
+  for (const b of bodies) { b.x = clamp(b.x, -5, 5); b.z = Math.min(b.z, b.side === 'foe' ? WALL_FRONT - .35 : WALL_FRONT - .5); }
+  // projectiles fly on game time too
+  for (let i = shots.length - 1; i >= 0; i--) {
+    const s = shots[i]; s.t += dt; const p = Math.min(1, s.t / s.dur);
+    if (s.to && !s.to.dead && s.to.x != null) { s.tx = s.to.x; s.tz = s.to.z; }
+    s.obj.position.set(s.sx + (s.tx - s.sx) * p, s.sy + (s.ty - s.sy) * p + Math.sin(p * Math.PI) * .6, s.sz + (s.tz - s.sz) * p);
+    if (!s.obj.isSprite) s.obj.rotation.set(0, Math.atan2(s.tx - s.sx, s.tz - s.sz), 0);
+    if (p >= 1) { scene.remove(s.obj); shots.splice(i, 1); s.onHit(); }
+  }
+  // wall regen
+  if (S.castle.repair && B.state === 'fight') B.wallHp = Math.min(wallMaxNow(), B.wallHp + wallMaxNow() * S.castle.repair * .004 * dt);
+  // wave end
+  if (B.state === 'fight' && !B.toSpawn.length && !foes.some(f => !f.dead)) waveClear();
+  if (B.state !== 'fight') { B.nextT -= dt; if (B.nextT <= 0) { if (B.newRegion) { B.newRegion = false; setTheme(S.region); } startWave(); } }
+}
+function visual(dt) {
+  const upd = e => {
+    const a = e.act;
+    if (e.dead) {
+      a.mixer.update(dt);
+      if (e.side === 'foe') { e.fade -= dt; if (e.fade < 0) a.root.visible = false; }
+      else if (a.lock < -2) a.root.visible = false; else a.lock -= dt;
+      return;
+    }
+    const p = a.root.position, k = Math.min(1, dt * 12);
+    p.x += (e.x - p.x) * k; p.z += (e.z - p.z) * k; p.y = e.y || 0;
+    const ft = e.face && !e.face.dead ? e.face : null;
+    const want = ft ? Math.atan2(ft.x - p.x, ft.z - p.z) : e.side === 'foe' ? (e.moving ? 0 : 0) : Math.PI;
+    a.root.rotation.y = lerpAng(a.root.rotation.y, want, Math.min(1, dt * 8));
+    a.lock -= dt;
+    if (e.anim === 'atk') { e.anim = null; const nm = a.A.atk[a.atkI++ % a.A.atk.length], clip = CLIPS[nm]; if (clip) play(a, nm, { once: true, speed: clamp(clip.duration / Math.max(.4, e.as || 1), 1, 2.5) }); }
+    else if (a.lock <= 0) play(a, e.moving ? a.A.run : a.A.idle);
+    const hurt = e.hurt > .03;
+    if (hurt !== a.fl) { a.fl = hurt; for (const m of a.mats) { if (hurt) { m.emissive.setRGB(.9, .15, .08); m.emissiveIntensity = .8; } else { m.emissive.copy(m.userData.baseE); m.emissiveIntensity = m.userData.baseI; } } }
+    a.mixer.update(dt);
+  };
+  allies.forEach(upd); foes.forEach(upd);
+  // remove faded corpses
+  for (let i = foes.length - 1; i >= 0; i--) if (foes[i].dead && foes[i].fade < 0) { killActor(foes[i].act); foes.splice(i, 1); }
+  for (let i = fxs.length - 1; i >= 0; i--) {
+    const f = fxs[i]; f.t += dt; const p = f.t / f.dur;
+    if (p >= 1) { scene.remove(f.obj); fxs.splice(i, 1); continue; }
+    const sc = .3 + p * f.grow; f.obj.scale.set(sc, sc, sc); f.obj.material.opacity = 1 - p;
+  }
+  for (const t of texts) t.t += dt;
+  texts = texts.filter(t => t.t < .9);
+}
+
+/* ================= OVERLAY ================= */
+const V = new THREE.Vector3();
+function scr(x, y, z) { V.set(x, y, z).project(camera); return V.z > 1 ? null : [(V.x + 1) / 2 * W, (1 - V.y) / 2 * H]; }
+function drawOverlay() {
+  const c = octx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+  c.textAlign = 'center';
+  const bar = (e, col) => {
+    if (e.dead || e.boss) return;
+    if (e.side === 'foe' && e.hp >= e.maxHp) return;
+    const p = scr(e.x, (e.y || 0) + e.act.h + .15, e.z); if (!p) return;
+    const w = e.hero ? 36 : 24;
+    c.fillStyle = 'rgba(0,0,0,.7)'; c.fillRect(p[0] - w / 2 - 1, p[1] - 1, w + 2, 5);
+    c.fillStyle = col; c.fillRect(p[0] - w / 2, p[1], w * Math.max(0, e.hp / e.maxHp), 3);
+  };
+  for (const f of foes) bar(f, '#e0503a');
+  for (const a of allies) if (a.maxHp) bar(a, a.hero ? '#ffd070' : '#5bd06e');
+  for (const t of texts) {
+    const p = scr(t.x, t.y + t.t * .9, t.z); if (!p) continue;
+    c.globalAlpha = 1 - t.t / .9; c.font = `800 ${t.big ? 14 : 11}px 'Noto Sans KR', sans-serif`; c.lineWidth = 3; c.strokeStyle = '#000';
+    c.strokeText(t.txt, p[0], p[1]); c.fillStyle = t.col; c.fillText(t.txt, p[0], p[1]); c.globalAlpha = 1;
+  }
+}
+
+/* ================= UI ================= */
+let tab = 'army', toastTm = 0;
+function toast(t) { const e = el('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toastTm); toastTm = setTimeout(() => e.classList.remove('show'), 1600); }
+function hud() {
+  el('region').textContent = regionName(S.region);
+  el('waveTxt').textContent = S.wave === 10 ? `웨이브 10 / 10 · 보스` : `웨이브 ${S.wave} / 10`;
+  el('waveBar').style.width = (B.total ? B.killed / B.total * 100 : 0) + '%';
+  el('gold').textContent = fmt(S.gold) + ' G';
+  const inc = territoryIncome(); el('income').textContent = `영토 수입 ${inc >= 10 ? fmt(inc) : inc.toFixed(1)}/초`;
+  const wm = wallMaxNow();
+  el('wallHp').style.width = Math.max(0, B.wallHp / wm * 100) + '%';
+  el('wallTxt').textContent = `${fmt(Math.max(0, B.wallHp))} / ${fmt(wm)}`;
+  if (B.boss && !B.boss.dead) el('bossHp').style.width = B.boss.hp / B.boss.maxHp * 100 + '%'; else if (!el('bossBox').hidden && (!B.boss || B.boss.dead)) el('bossBox').hidden = true;
+  el('bSpeed').textContent = `속도 ×${S.speed}`;
+  el('bAuto').classList.toggle('on', S.auto); el('bAuto').textContent = S.auto ? '자동 진행' : '반복 사냥';
+}
+const ico = (col, g) => `<span class="ico" style="background:${col}">${g}</span>`;
+const costBtn = (act, v, cost, label) => `<button class="btn ${S.gold >= cost ? 'pri' : ''}" data-a="${act}" data-v="${v}" ${S.gold >= cost ? '' : 'disabled'}>${label}<small>${fmt(cost)} G</small></button>`;
+function renderList() {
+  let h = '';
+  if (tab === 'army') {
+    for (const k in UNITS) {
+      const d = UNITS[k], u = S.units[k], mul = lvMul(u.lv);
+      const stat = k === 'priest' ? `치료 ${fmt(d.heal * mul * 4)} · 성벽 ${fmt(d.heal * mul * 2.5)}` : k === 'knight' ? `체력 ${fmt(d.hp * mul)} · 공격 ${fmt(d.dmg * mul)}` : `공격 ${fmt(d.dmg * mul)}${d.aoe ? ' · 범위' : ''}`;
+      h += `<div class="row">${ico(d.col, d.n[0])}<div class="info"><div class="n">${d.n} ${u.n}/${d.max}<small>Lv.${u.lv}</small></div><div class="s">${d.desc} · ${stat}</div></div>
+        <div class="btns">${u.n < d.max ? costBtn('hire', k, hireCost(k, u.n), '고용') : ''}${u.n ? costBtn('train', k, trainCost(k, u.lv), '훈련') : ''}</div></div>`;
+    }
+    h += `<p class="note">고용하면 수가 늘고, 훈련하면 그 병종 전체가 강해져요(레벨당 +12%). 쓰러진 기사는 7초 뒤에 다시 일어나요.</p>`;
+  } else if (tab === 'castle') {
+    for (const k in CASTLE) {
+      const d = CASTLE[k], lv = S.castle[k];
+      h += `<div class="row">${ico(d.col, d.n[0])}<div class="info"><div class="n">${d.n}<small>Lv.${lv}</small></div><div class="s">${d.desc(lv)} → ${d.desc(lv + 1)}</div></div><div class="btns">${costBtn('castle', k, castleCost(k, lv), '강화')}</div></div>`;
+    }
+    h += `<p class="note">웨이브가 끝날 때마다 성벽이 최대 체력의 30%만큼 수리돼요.</p>`;
+  } else if (tab === 'hero') {
+    const L = S.hero.lv, mul = heroMul(L);
+    h += `<div class="row">${ico('#ffd070', '영')}<div class="info"><div class="n">${HERO.n}<small>Lv.${L}</small></div><div class="s">체력 ${fmt(HERO.hp * mul)} · 공격 ${fmt(HERO.dmg * mul)} · 치명타 20%<br>스킬 검기 폭풍: 9초마다 주변 적에게 공격력 4배 피해</div></div><div class="btns">${costBtn('hero', 1, heroCost(L), '훈련')}</div></div>`;
+    h += `<p class="note">영웅은 기사보다 훨씬 강하고, 쓰러지면 10초 뒤에 다시 일어나요. 레벨당 +13%.</p>`;
+  } else {
+    h += `<div class="map">`;
+    const total = Math.max(REGIONS.length, S.conquered + 1);
+    for (let r = 0; r < total; r++) {
+      const cur = r === S.region, won = r < S.conquered, lock = r > S.conquered;
+      const inc = .4 * Math.pow(1.55, r) * goldMul();
+      h += `<div class="reg${cur ? ' cur' : ''}${lock ? ' lock' : ''}"><span class="dot" style="background:#${regionOf(r).g.toString(16).padStart(6, '0')}"></span><div><div class="rn">${regionName(r)}</div><div class="rs">${won ? `정복 · 수입 ${inc >= 10 ? fmt(inc) : inc.toFixed(1)}/초` : cur ? `진행 중 · 웨이브 ${S.wave}/10` : lock ? '잠김' : `보스 ${regionOf(r).boss[1]}`}</div></div>
+        <div class="rt">${cur ? '<span style="color:var(--gold2)">현재</span>' : !lock ? `<button class="btn" data-a="goto" data-v="${r}">이동</button>` : ''}</div></div>`;
+    }
+    h += `</div><p class="note">정복한 영토로 돌아가 웨이브를 반복하면 골드를 모을 수 있어요. 최고 기록: ${regionName(Math.floor((S.best - 1) / 10))} 웨이브 ${(S.best - 1) % 10 + 1} · 처치 ${fmt(S.kills)}</p>`;
+    h += `<button class="btn wide" data-a="reset" style="margin-top:6px">${resetAsk ? '정말 처음부터 할까요? 한 번 더 누르세요' : '처음부터 다시 하기'}</button>
+      <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px;padding:10px" href="../">무과금 사냥터로</a>`;
+  }
+  el('list').innerHTML = h;
+}
+let resetAsk = false;
+el('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; tab = b.dataset.t; resetAsk = false; for (const x of el('tabs').children) x.classList.toggle('on', x === b); renderList(); el('list').scrollTop = 0; });
+el('list').addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
+  audio();
+  const a = b.dataset.a, v = b.dataset.v;
+  const pay = c => { if (S.gold < c) return false; S.gold -= c; sfx('buy'); return true; };
+  if (a === 'hire') { const u = S.units[v]; if (u.n < UNITS[v].max && pay(hireCost(v, u.n))) { u.n++; rebuildArmy(); } }
+  else if (a === 'train') { const u = S.units[v]; if (pay(trainCost(v, u.lv))) { u.lv++; refreshStats(); } }
+  else if (a === 'castle') { const lv = S.castle[v]; if (pay(castleCost(v, lv))) { const before = wallMaxNow(); S.castle[v]++; if (v === 'wall') B.wallHp += wallMaxNow() - before; } }
+  else if (a === 'hero') { if (pay(heroCost(S.hero.lv))) { S.hero.lv++; refreshStats(); } }
+  else if (a === 'goto') { const r = +v; if (r > S.conquered) return; S.region = r; S.wave = r < S.conquered ? 1 : S.wave; if (r < S.conquered) setAuto(false, true); setTheme(r); startWave(); toast(`${regionName(r)}(으)로 이동`); }
+  else if (a === 'reset') { if (!resetAsk) { resetAsk = true; } else { resetAsk = false; S = fresh(); S.started = true; save(); setTheme(0); rebuildArmy(); B.wallHp = wallMaxNow(); startWave(); } }
+  save(); renderList(); hud();
+});
+function refreshStats() {
+  // keep current hp ratio when stats change
+  for (const a of allies) {
+    if (a.hero) { const r = a.hp / a.maxHp, mul = heroMul(S.hero.lv); a.maxHp = Math.round(HERO.hp * mul); a.hp = a.dead ? 0 : a.maxHp * r; a.dmg = HERO.dmg * mul; continue; }
+    const d = UNITS[a.k], mul = lvMul(S.units[a.k].lv);
+    a.dmg = (d.dmg || 0) * mul; a.heal = (d.heal || 0) * mul;
+    if (a.maxHp) { const r = a.hp / a.maxHp; a.maxHp = Math.round(d.hp * mul); a.hp = a.dead ? 0 : a.maxHp * r; }
+  }
+}
+function setAuto(on, quiet) { S.auto = on; if (!quiet) toast(on ? '자동 진행: 이기면 다음 웨이브로' : '반복 사냥: 지금 웨이브를 반복해요'); hud(); }
+el('bAuto').onclick = () => { audio(); setAuto(!S.auto); save(); };
+el('bSpeed').onclick = () => { audio(); S.speed = S.speed === 1 ? 2 : S.speed === 2 ? 3 : 1; hud(); save(); };
+
+/* ================= IDLE ================= */
+// estimate how the army does against a wave without running the full fight
+function armyDps() {
+  let d = 0;
+  for (const k of ['knight', 'archer', 'mage']) { const u = S.units[k], U = UNITS[k]; d += u.n * U.dmg * lvMul(u.lv) / U.as * (k === 'mage' ? 2.4 : k === 'knight' ? .8 : 1); }
+  d += HERO.dmg * heroMul(S.hero.lv) / HERO.as * 1.8;
+  return d;
+}
+function waveHpTotal(r, w) {
+  const R0 = regionOf(r), n = waveCount(r, w), Wn = r * 10 + w;
+  const avg = R0.e.reduce((a, k) => a + ET[k].hp, 0) / R0.e.length;
+  let hp = enemyHp(Wn) * avg * (w === 10 ? Math.ceil(n * .6) : n);
+  if (w === 10) hp += enemyHp(Wn) * ET[R0.boss[0]].hp * 34;
+  return { hp, n, gold: enemyGold(Wn) * n * 1.5 + (w === 10 ? enemyGold(Wn) * 25 : 0) };
+}
+// idle sims are calibrated on real fights: S.cal is the hardest wave (relative to army power) actually won while watching
+function armyPower() {
+  const tank = S.units.knight.n * UNITS.knight.hp * lvMul(S.units.knight.lv) + HERO.hp * heroMul(S.hero.lv);
+  const heal = S.units.priest.n * UNITS.priest.heal * lvMul(S.units.priest.lv) * 6.5 / 2.2 + wallMax(S.castle.wall) * S.castle.repair * .004;
+  return armyDps() * Math.sqrt(tank + wallMax(S.castle.wall) + heal * 30);
+}
+function waveDiff(r, w) { const { hp, n } = waveHpTotal(r, w); return hp * Math.sqrt(enemyDmg(r * 10 + w) * n * (w === 10 ? 3 : 1)); }
+const relDiff = (r, w) => waveDiff(r, w) / armyPower();
+function canClear(r, w) {
+  if (S.cal) { const t = waveHpTotal(r, w).hp / armyDps(); return { ok: relDiff(r, w) <= S.cal, t: Math.max(18, t + 8) }; }
+  const { hp, n } = waveHpTotal(r, w), Wn = r * 10 + w, t = hp / armyDps();
+  const tank = S.units.knight.n * UNITS.knight.hp * lvMul(S.units.knight.lv) + HERO.hp * heroMul(S.hero.lv);
+  const leak = Math.max(0, enemyDmg(Wn) * n * (w === 10 ? 2.5 : 1) * t * .35 - tank * .5);
+  const heal = S.units.priest.n * UNITS.priest.heal * lvMul(S.units.priest.lv) * 2.5 / 2.2 * t + wallMax(S.castle.wall) * S.castle.repair * .004 * t;
+  return { ok: t < 75 && leak - heal < wallMax(S.castle.wall) * .9, t: Math.max(18, t + 8) };
+}
+function simAway(sec) {
+  sec = Math.min(sec, 12 * 3600);
+  const g0 = S.gold, r0 = S.region, w0 = S.wave, c0 = S.conquered; let waves = 0, t = 0, kills = 0, guard = 0;
+  while (t < sec && guard++ < 5000) {
+    const res = canClear(S.region, S.wave), info = waveHpTotal(S.region, S.wave);
+    if (!res.ok) {
+      // farm the previous wave for the rest of the time
+      let fr = S.region, fw = S.wave - 1; if (fw < 1) { fw = 1; }
+      const f = waveHpTotal(fr, fw), ft = canClear(fr, fw).t, rounds = Math.floor((sec - t) / ft);
+      S.gold += f.gold * goldMul() * rounds; kills += f.n * rounds; waves += rounds;
+      if (S.wave > 1) S.wave--;
+      break;
+    }
+    t += res.t; waves++; kills += info.n; S.gold += info.gold * goldMul();
+    if (!S.auto) continue;
+    if (S.wave === 10) { if (S.region >= S.conquered) S.conquered = S.region + 1; S.region++; S.wave = 1; } else S.wave++;
+    S.best = Math.max(S.best, S.region * 10 + S.wave);
+  }
+  const terr = territoryIncome() * sec; S.gold += terr; S.kills += kills;
+  return { sec, gold: S.gold - g0, terr, waves, kills, from: [r0, w0], to: [S.region, S.wave], newRegions: S.conquered - c0 };
+}
+function showAway(r) {
+  const h = Math.floor(r.sec / 3600), m = Math.floor(r.sec % 3600 / 60);
+  el('awayMsg').textContent = `${h ? h + '시간 ' : ''}${m}분 동안 군대가 싸웠어요.${r.newRegions ? ` 새 영토 ${r.newRegions}곳을 정복했어요!` : ''}`;
+  el('awayStats').innerHTML = `<div>획득 골드<b>${fmt(r.gold)}</b></div><div>영토 수입<b>${fmt(r.terr)}</b></div><div>치른 웨이브<b>${fmt(r.waves)}</b></div><div>처치<b>${fmt(r.kills)}</b></div>
+    <div style="grid-column:1/-1">위치<b>${regionName(r.from[0])} ${r.from[1]} → ${regionName(r.to[0])} ${r.to[1]}</b></div>`;
+  el('away').hidden = false;
+}
+el('awayOk').onclick = () => { el('away').hidden = true; };
+function resumeFrom(sec) {
+  if (sec < 60) return;
+  const r = simAway(sec);
+  setTheme(S.region); rebuildArmy(); B.wallHp = wallMaxNow(); startWave(); save(); renderList(); showAway(r);
+}
+document.addEventListener('visibilitychange', () => {
+  if (!S || !S.started) return;
+  if (document.hidden) save();
+  else { const sec = (Date.now() - S.lastT) / 1000; resumeFrom(sec); }
+});
+addEventListener('pagehide', save);
+
+/* ================= AUDIO ================= */
+let AC = null;
+function audio() { try { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); } catch (e) {} }
+function tone(f, d, type = 'sine', v = .05, delay = 0) { if (!AC) return; try { const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + .02); } catch (e) {} }
+const sfx = k => ({ buy: () => { tone(880, .07, 'triangle', .05); tone(1320, .09, 'triangle', .04, .05); }, clear: () => [659, 880].forEach((f, i) => tone(f, .2, 'triangle', .05, i * .08)), win: () => [523, 659, 784, 1046].forEach((f, i) => tone(f, .3, 'triangle', .06, i * .08)), lose: () => tone(180, .6, 'sawtooth', .04), boss: () => [220, 196, 165].forEach((f, i) => tone(f, .35, 'sawtooth', .04, i * .15)), skill: () => tone(520, .18, 'square', .03) }[k] || (() => {}))();
+
+/* ================= LOOP ================= */
+let last = performance.now(), uiT = 0, saveT = 0, running = false;
+function frame(now) {
+  const real = Math.min(.05, (now - last) / 1000); last = now;
+  if (running) {
+    const sp = S.speed || 1, sub = sp > 1 ? sp : 1;
+    for (let i = 0; i < sub; i++) step(real * sp / sub);
+    visual(real * sp);
+    uiT -= real; if (uiT <= 0) { uiT = .25; hud(); if (tab !== 'map') refreshButtons(); }
+    saveT -= real; if (saveT <= 0) { saveT = 5; save(); }
+  }
+  if (renderer) { renderer.render(scene, camera); drawOverlay(); }
+  requestAnimationFrame(frame);
+}
+// cheap per-tick update: only flip button enabled state so taps aren't eaten by re-rendering
+function refreshButtons() {
+  for (const b of el('list').querySelectorAll('[data-a]')) {
+    const sm = b.querySelector('small'); if (!sm) continue;
+    const a = b.dataset.a, v = b.dataset.v;
+    const c = a === 'hire' ? hireCost(v, S.units[v].n) : a === 'train' ? trainCost(v, S.units[v].lv) : a === 'castle' ? castleCost(v, S.castle[v]) : a === 'hero' ? heroCost(S.hero.lv) : 0;
+    const ok = S.gold >= c; b.disabled = !ok; b.classList.toggle('pri', ok);
+  }
+}
+function begin() {
+  el('title').hidden = true; S.started = true;
+  setTheme(S.region); rebuildArmy(); B.wallHp = wallMaxNow(); startWave(); renderList(); hud(); running = true; save();
+}
+el('startBtn').onclick = () => { audio(); begin(); };
+async function start() {
+  initGL();
+  try { await loadAssets(); } catch (e) { el('loadMsg').textContent = '그래픽 파일을 불러오지 못했어요. 새로고침해 주세요.'; return; }
+  el('loading').hidden = true;
+  const s = load();
+  if (s && s.started) { S = s; const sec = (Date.now() - S.lastT) / 1000; begin(); if (sec >= 60) { const r = simAway(sec); setTheme(S.region); rebuildArmy(); B.wallHp = wallMaxNow(); startWave(); renderList(); showAway(r); save(); } }
+  else { S = fresh(); el('title').hidden = false; }
+}
+start();
+requestAnimationFrame(frame);
+window.__W = { get S() { return S; }, B, simAway, canClear, step: dt => step(dt), hireCost, trainCost, heroCost, castleCost, rebuildArmy, refreshStats, UNITS, get foes() { return foes; } };
+})();
+</script>
+</body>
+</html>

@@ -323,6 +323,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
       <div class="field"><label for="cname">캐릭터 이름</label><input id="cname" maxlength="10" autocomplete="off" value="무과금전사"></div>
       <button class="btn pri wide" id="startBtn">사냥 시작</button>
       <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="https://singapore219-ctrl.github.io/mugwagum/chess/">무과금 오토체스 (8인 자동 전투)</a>
+      <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="https://singapore219-ctrl.github.io/mugwagum/war/">무과금 영토전쟁 (방치형 디펜스)</a>
       <div class="guide" id="guide">
         <h3>휴대폰에서 앱처럼 쓰기</h3>
         <ol>
@@ -2720,6 +2721,7 @@ const VIEWS = {
       <p class="note">앱처럼 쓰기: 안드로이드 크롬 ⋮ 메뉴 → 홈 화면에 추가, 아이폰 사파리 공유 버튼 → 홈 화면에 추가. 사냥터에서 자동 사냥을 켠 채 화면을 꺼도, 다시 켜면 그동안 사냥한 결과를 받아요. (최대 12시간)</p>
       <div class="sec">다른 게임</div>
       <a class="btn wide" style="display:block;text-align:center;text-decoration:none" href="${CHESS_URL}">무과금 오토체스 하러 가기</a>
+      <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="${CHESS_URL.replace('chess/', 'war/')}">무과금 영토전쟁 하러 가기</a>
       <div class="sec">저장 코드</div>
       <p class="note" style="margin-top:0">캐릭터 전체(레벨, 장비, 강화, 아이템, 변신, 파티, AI 유저 기록)를 글자로 바꾼 코드예요. 복사해서 Claude에게 보내면 진행 상황을 분석받을 수 있고, 다른 기기에서 불러오면 그대로 이어서 할 수 있어요.</p>
       <button class="btn wide" data-a="savecode">저장 코드 만들고 복사</button>
