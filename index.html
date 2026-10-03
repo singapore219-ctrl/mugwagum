@@ -160,6 +160,38 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
   #jbase{bottom:14px;width:104px;height:104px}
   #townbar{top:30%}
 }
+@media (orientation:landscape){
+  #stat{width:min(300px, 36vw);padding:6px 8px 7px}
+  .bar{height:13px;margin-top:4px}
+  .bar span{font-size:10px;line-height:11px}
+  .bar.ex{height:8px}
+  #buffs{flex-wrap:nowrap;overflow:hidden;gap:4px;margin-top:4px;-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}
+  .chip{white-space:nowrap;flex:none}
+  #party{margin-top:4px;gap:2px}
+  #party .pm{font-size:10px}
+  #right{gap:4px}
+  #menu{grid-template-columns:repeat(7,44px);gap:5px}
+  .mbtn{height:34px}
+  #townbar{top:auto;bottom:16px;right:calc(max(10px, env(safe-area-inset-right, 0px)) + 216px);flex-direction:row}
+  #townbar button{min-width:76px;padding:8px 10px}
+  #log{left:calc(max(12px, env(safe-area-inset-left, 0px)) + 136px);bottom:10px;width:min(34vw, 380px);max-height:76px}
+  #jbase{bottom:14px;width:108px;height:108px}
+  #joy{height:60%}
+  #raidbar{top:calc(env(safe-area-inset-top, 0px) + 8px);width:min(34vw, 340px)}
+  #toast{top:30%}
+}
+@media (orientation:landscape) and (max-height:420px){
+  #party .pm:nth-child(n+4){display:none}
+  #acts{transform:scale(.92);transform-origin:right bottom}
+}
+#rotate{display:none;position:fixed;inset:0;z-index:60;align-items:center;justify-content:center;flex-direction:column;gap:18px;padding:24px;text-align:center;
+  background:radial-gradient(ellipse at 50% 40%,#2a2014,#0b0906 75%);color:var(--text)}
+#rotate .ph{width:58px;height:96px;border:3px solid var(--gold2);border-radius:12px;position:relative;animation:rot 2.2s ease-in-out infinite}
+#rotate .ph::after{content:"";position:absolute;left:50%;bottom:6px;width:14px;height:3px;margin-left:-7px;border-radius:2px;background:var(--gold2)}
+#rotate b{font-family:var(--serif);font-size:21px;color:var(--gold2)}
+#rotate p{margin:0;font-size:13px;color:var(--dim);line-height:1.6}
+@keyframes rot{0%,20%{transform:rotate(0)}50%,80%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
+@media (orientation:portrait) and (max-width:900px){ #rotate{display:flex} }
 #hurt{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 90px rgba(200,20,10,0);transition:box-shadow .25s}
 #hurt.on{box-shadow:inset 0 0 90px rgba(200,20,10,.55);transition:none}
 #toast{position:absolute;left:50%;top:26%;transform:translate(-50%,0);font-family:var(--serif);font-weight:800;font-size:20px;
@@ -267,6 +299,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
   <canvas id="gl"></canvas>
   <canvas id="ov"></canvas>
   <div id="hurt"></div>
+  <div id="rotate"><div class="ph"></div><b>휴대폰을 가로로 돌려 주세요</b><p>무과금 사냥터는 가로 화면용 게임이에요.<br>화면 자동 회전이 꺼져 있으면 켜 주세요.</p><button class="btn pri" id="rotBtn" style="padding:11px 18px">전체 화면 가로 모드로 열기</button></div>
   <div id="joy"><div id="jbase"><div id="jknob"></div></div></div>
   <div id="log"></div>
   <div id="top">
@@ -3201,6 +3234,15 @@ function actAuto() {
   setAuto(!R.auto); if (!R.auto) P.engage = false;
   toast(R.auto ? (ZONES[S.zone].town ? '사냥터에 가면 자동 사냥을 시작해요' : '자동 사냥 시작') : '자동 사냥 중지');
 }
+// phones: go fullscreen and lock to landscape where the browser allows it (Android Chrome, installed app)
+function lockLandscape() {
+  const so = screen.orientation; if (!so || !so.lock) return;
+  const go = () => so.lock('landscape').catch(() => {});
+  if (document.fullscreenElement || matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) go();
+  else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(go).catch(() => {});
+}
+el('rotBtn').addEventListener('click', lockLandscape);
+if (matchMedia('(pointer: coarse)').matches) document.addEventListener('pointerdown', lockLandscape, { once: true });
 const bind = (id, fn) => el(id).addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); fn(); });
 bind('bAtk', actAttack); bind('bPot', actPot); bind('bAuto', actAuto);
 for (let i = 0; i < 4; i++) {
