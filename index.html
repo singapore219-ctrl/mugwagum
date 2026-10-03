@@ -128,6 +128,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
 @media (prefers-reduced-motion:reduce){.card{animation:none}}
 .grade{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:9px;border:1px solid var(--gc);color:var(--gc);margin-left:5px;vertical-align:1px}
 .act.sk.locked{opacity:.4;filter:grayscale(.9)}
+.skimg{background-image:url(assets/ui/skills.webp?v=1);background-size:600% 400%;background-repeat:no-repeat;background-color:#16120d}
+.act.sk.skimg{border-color:rgba(216,174,79,.8)}
+.act.sk.skimg .skn{display:none}
+.act.sk.skimg .skm{position:absolute;left:0;right:0;bottom:3px;font-size:9.5px;font-weight:700;text-shadow:0 0 3px #000,0 1px 2px #000,0 0 6px #000}
+.ico.skimg{border-color:rgba(216,174,79,.5)}
 #bS1{right:94px;bottom:2px;width:56px;height:56px}
 #bS2{right:152px;bottom:44px}
 #bS3{right:100px;bottom:66px}
@@ -686,6 +691,11 @@ const SKILLS = {
     { id: 'judgment', n: '천벌', lv: 90, mp: 45, mpl: .4, cd: 20, desc: '주변 모든 적에게 하늘의 벼락' },
   ],
 };
+// 2D skill icons: one sprite sheet (6 columns x 4 rows), built by build_ui_art.py
+const UI_V = 1;
+const SKICON = { bash: 0, whirl: 1, iron: 2, rage: 3, sbash: 4, quake: 5, drain: 6, avatar: 7, triple: 8, rain: 9, snipe: 10, wind: 11, multi: 12, poison: 13, storm: 14, eagle: 15, fireball: 16, bolt: 17, heal: 18, meteor: 19, frost: 20, mshield: 21, chainx: 22, judgment: 23 };
+const skIcoPos = id => { const i = SKICON[id]; return i == null ? '' : `background-position:${(i % 6) / 5 * 100}% ${Math.floor(i / 6) / 3 * 100}%`; };
+const skIco = (sk, cls = 'ico') => SKICON[sk.id] != null ? `<span class="${cls} skimg" style="${skIcoPos(sk.id)}"></span>` : `<span class="${cls}" style="background:#d8ae4f">${sk.n[0]}</span>`;
 const BUFFN = { iron: '철벽', rage: '광폭', wind: '바람의 가호', avatar: '전쟁의 화신', eagle: '매의 눈', mshield: '마나 실드' };
 const mySkills = () => SKILLS[S.cls];
 // the 4 skill buttons show one page of 4 skills at a time
@@ -2658,6 +2668,7 @@ function hud() {
   [0, 1, 2, 3].map(slotSkill).forEach((sk, i) => {
     if (!sk) return;
     const b = el('bS' + (i + 1)), locked = S.lv < sk.lv;
+    if (b.dataset.sk !== sk.id) { b.dataset.sk = sk.id; const pos = skIcoPos(sk.id); b.classList.toggle('skimg', !!pos); b.style.cssText = pos; }
     b.classList.toggle('locked', locked);
     b.querySelector('.skn').textContent = sk.n;
     b.querySelector('.skm').textContent = locked ? `Lv.${sk.lv}` : `MP ${skCost(sk)}`;
@@ -2857,7 +2868,7 @@ const VIEWS = {
       <div><span>처치 수</span><b>${fmt(S.kills)}</b></div><div><span>최고 강화</span><b>${S.best ? '+' + S.best : '-'}</b></div>
       <div><span>성향</span><b style="color:${alignOf() < 0 ? 'var(--bad)' : 'var(--good)'}">${alignOf()}</b></div><div><span>PK 처치</span><b>${S.pkKills || 0}회</b></div>
       <div><span>사망</span><b>${S.deaths || 0}회</b></div><div><span>아데나</span><b>${fmt(S.adena)}</b></div></div>
-      <div class="sec">스킬</div>${mySkills().map(k => `<div class="row" style="${S.lv < k.lv ? 'opacity:.5' : ''}"><span class="ico" style="background:#d8ae4f">${k.n[0]}</span><div class="info"><div class="n">${k.n}${S.lv < k.lv ? `<span class="tag">Lv.${k.lv}</span>` : ''}</div><div class="s">${k.desc} · MP ${skCost(k)} · 재사용 ${k.cd}초</div></div></div>`).join('')}
+      <div class="sec">스킬</div>${mySkills().map(k => `<div class="row" style="${S.lv < k.lv ? 'opacity:.5' : ''}">${skIco(k)}<div class="info"><div class="n">${k.n}${S.lv < k.lv ? `<span class="tag">Lv.${k.lv}</span>` : ''}</div><div class="s">${k.desc} · MP ${skCost(k)} · 재사용 ${k.cd}초</div></div></div>`).join('')}
       <div class="sec">환생 ${S.reb ? `<span style="color:var(--gold2)">✦${S.reb}</span>` : ''}</div>
       <p class="note" style="margin-top:0">Lv.${MAXLV}에 도달하면 Lv.1로 돌아가는 대신 영구 능력치를 얻어요. 장비, 아이템, 아데나, 변신, 펫은 그대로예요. 환생하면 사냥터 몬스터가 ★각성해서 환생 1회당 레벨 +15, 장비 드랍 등급 +1(최대 +3), 주문서 드랍이 늘어요.<br>환생 1회마다 최대 HP +6%, 피해 +6%, 공격 속도 +2%, 경험치 +10%. 대신 레벨업에 필요한 경험치가 환생 1회당 40%씩 늘어요.${S.reb ? ` (지금: HP·피해 +${6 * S.reb}%, 공속 +${2 * S.reb}%, 경험치 +${10 * S.reb}%, 필요 경험치 +${40 * S.reb}%)` : ''} ✦3 환생부터 [태초] 레이드에 들어갈 수 있어요.</p>
       <button class="btn wide ${S.lv >= MAXLV ? 'pri' : ''}" data-a="rebirth" ${S.lv >= MAXLV ? '' : 'disabled'}>${S.lv < MAXLV ? `Lv.${MAXLV}부터 환생할 수 있어요` : R.confirmReb ? '정말 환생할까요? 한 번 더 누르면 Lv.1이 됩니다' : '환생하기'}</button>
@@ -2869,7 +2880,7 @@ const VIEWS = {
     const o = S.opts, tog = (k, t) => `<div class="set"><span>${t}</span><button class="tog ${o[k] ? 'on' : ''}" data-a="tog" data-v="${k}" aria-pressed="${!!o[k]}"></button></div>`;
     return `<div class="set"><span>자동 물약 <b id="potv" style="color:var(--gold2)">${o.pot ? `HP ${o.pot}% 이하` : '끔'}</b></span><input type="range" id="potr" min="0" max="90" step="10" value="${o.pot}"></div>
       <div class="sec">자동 사냥 때 쓸 스킬 <span style="font-weight:500">스킬 버튼을 길게 눌러도 바뀌어요</span></div>
-      ${mySkills().map(k => `<div class="set"><span>${k.n}${S.lv < k.lv ? ` <span class="tag">Lv.${k.lv}</span>` : ''}</span><button class="tog ${autoOn(k) ? 'on' : ''}" data-a="skauto" data-v="${k.id}" aria-pressed="${autoOn(k)}"></button></div>`).join('')}
+      ${mySkills().map(k => `<div class="set"><span style="display:flex;align-items:center;gap:8px">${skIco(k)}${k.n}${S.lv < k.lv ? ` <span class="tag">Lv.${k.lv}</span>` : ''}</span><button class="tog ${autoOn(k) ? 'on' : ''}" data-a="skauto" data-v="${k.id}" aria-pressed="${autoOn(k)}"></button></div>`).join('')}
       <div class="sec">자동 기능</div>
       ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자 끄기)')}<div class="set"><span>각성 몬스터 (환생 후)</span><button class="tog ${S.opts.awaken !== false ? 'on' : ''}" data-a="awktog" aria-pressed="${S.opts.awaken !== false}"></button></div><div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
       <div class="set"><span>카메라 거리 <b id="camzv" style="color:var(--gold2)">${Math.round(camOpt().z * 100)}%</b></span><input type="range" id="camz" min="50" max="180" step="5" value="${Math.round(camOpt().z * 100)}"></div>
