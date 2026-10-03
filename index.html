@@ -108,6 +108,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
 .act.sk .au{position:absolute;top:-3px;right:-3px;font-style:normal;font-size:8.5px;font-weight:800;line-height:1;padding:2px 3px;border-radius:5px;
   background:#1f4a66;color:#bfeaff;border:1px solid #8fe0ff;pointer-events:none}
 .act.sk.noauto .au{display:none}
+.fslots{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px}
+.fslot{min-height:52px;border-radius:9px;border:1px dashed var(--line2);display:grid;place-items:center;text-align:center;font-size:11.5px;color:var(--dim);padding:4px;background:none;line-height:1.25}
+.fslot.on{border:1.5px solid var(--gc);color:var(--text);font-weight:700;background:color-mix(in srgb,var(--gc) 16%,#1b1610);cursor:pointer}
+.fslot small{display:block;font-size:10px;font-weight:500;color:var(--dim)}
 .gacha{position:absolute;inset:0;z-index:11;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px 16px;
   background:radial-gradient(ellipse at 50% 40%,rgba(40,30,16,.92),rgba(6,5,3,.97))}
 .gacha h2{margin:0;font-family:var(--serif);font-size:24px;color:var(--gold2)}
@@ -132,6 +136,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
 #bAuto{right:0;bottom:96px;width:54px;height:54px}
 #bAuto.on{border-color:#8fe0ff;color:#dff6ff;background:radial-gradient(circle at 50% 35%,#1f4a66,#08141c 75%);box-shadow:0 0 16px rgba(120,210,255,.5)}
 #bTele{right:160px;bottom:104px;width:44px;height:44px;font-size:10px}
+#bSkP{right:158px;bottom:0;width:38px;height:38px;font-size:10.5px;border-color:#8fc0ff;color:#cfe4ff}
 #bRet{right:110px;bottom:128px;width:44px;height:44px;font-size:10px}
 .act .cd{position:absolute;inset:0;border-radius:50%;background:conic-gradient(rgba(0,0,0,.6) var(--p,0%),transparent 0);pointer-events:none}
 
@@ -301,6 +306,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
     <button class="act sk" id="bS3"><span class="skn">-</span><small class="skm"></small><i class="cd"></i><em class="au">AUTO</em></button>
     <button class="act sk" id="bS4"><span class="skn">-</span><small class="skm"></small><i class="cd"></i><em class="au">AUTO</em></button>
     <button class="act" id="bAtk">공격</button>
+    <button class="act" id="bSkP">1/2</button>
   </div>
   <div id="raidbar" hidden><div class="rt"><span id="raidName">-</span><span id="raidTime">5:00</span></div><div class="rb"><i id="raidHp"></i></div></div>
   <div id="toast"></div>
@@ -590,6 +596,9 @@ function recalc() {
   D.dmgMul = buffOn('rage') ? 1.2 : 1; D.taken = buffOn('iron') ? .65 : 1; D.dodge = buffOn('wind') ? .15 : 0;
   D.hpReg = (.6 + L * .12) * c.hpR; D.mpReg = c.mpR[0] + c.mpR[1] * L;
   D.crit = .06; D.cdr = 0;
+  if (buffOn('avatar')) { D.dmgMul *= 1.35; D.aspd /= 1.2; D.taken *= .8; }
+  if (buffOn('eagle')) { D.crit += .25; D.dmgMul *= 1.2; }
+  if (buffOn('mshield')) D.taken *= .7;
   const rb = S.reb || 0; // each rebirth: +6% max HP and damage, +2% attack speed, +10% exp (levels need +40% exp)
   if (rb) { D.maxHp = Math.round(D.maxHp * (1 + .06 * rb)); D.dmgMul *= 1 + .06 * rb; D.aspd /= 1 + .02 * rb; }
   D.expMul = 1 + .1 * rb;
@@ -618,22 +627,36 @@ const SKILLS = {
     { id: 'whirl', n: '회오리', lv: 10, mp: 7, mpl: .1, cd: 6, desc: '주변 적 모두에게 1.6배 회전 베기' },
     { id: 'iron', n: '철벽', lv: 20, mp: 10, cd: 40, buff: 'iron', dur: 20, desc: '20초간 받는 피해 35% 감소' },
     { id: 'rage', n: '광폭', lv: 30, mp: 14, cd: 60, buff: 'rage', dur: 20, desc: '20초간 공격 속도 30%, 피해 20% 증가' },
+    { id: 'sbash', n: '방패 강타', lv: 40, mp: 12, mpl: .05, cd: 7, desc: '대상에게 2.8배, 주변 적에게 1배 충격' },
+    { id: 'quake', n: '대지 분쇄', lv: 55, mp: 18, mpl: .1, cd: 12, desc: '넓은 범위의 적 모두에게 2.4배 피해' },
+    { id: 'drain', n: '흡혈 일격', lv: 70, mp: 16, mpl: .08, cd: 10, desc: '3배 일격, 준 피해의 30%만큼 HP 회복' },
+    { id: 'avatar', n: '전쟁의 화신', lv: 90, mp: 30, cd: 90, buff: 'avatar', dur: 30, desc: '30초간 피해 35%·공격 속도 20% 증가, 받는 피해 20% 감소' },
   ],
   elf: [
     { id: 'triple', n: '트리플', lv: 1, mp: 6, cd: 2.4, desc: '화살 3발을 연속으로 발사' },
     { id: 'rain', n: '화살비', lv: 10, mp: 11, mpl: .15, cd: 6, desc: '대상 주변 적 모두에게 1.5배 화살비' },
     { id: 'snipe', n: '저격', lv: 20, mp: 14, mpl: .15, cd: 8, desc: '한 대상에게 3.6배 관통 화살' },
     { id: 'wind', n: '바람', lv: 30, mp: 16, cd: 60, buff: 'wind', dur: 25, desc: '25초간 이동·공격 속도 증가, 15% 회피' },
+    { id: 'multi', n: '멀티샷', lv: 40, mp: 14, mpl: .15, cd: 5, desc: '가까운 적 최대 5마리에게 1.4배 화살' },
+    { id: 'poison', n: '독화살', lv: 55, mp: 12, mpl: .12, cd: 9, desc: '2배 피해 후 6초 동안 중독 피해' },
+    { id: 'storm', n: '폭풍의 화살', lv: 70, mp: 26, mpl: .25, cd: 14, desc: '아주 넓은 범위에 2.6배 화살 폭풍' },
+    { id: 'eagle', n: '매의 눈', lv: 90, mp: 30, cd: 90, buff: 'eagle', dur: 30, desc: '30초간 치명타 +25%, 피해 20% 증가' },
   ],
   mage: [
     { id: 'fireball', n: '파이어볼', lv: 1, mp: 8, mpl: .2, cd: 2.4, desc: '대상 주변 적 모두에게 화염 피해' },
     { id: 'bolt', n: '라이트닝', lv: 10, mp: 12, mpl: .2, cd: 4, desc: '번개가 적 최대 4마리에게 튄다' },
     { id: 'heal', n: '힐', lv: 15, mp: 15, mpl: .2, cd: 10, desc: '최대 HP의 40%를 회복' },
     { id: 'meteor', n: '메테오', lv: 30, mp: 28, mpl: .3, cd: 14, desc: '넓은 범위에 거대한 운석 낙하' },
+    { id: 'frost', n: '얼음 폭풍', lv: 40, mp: 16, mpl: .2, cd: 6, desc: '대상 주변에 1.8배 냉기 폭발' },
+    { id: 'mshield', n: '마나 실드', lv: 55, mp: 20, cd: 60, buff: 'mshield', dur: 25, desc: '25초간 받는 피해 30% 감소' },
+    { id: 'chainx', n: '연쇄 폭발', lv: 70, mp: 30, mpl: .3, cd: 12, desc: '적 최대 6마리가 차례로 폭발' },
+    { id: 'judgment', n: '천벌', lv: 90, mp: 45, mpl: .4, cd: 20, desc: '주변 모든 적에게 하늘의 벼락' },
   ],
 };
-const BUFFN = { iron: '철벽', rage: '광폭', wind: '바람의 가호' };
+const BUFFN = { iron: '철벽', rage: '광폭', wind: '바람의 가호', avatar: '전쟁의 화신', eagle: '매의 눈', mshield: '마나 실드' };
 const mySkills = () => SKILLS[S.cls];
+// the 4 skill buttons show one page of 4 skills at a time
+const slotSkill = i => mySkills()[(R.skPage || 0) * 4 + i];
 const skCost = sk => sk.mp + Math.floor(S.lv * (sk.mpl || 0));
 const skReady = sk => S.lv >= sk.lv && !(P.cds[sk.id] > 0) && S.mp >= skCost(sk);
 const autoOn = sk => !((S.opts.skOff || {})[sk.id]);
@@ -936,6 +959,38 @@ function polyDraw(n, ticket) {
   el('gachaTitle').textContent = n === 10 ? '변신 카드 10회' : '변신 카드';
   el('gachaCards').className = 'cards' + (n === 1 ? ' one' : '');
   el('gachaCards').innerHTML = res.map((r, i) => `<div class="card" style="--gc:${PGRADE[r.g].col};--d:${(i * .12).toFixed(2)}s"><span class="g">${PGRADE[r.g].k}</span><span class="cn">${MON[r.id].n}</span><span class="ct">${r.isNew ? 'NEW' : '★' + r.stars}</span></div>`).join('');
+  el('gacha').hidden = false;
+  R.dirty = true; save();
+}
+/* 변신 합성: 같은 등급 4장(★ 하나가 한 장)을 넣으면 한 단계 위 등급 1장.
+   실패하면 같은 등급 1장이 돌아와요. 쓰고 있는 변신은 마지막 한 장을 남겨요. */
+const FUSE_RATE = [1, .8, .5, .25];
+const fuseState = () => R.fuse || (R.fuse = { g: 0, picks: [] });
+const fuseSpare = id => (polyState().owned[id] || 0) - (id === polyActive() ? 1 : 0) - fuseState().picks.filter(x => x === id).length;
+function fuseAuto() {
+  const f = fuseState();
+  // spend the most-duplicated forms first so collections stay intact
+  while (f.picks.length < 4) {
+    const ids = Object.keys(POLY).filter(id => POLY[id] === f.g && fuseSpare(id) > 0 && (polyState().owned[id] - f.picks.filter(x => x === id).length) > 1);
+    const pool = ids.length ? ids : Object.keys(POLY).filter(id => POLY[id] === f.g && fuseSpare(id) > 0);
+    if (!pool.length) break;
+    pool.sort((a, b) => fuseSpare(b) - fuseSpare(a)); f.picks.push(pool[0]);
+  }
+  if (f.picks.length < 4) toast('넣을 수 있는 변신이 부족해요');
+}
+function fuseGo() {
+  const f = fuseState(), ps = polyState(); if (f.picks.length < 4 || f.g >= 4) return;
+  for (const id of f.picks) { ps.owned[id]--; if (ps.owned[id] <= 0) delete ps.owned[id]; }
+  const ok = Math.random() < FUSE_RATE[f.g], g = ok ? f.g + 1 : f.g;
+  const ids = Object.keys(POLY).filter(k => POLY[k] === g), id = pick(ids), isNew = !ps.owned[id];
+  ps.owned[id] = Math.min(5, (ps.owned[id] || 0) + 1);
+  f.picks = [];
+  if (ok && g >= 3) log(`${S.name}님이 변신 합성으로 [${PGRADE[g].k}] ${MON[id].n}${J(MON[id].n, '을', '를')} 얻었습니다!`, 'ann');
+  else log(ok ? `변신 합성 성공: [${PGRADE[g].k}] ${MON[id].n}` : `변신 합성 실패: [${PGRADE[g].k}] ${MON[id].n}${J(MON[id].n, '이', '가')} 돌아왔어요`, ok ? 'loot' : 'warn');
+  if (ok) (g >= 3 ? SFX.rare : SFX.win)(); else SFX.fail();
+  el('gachaTitle').textContent = ok ? '합성 성공!' : '합성 실패';
+  el('gachaCards').className = 'cards one';
+  el('gachaCards').innerHTML = `<div class="card" style="--gc:${PGRADE[g].col};--d:0s"><span class="g">${PGRADE[g].k}</span><span class="cn">${MON[id].n}</span><span class="ct">${isNew ? 'NEW' : '★' + ps.owned[id]}</span></div>`;
   el('gacha').hidden = false;
   R.dirty = true; save();
 }
@@ -2049,7 +2104,7 @@ function pickAutoSkill(t) {
   const dmg = ready.filter(k => needsTarget(k) && S.mp - skCost(k) >= reserve);
   if (!dmg.length) return null;
   const grouped = R.mons.filter(m => !m.dead && Math.hypot(m.x - t.x, m.y - t.y) < 2.6).length >= 2;
-  const aoe = dmg.filter(k => ['whirl', 'rain', 'fireball', 'bolt', 'meteor'].includes(k.id));
+  const aoe = dmg.filter(k => ['whirl', 'rain', 'fireball', 'bolt', 'meteor', 'sbash', 'quake', 'multi', 'storm', 'frost', 'chainx', 'judgment'].includes(k.id));
   return grouped && aoe.length ? aoe[aoe.length - 1] : dmg[dmg.length - 1];
 }
 function aoeHit(cx, cy, r, dmgFn) { for (const m of R.mons.slice()) if (!m.dead && Math.hypot(m.x - cx, m.y - cy) < r) hitMon(P, m, dmgFn(), true); }
@@ -2110,9 +2165,59 @@ function castSkill(sk, t) {
       later(700, () => { fx('column', cx, cy, { col: 0xffa040, dur: .6 }); fx('boom', cx, cy, { col: 0xff6a20, r1: 3.8, dur: .7 }); aoeHit(cx, cy, 3.2, () => rollMagic() * 2.4 + S.lv * 2 + 20); });
       break;
     }
+    case 'sbash':
+      attackAnim(P, 'Melee_1H_Attack_Chop', D.aspd);
+      later(200, () => { if (t.dead) return; fx('ring', t.x, t.y, { col: 0xd8e0f0, r1: 1.8, dur: .4 }); fx('hit', t.x, t.y, { col: 0xffffff, dur: .3, r1: 1.4, h: .8 }); hitMon(P, t, rollDmg() * 2.8, true); aoeHit(t.x, t.y, 1.7, () => rollDmg()); });
+      break;
+    case 'quake':
+      attackAnim(P, 'Melee_2H_Attack_Chop', 1.1);
+      later(380, () => { fx('ring', P.x, P.y, { col: 0xc89a5a, r1: 3.6, dur: .6 }); fx('boom', P.x, P.y, { col: 0x8a6a3a, r1: 3.4, dur: .6 }); aoeHit(P.x, P.y, 3.3, () => rollDmg() * 2.4); });
+      break;
+    case 'drain':
+      attackAnim(P, 'Melee_2H_Attack_Slice', D.aspd);
+      later(220, () => { if (t.dead) return; const d = rollDmg() * 3; hitMon(P, t, d, true); const h = Math.round(d * .3); S.hp = Math.min(D.maxHp, S.hp + h); fx('heal', P.x, P.y, { col: 0xff5a6a, dur: .5, r1: 1.2 }); fx('slash', t.x, t.y, { col: 0xff3a4a, dur: .35 }); ftxt(P, '+' + h, '#ff8a9a', 13, 2.1); });
+      break;
+    case 'multi': {
+      attackAnim(P, 'Ranged_Bow_Release', .8);
+      const ts = R.mons.filter(m => !m.dead && Math.hypot(m.x - P.x, m.y - P.y) < 6.5).sort((a, b) => Math.hypot(a.x - P.x, a.y - P.y) - Math.hypot(b.x - P.x, b.y - P.y)).slice(0, 5);
+      ts.forEach((m, i) => proj({ from: P, to: m, kind: 'arrow', sp: 18, delay: .15 + i * .05, onHit: () => hitMon(P, m, rollDmg() * 1.4, true) }));
+      break;
+    }
+    case 'poison':
+      attackAnim(P, 'Ranged_Bow_Release', .9);
+      proj({ from: P, to: t, kind: 'arrow', sp: 18, delay: .2, onHit: () => {
+        hitMon(P, t, rollDmg() * 2, true); fx('hit', t.x, t.y, { col: 0x60e060, dur: .4, r1: 1.2, h: .6 });
+        for (let k = 1; k <= 6; k++) later(k * 1000, () => { if (!t.dead) { hitMon(P, t, rollDmg() * .45, true); fx('hit', t.x, t.y, { col: 0x50c050, dur: .25, r1: .7, h: .4 }); } });
+      } });
+      break;
+    case 'storm': {
+      attackAnim(P, 'Ranged_Bow_Release', 1);
+      const cx = t.x, cy = t.y;
+      fx('ring', cx, cy, { col: 0x9fd0ff, r1: 3.6, dur: 1 });
+      for (let k = 0; k < 10; k++) later(250 + k * 60, () => fx('hit', cx + rnd(-2.6, 2.6), cy + rnd(-2.6, 2.6), { col: 0xdff0ff, dur: .25, r1: .9, h: .4 }));
+      later(600, () => aoeHit(cx, cy, 3.5, () => rollDmg() * 2.6));
+      break;
+    }
+    case 'frost':
+      attackAnim(P, 'Ranged_Magic_Shoot', .9);
+      proj({ from: P, to: t, kind: 'bolt', sp: 12, delay: .2, onHit: () => { fx('boom', t.x, t.y, { col: 0x8fd8ff, r1: 2.6, dur: .5 }); fx('ring', t.x, t.y, { col: 0xdff4ff, r1: 2.8, dur: .5 }); aoeHit(t.x, t.y, 2.5, () => rollMagic() * 1.8 + S.lv * 1.2); } });
+      break;
+    case 'chainx': {
+      attackAnim(P, 'Ranged_Magic_Spellcasting', 1);
+      const ts = [t, ...R.mons.filter(m => !m.dead && m !== t && Math.hypot(m.x - t.x, m.y - t.y) < 5).slice(0, 5)];
+      ts.forEach((m, i) => later(250 + i * 140, () => { if (m.dead) return; fx('boom', m.x, m.y, { col: 0xff7a30, r1: 1.6, dur: .4 }); hitMon(P, m, rollMagic() * 2 + S.lv * 1.5, true); }));
+      break;
+    }
+    case 'judgment': {
+      attackAnim(P, 'Ranged_Magic_Spellcasting', 1.2);
+      const ts = R.mons.filter(m => !m.dead && Math.hypot(m.x - P.x, m.y - P.y) < 7.5);
+      fx('ring', P.x, P.y, { col: 0xffe080, r1: 7, dur: .8 });
+      ts.forEach((m, i) => later(400 + i * 50, () => { if (m.dead) return; fx('column', m.x, m.y, { col: 0xfff0a0, dur: .45 }); hitMon(P, m, rollMagic() * 3.2 + S.lv * 3, true); }));
+      break;
+    }
     default: // buffs
       P.buffs[sk.buff] = R.t + sk.dur; recalc();
-      fx('column', P.x, P.y, { col: sk.buff === 'iron' ? 0xd8e0f0 : sk.buff === 'rage' ? 0xff6a4a : 0x9fe8a0, dur: .9 });
+      fx('column', P.x, P.y, { col: { iron: 0xd8e0f0, rage: 0xff6a4a, avatar: 0xff9a3a, eagle: 0xffe08a, mshield: 0x8fb8ff }[sk.buff] || 0x9fe8a0, dur: .9 });
       fx('ring', P.x, P.y, { col: 0xffffff, r1: 1.8, dur: .5 });
       log(`${BUFFN[sk.buff]} 효과를 받았습니다. (${sk.dur}초)`, 'sys');
   }
@@ -2515,7 +2620,10 @@ function hud() {
   el('ad').textContent = fmt(S.adena);
   const pc = cnt('red') + cnt('orange') + cnt('clear') + cnt('elixir');
   el('cPot').textContent = pc; el('cTele').textContent = cnt('tele'); el('cRet').textContent = cnt('ret');
-  mySkills().forEach((sk, i) => {
+  if ((R.skPage || 0) * 4 >= mySkills().length) R.skPage = 0;
+  el('bSkP').textContent = `${(R.skPage || 0) + 1}/${Math.ceil(mySkills().length / 4)}`;
+  [0, 1, 2, 3].map(slotSkill).forEach((sk, i) => {
+    if (!sk) return;
     const b = el('bS' + (i + 1)), locked = S.lv < sk.lv;
     b.classList.toggle('locked', locked);
     b.querySelector('.skn').textContent = sk.n;
@@ -2578,6 +2686,23 @@ function equipBest() {
 }
 // success chance for the k-th step past the safe line; blessed scrolls add 10%p there
 const encOdds = (k, bless) => [.5, .4, .3, .2, .12][Math.min(k - 1, 4)] + (bless ? .1 : 0);
+function fuseView() {
+  const f = fuseState(), ps = polyState(), G = PGRADE[f.g], N = PGRADE[f.g + 1];
+  f.picks = f.picks.filter(id => POLY[id] === f.g);
+  let h = `<div class="sec">변신 합성</div>
+    <div class="seg four">${[0, 1, 2, 3].map(g => `<button data-a="fuseg" data-v="${g}" class="${f.g === g ? 'on' : ''}" style="color:${PGRADE[g].col}">${PGRADE[g].k}</button>`).join('')}</div>
+    <p class="note">${G.k} 변신 4장 → <b style="color:${N.col}">${N.k}</b> 변신 1장 · 성공 ${Math.round(FUSE_RATE[f.g] * 100)}%${FUSE_RATE[f.g] < 1 ? ` (실패하면 ${G.k} 변신 1장이 돌아와요)` : ''}. ★ 하나가 한 장이고, 쓰고 있는 변신은 한 장을 남겨요.</p>
+    <div class="fslots">${[0, 1, 2, 3].map(i => { const id = f.picks[i]; return id ? `<button class="fslot on" data-a="fuseout" data-v="${i}" style="--gc:${G.col}">${MON[id].n}<small>빼기</small></button>` : `<div class="fslot">빈 칸</div>`; }).join('')}</div>
+    <div class="seg" style="grid-template-columns:1fr 1fr 1.4fr"><button data-a="fuseauto">자동 채우기</button><button data-a="fuseclear">비우기</button><button data-a="fusego" class="${f.picks.length === 4 ? 'on' : ''}" ${f.picks.length === 4 ? '' : 'disabled'}>합성하기</button></div>`;
+  const ids = Object.keys(POLY).filter(id => POLY[id] === f.g && ps.owned[id]).sort((a, b) => ps.owned[b] - ps.owned[a]);
+  if (!ids.length) h += `<p class="note">${G.k} 등급 변신이 없어요.</p>`;
+  for (const id of ids) {
+    const sp = fuseSpare(id);
+    h += `<div class="row">${icoHtml(G.col, MON[id].n[0])}<div class="info"><div class="n">${MON[id].n} <span style="color:var(--gold2);font-size:11px">★${ps.owned[id]}</span>${id === polyActive() ? '<span class="tag">변신 중</span>' : ''}</div><div class="s">넣을 수 있는 장 ${Math.max(0, sp)}</div></div>
+      <div class="btns"><button class="btn" data-a="fusein" data-v="${id}" ${sp > 0 && f.picks.length < 4 ? '' : 'disabled'}>넣기</button></div></div>`;
+  }
+  return h;
+}
 const VIEWS = {
   pet() {
     const ps = petState(), a = petActive(), town = ZONES[S.zone].town;
@@ -2601,6 +2726,7 @@ const VIEWS = {
       <div class="seg"><button data-a="polydraw" data-v="1" ${!town || S.adena < POLY_COST ? 'disabled' : ''}>1회 · ${fmt(POLY_COST)}</button><button data-a="polydraw" data-v="10" ${!town || S.adena < POLY_COST10 ? 'disabled' : ''}>10회 · ${fmt(POLY_COST10)}</button></div>
       ${cnt('pticket') ? `<button class="btn pri wide" data-a="polyticket">변신 카드 1회권 사용 (${cnt('pticket')}장)</button>` : ''}
       <p class="note">${town ? '' : '카드는 마을에서 뽑을 수 있어요(1회권은 어디서나). '}확률: ${PGRADE.map(g => `${g.k} ${+(g.p * 100).toFixed(1)}%`).join(' · ')}. 같은 변신을 또 뽑으면 ★가 올라 능력치가 8%씩 늘어요(최대 ★5). 유형: ${Object.entries(PTYPE).map(([k, v]) => `${k}(${v.desc})`).join(', ')}.</p>
+      ${fuseView()}
       <div class="sec">도감 (${Object.keys(ps.owned).length}/${Object.keys(POLY).length})</div>`;
     const ids = Object.keys(POLY).sort((x, y) => POLY[y] - POLY[x]);
     for (const id of ids) {
@@ -2955,6 +3081,12 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'polyticket') { polyDraw(1, true); }
   else if (a === 'polyuse') { polyUse(v); }
   else if (a === 'polyoff') { polyUse(null); }
+  else if (a === 'fuseg') { fuseState().g = +v; fuseState().picks = []; }
+  else if (a === 'fusein') { const f = fuseState(); if (f.picks.length < 4 && fuseSpare(v) > 0) f.picks.push(v); }
+  else if (a === 'fuseout') { fuseState().picks.splice(+v, 1); }
+  else if (a === 'fuseclear') { fuseState().picks = []; }
+  else if (a === 'fuseauto') { fuseAuto(); }
+  else if (a === 'fusego') { fuseGo(); }
   else if (a === 'tog') { S.opts[v] = !S.opts[v]; if (v === 'lowfx') applyQuality(); }
   else if (a === 'reset') {
     if (!R.confirmReset) R.confirmReset = true;
@@ -3054,7 +3186,7 @@ function actAttack() {
 }
 function actSkill(i) {
   if (!S || R.dead) return;
-  const sk = mySkills()[i]; if (!sk) return;
+  const sk = slotSkill(i); if (!sk) return;
   if (S.lv < sk.lv) { toast(`${sk.n}: Lv.${sk.lv}부터 쓸 수 있어요`); return; }
   if (P.cds[sk.id] > 0) { toast(`${sk.n}: ${Math.ceil(P.cds[sk.id])}초 뒤에 쓸 수 있어요`); return; }
   if (S.mp < skCost(sk)) { toast('MP가 부족해요'); return; }
@@ -3073,12 +3205,13 @@ const bind = (id, fn) => el(id).addEventListener('pointerdown', e => { e.prevent
 bind('bAtk', actAttack); bind('bPot', actPot); bind('bAuto', actAuto);
 for (let i = 0; i < 4; i++) {
   const b = el('bS' + (i + 1)); let tm = null, held = false;
-  b.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); held = false; tm = setTimeout(() => { held = true; tm = null; const sk = S && mySkills()[i]; if (sk) toggleAuto(sk); }, 550); });
+  b.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); held = false; tm = setTimeout(() => { held = true; tm = null; const sk = S && slotSkill(i); if (sk) toggleAuto(sk); }, 550); });
   const end = cast => { if (tm) { clearTimeout(tm); tm = null; if (cast && !held) actSkill(i); } };
   b.addEventListener('pointerup', () => end(true));
   b.addEventListener('pointerleave', () => end(false)); b.addEventListener('pointercancel', () => end(false));
   b.addEventListener('contextmenu', e => e.preventDefault());
 }
+bind('bSkP', () => { if (!S) return; R.skPage = ((R.skPage || 0) + 1) % Math.ceil(mySkills().length / 4); hud(); toast(`스킬 ${R.skPage + 1}페이지`); });
 bind('bTele', () => S && !R.dead && useTele()); bind('bRet', () => S && !R.dead && useRet());
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
