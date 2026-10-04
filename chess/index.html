@@ -18,6 +18,7 @@
 <script src="../lib/ShaderPass.js"></script>
 <script src="../lib/UnrealBloomPass.js"></script>
 <script src="../lib/mgfx.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js" async></script>
 <style>
 :root{
   color-scheme: dark;
@@ -91,6 +92,14 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
 .loadbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#a67f2c,#f1d58c)}
 @media (max-height:640px){ #traits{display:none} }
 .rcol{display:flex;flex-direction:column;align-items:flex-end}
+.mp{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.mp input,#duel textarea{background:#120f0a;border:1px solid var(--line2);border-radius:8px;color:var(--text);padding:10px;font:inherit;font-size:14px;user-select:text;-webkit-user-select:text;touch-action:auto}
+.row2{display:flex;gap:8px}.row2 input{flex:1;min-width:0;text-transform:uppercase;letter-spacing:4px;text-align:center;font-weight:700}
+.code{font-family:var(--serif);font-size:46px;font-weight:800;letter-spacing:12px;color:var(--gold2);margin:0 0 8px;user-select:text;-webkit-user-select:text}
+#duel textarea{width:100%;resize:none;margin-bottom:10px;font-size:12px}
+.lp{display:flex;justify-content:space-between;padding:3px 0}
+.pl.hu b{color:#bfe4ff}
+.duelmode #bottom,.duelmode #traits,.duelmode #players,.duelmode .fxb{display:none!important}
 .fxb{pointer-events:auto;margin-top:5px;background:rgba(14,11,8,.8);border:1px solid #6b5a3a;color:#f1d58c;border-radius:12px;padding:3px 9px;font:700 10.5px inherit;font-family:inherit}
 .fxb.off{color:#9a8e78}
 </style>
@@ -101,7 +110,7 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
   <canvas id="ov"></canvas>
   <div id="top">
     <div id="stageBox"><div id="stage">1-1</div><div id="phase">준비</div></div>
-    <div class="rcol"><div id="players"></div><button id="bFx" class="fxb">효과 켬</button></div>
+    <div class="rcol"><div id="players"></div><button id="bFx" class="fxb">효과 켬</button><button id="bDeck" class="fxb" hidden>진영 코드</button></div>
   </div>
   <div id="traits"></div>
   <div id="info" hidden></div>
@@ -129,7 +138,14 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
         아끼면 <b>이자</b>(10골드당 1, 최대 5)를 받아요.<br>
         <b>조작</b>: 용병을 눌러 고른 뒤 칸을 누르면 이동, 고른 상태에서 판매 버튼으로 팔아요.
       </div>
-      <button class="btn pri wide" id="startBtn">게임 시작</button>
+      <button class="btn pri wide" id="startBtn">혼자 하기 (AI 7명)</button>
+      <div class="mp">
+        <input id="nameIn" maxlength="8" placeholder="내 이름 (친구에게 보여요)" autocomplete="off">
+        <button class="btn wide" id="hostBtn">친구와 하기 · 방 만들기</button>
+        <div class="row2"><input id="codeIn" maxlength="4" placeholder="방 코드" autocomplete="off"><button class="btn" id="joinBtn" style="min-width:90px">참가</button></div>
+        <button class="btn wide" id="duelBtn">진영 코드 대결</button>
+        <p class="sub" id="netMsg" style="margin:0;color:#ffb0a4" hidden></p>
+      </div>
       <p class="sub" id="record" style="margin-top:10px"></p>
     </div>
   </div>
@@ -138,7 +154,29 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
       <div class="logo" id="endTitle">1등!</div>
       <p class="sub" id="endMsg"></p>
       <button class="btn pri wide" id="againBtn">다시 하기</button>
+      <button class="btn wide" id="homeBtn" style="margin-top:8px">처음 화면</button>
       <a class="btn wide" style="display:block;margin-top:8px;text-decoration:none" href="../">무과금 사냥터로</a>
+    </div>
+  </div>
+  <div class="ov" id="lobby" hidden>
+    <div class="box">
+      <div class="logo" style="font-size:28px">친구와 하기</div>
+      <p class="sub" id="lobbyMsg"></p>
+      <div class="code" id="lobbyCode"></div>
+      <button class="btn" id="shareBtn" style="margin-bottom:12px">초대 링크 보내기</button>
+      <div class="rules" id="lobbyList"></div>
+      <button class="btn pri wide" id="lobbyStart" hidden>시작 (빈자리는 AI)</button>
+      <button class="btn wide" id="lobbyLeave" style="margin-top:8px">나가기</button>
+    </div>
+  </div>
+  <div class="ov" id="duel" hidden>
+    <div class="box">
+      <div class="logo" style="font-size:28px">진영 코드 대결</div>
+      <p class="sub">친구가 보낸 진영 코드를 붙여넣으면 내 마지막 진영과 자동 전투를 해요.<br>내 진영 코드는 게임 중 오른쪽 위 <b>진영 코드</b> 버튼으로 복사해요.</p>
+      <div class="rules" id="duelMine"></div>
+      <textarea id="duelIn" rows="3" placeholder="친구 진영 코드 (MGC1.…)"></textarea>
+      <button class="btn pri wide" id="duelGo">대결 시작</button>
+      <button class="btn wide" id="duelBack" style="margin-top:8px">돌아가기</button>
     </div>
   </div>
 </div>
@@ -362,7 +400,7 @@ function initGL() {
   scene = new THREE.Scene(); scene.background = lin(0x16120d); scene.fog = new THREE.Fog(lin(0x16120d), 18, 34);
   camera = new THREE.PerspectiveCamera(38, 1, .5, 80);
   scene.add(new THREE.HemisphereLight(0xfff0e0, 0x30261a, .8));
-  const sun = new THREE.DirectionalLight(0xfff0d8, 1.4); sun.position.set(4, 12, 6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+  const sun = G.sun = new THREE.DirectionalLight(0xfff0d8, 1.4); sun.position.set(4, 12, 6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9 }); scene.add(sun);
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(.3, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
@@ -404,7 +442,9 @@ function resize() {
   // fit the whole board + bench (about 9 wide, 11 deep) whatever the aspect
   const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(5 / (half * camera.aspect), 6.6 / half);
   const tilt = .78; // radians from vertical
-  camera.position.set(0, Math.cos(tilt) * need, .9 + Math.sin(tilt) * need); camera.lookAt(0, 0, -1.6);
+  const fl = G.flip ? -1 : 1; // side B watches from the other end
+  if (G.sun) G.sun.position.set(4 * fl, 12, 6 * fl);
+  camera.position.set(0, Math.cos(tilt) * need, fl * (.9 + Math.sin(tilt) * need)); camera.lookAt(0, 0, fl * -1.6);
   camera.far = need + 30; camera.updateProjectionMatrix();
   scene && scene.fog && (scene.fog.near = need + 4, scene.fog.far = need + 20);
 }
@@ -498,7 +538,10 @@ function clearView() { for (const a of viewActors.values()) killActor(a); viewAc
 
 /* ================= BATTLE ================= */
 // fighters live on a 7x8 hex grid; rows 4-7 are side A (bottom), rows 0-3 side B (top)
-const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z) / HEX; // in tiles
+const dist = (a, b) => Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.z - b.z) * (a.z - b.z)) / HEX; // in tiles (sqrt: same result on every phone)
+// each fight has its own seeded random, so every player's phone replays exactly the fight the host computed
+let BR = Math.random;
+const mulberry = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 const MOVE_SPEED = 2.2, BODY = .8;
 function makeFighters(p, side, visual) {
   const t = countTraits(p), list = [];
@@ -508,7 +551,7 @@ function makeFighters(p, side, visual) {
     if (side === 'B') { c = COLS - 1 - c; r = 7 - r; }
     const s = unitStats(u.key, u.star), d = ALLU[u.key];
     const f = { key: u.key, star: u.star, side, c, r, x: 0, z: 0, hp: s.hp, maxHp: s.hp, ad: s.ad, as: s.as, armor: s.armor, range: s.range, mana: 0, maxMana: s.mana, cls: d.cls, org: d.org,
-      atkT: rnd(.1, .6), moveT: 0, dead: false, shield: 0, crit: .05, ls: 0, mpMul: 1, abilMul: 1, dmgMul: 1, target: null, hurt: 0 };
+      atkT: .1 + BR() * .5, moveT: 0, dead: false, shield: 0, crit: .05, ls: 0, mpMul: 1, abilMul: 1, dmgMul: 1, target: null, hurt: 0 };
     [f.x, f.z] = hexPos(c, r);
     list.push(f);
   });
@@ -529,7 +572,8 @@ function makeFighters(p, side, visual) {
   list.debuff = { armor: [0, 20, 40][tier('언데드')], slow: [0, .15, .25][tier('서리')] };
   return list;
 }
-function startBattle(pa, pb, visual, creep) {
+function startBattle(pa, pb, visual, creep, seed) {
+  const rng = BR = mulberry(seed != null ? seed : Math.floor(Math.random() * 2147483647));
   const A = makeFighters(pa, 'A'), B = creep ? creepFighters(creep) : makeFighters(pb, 'B');
   for (const f of A) { f.armor = Math.max(0, f.armor - B.debuff.armor); f.as *= 1 - B.debuff.slow; }
   for (const f of B) { f.armor = Math.max(0, f.armor - A.debuff.armor); f.as *= 1 - A.debuff.slow; }
@@ -539,16 +583,16 @@ function startBattle(pa, pb, visual, creep) {
     const foes = all.filter(o => o.side !== f.side);
     const back = f.side === 'A' ? 0 : 7;
     const spots = []; for (let c = 0; c < COLS; c++) for (const r of [back, f.side === 'A' ? 1 : 6]) if (!all.some(o => o.c === c && o.r === r)) spots.push([c, r]);
-    if (foes.length && spots.length) { const [c, r] = pick(spots); f.c = c; f.r = r; [f.x, f.z] = hexPos(c, r); f.leaped = true; }
+    if (foes.length && spots.length) { const [c, r] = spots[Math.floor(BR() * spots.length)]; f.c = c; f.r = r; [f.x, f.z] = hexPos(c, r); f.leaped = true; }
   }
-  return { A, B, all, t: 0, over: false, winner: null, visual, fx: [] };
+  return { A, B, all, t: 0, over: false, winner: null, visual, fx: [], rng };
 }
 function creepFighters(n) {
   const list = [], keys = n.keys;
   keys.forEach((k, i) => {
     const s = unitStats(k, n.star || 1), d = ALLU[k], c = [3, 2, 4, 1, 5, 0, 6][i % 7], r = i < 7 ? 2 : 1;
     const f = { key: k, star: n.star || 1, side: 'B', c, r, x: 0, z: 0, hp: s.hp, maxHp: s.hp, ad: s.ad, as: s.as, armor: s.armor, range: s.range, mana: 0, maxMana: 999, cls: '', org: '',
-      atkT: rnd(.2, .8), moveT: 0, dead: false, shield: 0, crit: .05, ls: 0, mpMul: 1, abilMul: 1, dmgMul: 1, target: null, hurt: 0 };
+      atkT: .2 + BR() * .6, moveT: 0, dead: false, shield: 0, crit: .05, ls: 0, mpMul: 1, abilMul: 1, dmgMul: 1, target: null, hurt: 0 };
     [f.x, f.z] = hexPos(c, r); list.push(f);
   });
   list.debuff = { armor: 0, slow: 0 };
@@ -556,7 +600,7 @@ function creepFighters(n) {
 }
 function dealDamage(B, src, tgt, dmg, magic) {
   if (tgt.dead) return;
-  if (!magic && Math.random() < src.crit) { dmg *= 1.8; if (B.visual) B.fx.push({ k: 'txt', f: tgt, txt: '치명타', col: '#ffd070', t: 0 }); }
+  if (!magic && BR() < src.crit) { dmg *= 1.8; if (B.visual) B.fx.push({ k: 'txt', f: tgt, txt: '치명타', col: '#ffd070', t: 0 }); }
   dmg *= src.dmgMul;
   if (!magic) dmg *= 100 / (100 + tgt.armor);
   dmg = Math.round(dmg);
@@ -579,6 +623,7 @@ function cast(B, f, t) {
 }
 function stepBattle(B, dt) {
   if (B.over) return;
+  BR = B.rng;
   B.t += dt;
   const live = B.all.filter(f => !f.dead);
   for (const f of live) {
@@ -606,9 +651,9 @@ function stepBattle(B, dt) {
   }
   for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
     const a = live[i], b = live[j]; if (a.dead || b.dead) continue;
-    let dx = b.x - a.x, dz = b.z - a.z, dd = Math.hypot(dx, dz);
+    let dx = b.x - a.x, dz = b.z - a.z, dd = Math.sqrt(dx * dx + dz * dz);
     if (dd >= BODY) continue;
-    if (dd < 1e-4) { dx = Math.random() - .5; dz = Math.random() - .5; dd = Math.hypot(dx, dz); }
+    if (dd < 1e-4) { dx = BR() - .5; dz = BR() - .5; dd = Math.sqrt(dx * dx + dz * dz); }
     const push = (BODY - dd) / 2 / dd;
     a.x -= dx * push; a.z -= dz * push; b.x += dx * push; b.z += dz * push;
   }
@@ -645,11 +690,12 @@ function battleVfx(e) {
 }
 function beginBattleView(B) {
   clearView(); setArena(true);
+  G.flip = (G.mySide || 'A') === 'B'; resize();
   battleActors = B.all.map(f => { const a = makeActor(f.key, f.star); a.root.position.set(f.x, 0, f.z); a.root.rotation.y = f.side === 'A' ? Math.PI : 0; a.f = f; return a; });
   // bench stays visible
-  G.me.bench.forEach((u, i) => { if (u) { const a = makeActor(u.key, u.star); const [x, z] = benchPos(i); a.root.position.set(x, 0, z); a.root.rotation.y = Math.PI; a.benchOnly = true; battleActors.push(a); } });
+  G.me.bench.forEach((u, i) => { if (u) { const a = makeActor(u.key, u.star); const [x, z] = benchPos(i), k = G.flip ? -1 : 1; a.root.position.set(x * k, 0, z * k); a.root.rotation.y = G.flip ? 0 : Math.PI; a.benchOnly = true; battleActors.push(a); } });
 }
-function endBattleView() { setArena(false); for (const a of battleActors) killActor(a); battleActors = []; for (const o of fxObjs) scene.remove(o.obj); fxObjs = []; VX.clear(); }
+function endBattleView() { if (G.flip) { G.flip = false; resize(); } setArena(false); for (const a of battleActors) killActor(a); battleActors = []; for (const o of fxObjs) scene.remove(o.obj); fxObjs = []; VX.clear(); }
 let fxObjs = [];
 function battleFrame(B, dt) {
   for (const a of battleActors) {
@@ -694,8 +740,9 @@ const isPve = () => G.stage === 1 ? G.rnum <= 3 : G.rnum === 7;
 const roundName = () => `${G.stage}-${G.rnum}`;
 const PVE = s => s === 1 ? [{ keys: ['wolfling', 'wolfling'] }, { keys: ['wolfling', 'wolfling', 'skelling'] }, { keys: ['skelling', 'skelling', 'wolfling', 'wolfling'] }]
   : [{ keys: ['golem', 'golem', 'skelling', 'skelling', 'wolfling'], star: Math.min(3, s - 1) }];
-function startGame() {
-  G.players = [newPlayer('나', false), ...shuffle(AI_NAMES.slice()).slice(0, 7).map(n => newPlayer(n, true))];
+function startGame(keep) {
+  if (!keep) G.players = [newPlayer('나', false), ...shuffle(AI_NAMES.slice()).slice(0, 7).map(n => newPlayer(n, true))];
+  G.mySide = 'A'; G.hostOut = false; document.body.classList.remove('duelmode');
   G.me = G.players[0]; G.stage = 1; G.rnum = 1; G.round = 0;
   initPool();
   for (const p of G.players) { p.gold = 2; rollShop(p); }
@@ -712,7 +759,8 @@ function beginPlanning(first) {
   }
   for (const p of G.players) if (p.alive && p.ai) aiPlan(p);
   // next opponent is known during planning so the player can scout
-  G.opp = isPve() ? null : pickOpponent(G.me);
+  if (NET.mode === 'host') { makePairs(); for (const p of G.players) p.ready = false; G.opp = G.oppOf[0] >= 0 ? G.players[G.oppOf[0]] : null; }
+  else G.opp = isPve() ? null : pickOpponent(G.me);
   syncView(G.me, G.opp);
   renderAll();
   toast(isPve() ? `${roundName()} 몬스터 라운드` : `${roundName()} · 상대 ${G.opp.name}`);
@@ -720,7 +768,7 @@ function beginPlanning(first) {
 function pickOpponent(p) { const others = G.players.filter(o => o.alive && o !== p && boardUnits(o).length); return others.length ? pick(others) : null; }
 function startFight() {
   if (G.phase !== 'plan') return;
-  enforceCap(G.me);
+  enforceCap(G.me); saveDeck();
   G.phase = 'combat'; G.sel = null; el('info').hidden = true;
   const creep = isPve() ? PVE(G.stage)[G.stage === 1 ? G.rnum - 1 : 0] : null;
   G.battle = startBattle(G.me, G.opp, true, creep);
@@ -764,12 +812,17 @@ function finishFight() {
 }
 function nextRound() {
   endBattleView(); G.battle = null;
+  if (NET.mode === 'host') {
+    if (G.players.filter(p => p.alive).length <= 1) { G.phase = 'over'; NET.dirty = true; netGameOver(); return; }
+    G.rnum++; if ((G.stage === 1 && G.rnum > 3) || G.rnum > 7) { G.stage++; G.rnum = 1; }
+    return beginPlanning(false);
+  }
   if (!G.me.alive || G.players.filter(p => p.alive).length <= 1) return gameOver();
   G.rnum++; if ((G.stage === 1 && G.rnum > 3) || G.rnum > 7) { G.stage++; G.rnum = 1; }
   beginPlanning(false);
 }
 function gameOver() {
-  G.phase = 'over';
+  G.phase = 'over'; G.endMode = null; el('againBtn').textContent = '다시 하기';
   const place = G.me.alive ? 1 : G.me.place;
   el('endTitle').textContent = place === 1 ? '1등! 우승!' : `${place}등`;
   el('endMsg').innerHTML = place === 1 ? `${roundName()}까지 살아남아 최후의 1인이 됐어요.` : `${roundName()}에서 탈락했어요.${place <= 4 ? ' 상위권이에요!' : ''}`;
@@ -787,9 +840,19 @@ function pickTile(px, py) {
   const hit = ray.intersectObjects(tileMeshes, false)[0];
   return { unit: best ? best.u : null, tile: hit ? hit.object.userData : null };
 }
+function moveUnit(p, from, to) {
+  const ok = x => Array.isArray(x) && (x[0] === 'b' || x[0] === 'n') && Number.isInteger(x[1]) && x[1] >= 0 && x[1] < (x[0] === 'b' ? p.board.length : p.bench.length);
+  if (!ok(from) || !ok(to)) return '이동할 수 없어요';
+  const arr = w => w === 'b' ? p.board : p.bench;
+  const moving = arr(from[0])[from[1]], other = arr(to[0])[to[1]];
+  if (!moving) return '이동할 수 없어요';
+  if (to[0] === 'b' && from[0] !== 'b' && !other && boardUnits(p).length >= p.lv) return `레벨 ${p.lv}: 최대 ${p.lv}명까지 배치할 수 있어요`;
+  arr(to[0])[to[1]] = moving; arr(from[0])[from[1]] = other; return '';
+}
 function locate(p, u) { let i = p.board.indexOf(u); if (i >= 0) return ['b', i]; i = p.bench.indexOf(u); return i >= 0 ? ['n', i] : null; }
 glc.addEventListener('pointerdown', e => {
   audio(); if (G.phase !== 'plan' && G.phase !== 'combat') return;
+  if (!G.me || !G.me.alive) return;
   const { unit, tile } = pickTile(e.clientX, e.clientY), p = G.me;
   if (G.phase === 'combat') { if (unit) showInfo(unit); return; }
   if (G.sel) {
@@ -799,10 +862,8 @@ glc.addEventListener('pointerdown', e => {
     else if (tile && tile.bench != null) to = ['n', tile.bench];
     else if (tile && tile.mine) to = ['b', idx(tile.c, tile.r - 4)];
     if (to && from) {
-      const arr = w => w === 'b' ? p.board : p.bench;
-      const moving = arr(from[0])[from[1]], other = arr(to[0])[to[1]];
-      if (to[0] === 'b' && from[0] !== 'b' && !other && boardUnits(p).length >= p.lv) { toast(`레벨 ${p.lv}: 최대 ${p.lv}명까지 배치할 수 있어요`); }
-      else { arr(to[0])[to[1]] = moving; arr(from[0])[from[1]] = other; sfx('tap'); }
+      const err = moveUnit(p, from, to);
+      if (err) toast(err); else { sfx('tap'); if (NET.mode === 'client') netSend({ a: 'move', from, to }); }
       G.sel = null; el('info').hidden = true; syncView(p, G.opp); renderAll(); return;
     }
     G.sel = null; el('info').hidden = true;
@@ -816,30 +877,347 @@ function showInfo(u, mine) {
     <div class="is">${d.cls ? `${d.cls} · ${d.org} · ` : ''}체력 ${s.hp} · 공격 ${s.ad} · 공속 ${s.as} · 사거리 ${s.range}<br>${d.cls ? ABIL[d.cls] : '몬스터'}</div></div>
     ${mine && G.phase === 'plan' ? `<button class="btn red" id="sellBtn">판매 +${sellValue(u)}G</button>` : ''}`;
   el('info').hidden = false;
-  const b = el('sellBtn'); if (b) b.onclick = ev => { ev.stopPropagation(); sell(G.me, u); G.sel = null; el('info').hidden = true; sfx('tap'); syncView(G.me, G.opp); renderAll(); };
+  const b = el('sellBtn'); if (b) b.onclick = ev => { ev.stopPropagation(); if (NET.mode === 'client') netSend({ a: 'sell', id: u.id }); sell(G.me, u); G.sel = null; el('info').hidden = true; sfx('tap'); syncView(G.me, G.opp); renderAll(); };
 }
 el('shop').addEventListener('click', e => {
   const c = e.target.closest('.card'); if (!c || G.phase !== 'plan') return;
   const i = +c.dataset.i;
+  if (!G.me.alive) return;
+  if (NET.mode === 'client') { const k = G.me.shop[i]; if (!k) return; if (G.me.gold < UNITS[k].c) { toast('골드가 부족해요'); return; } netSend({ a: 'buy', i }); sfx('buy'); return; }
   if (buy(G.me, i)) { sfx('buy'); syncView(G.me, G.opp); renderAll(); } else toast(G.me.gold < UNITS[G.me.shop[i]].c ? '골드가 부족해요' : '대기석이 가득 찼어요');
 });
-el('bRoll').onclick = () => { if (G.phase !== 'plan' || G.me.gold < 2) return; G.me.gold -= 2; rollShop(G.me); sfx('tap'); renderAll(); };
-el('bXp').onclick = () => { if (G.phase !== 'plan' || G.me.gold < 4 || G.me.lv >= MAXLV) return; G.me.gold -= 4; addXp(G.me, 4); renderAll(); };
-el('bFight').onclick = () => startFight();
+el('bRoll').onclick = () => { if (G.phase !== 'plan' || G.me.gold < 2 || !G.me.alive) return; if (NET.mode === 'client') { netSend({ a: 'roll' }); sfx('tap'); return; } G.me.gold -= 2; rollShop(G.me); sfx('tap'); renderAll(); };
+el('bXp').onclick = () => { if (G.phase !== 'plan' || G.me.gold < 4 || G.me.lv >= MAXLV || !G.me.alive) return; if (NET.mode === 'client') { netSend({ a: 'xp' }); sfx('tap'); return; } G.me.gold -= 4; addXp(G.me, 4); renderAll(); };
+el('bFight').onclick = () => { if (!NET.mode) return startFight(); if (G.phase !== 'plan' || !G.me.alive) return; G.me.ready = true; if (NET.mode === 'client') netSend({ a: 'ready' }); else NET.dirty = true; renderAll(); };
 el('startBtn').onclick = () => { audio(); startGame(); };
-el('againBtn').onclick = () => { audio(); startGame(); };
+el('againBtn').onclick = () => { audio(); if (G.endMode === 'duel') return startDuel(); if (G.endMode === 'net') return toTitle(); startGame(); };
+el('homeBtn').onclick = () => toTitle();
+
+
+/* ================= ONLINE: play with friends =================
+   PeerJS connects phones directly with a 4-letter room code. The host's phone runs the whole game
+   (shops, AI, results); friends send their actions and get the state back. Every fight has a seed,
+   so each friend replays their own fight on their phone with the same outcome the host computed.
+   A friend who drops is played by the AI and takes their seat back when they rejoin with the code. */
+const NET = { mode: null, peer: null, code: '', conns: [], conn: null, myIdx: 0, token: '', lastSend: 0, dirty: false, lobby: [] };
+const ROOM_CH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const esc = t => String(t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const myName = () => (el('nameIn').value.trim() || '플레이어').slice(0, 8);
+function saveName() { try { localStorage.setItem('mug-chess-name', myName()); } catch (e) {} }
+function netToken() { try { let t = localStorage.getItem('mug-chess-token'); if (!t) { t = Math.random().toString(36).slice(2, 10); localStorage.setItem('mug-chess-token', t); } return t; } catch (e) { return Math.random().toString(36).slice(2, 10); } }
+const sendAll = m => { for (const c of NET.conns) if (c.open) try { c.send(m); } catch (e) {} };
+const netSend = m => { if (NET.conn && NET.conn.open) NET.conn.send({ t: 'act', ...m }); };
+function newPeer(id) {
+  if (!window.Peer) { netFail('연결 모듈을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'); return null; }
+  return id ? new Peer(id, { debug: 0 }) : new Peer({ debug: 0 });
+}
+function netFail(msg) {
+  leaveNet(); toTitle();
+  el('netMsg').textContent = msg; el('netMsg').hidden = false;
+}
+function netError(e) {
+  const t = e && e.type;
+  netFail(t === 'peer-unavailable' ? '방을 찾을 수 없어요. 방 코드를 확인해 주세요.' : t === 'full' ? '이미 시작했거나 가득 찬 방이에요.'
+    : t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed' ? '연결 서버에 접속하지 못했어요. 잠시 뒤 다시 해 주세요.' : `연결하지 못했어요 (${t || '알 수 없음'}).`);
+}
+function leaveNet() {
+  NET.leaving = true;
+  try { if (NET.peer) NET.peer.destroy(); } catch (e) {}
+  Object.assign(NET, { mode: null, peer: null, conn: null, conns: [], lobby: [], leaving: false });
+  G.netStarted = false;
+}
+function toTitle() {
+  if (NET.mode) leaveNet();
+  endBattleView(); clearView(); G.battle = null; G.phase = 'title'; G.endMode = null; G.mySide = 'A';
+  document.body.classList.remove('duelmode');
+  for (const id of ['end', 'lobby', 'duel']) el(id).hidden = true;
+  el('title').hidden = false; el('netMsg').hidden = true;
+}
+// ---- host ----
+function hostRoom() {
+  saveName(); el('netMsg').hidden = true;
+  const code = Array.from({ length: 4 }, () => pick([...ROOM_CH])).join('');
+  const peer = newPeer('mgwchess-' + code); if (!peer) return;
+  Object.assign(NET, { mode: 'host', peer, code, conns: [], token: netToken() });
+  NET.lobby = [{ name: myName(), token: NET.token, host: true }];
+  el('lobbyMsg').textContent = '방을 만드는 중…'; el('lobbyCode').textContent = ''; el('lobbyList').innerHTML = '';
+  el('lobby').hidden = false; el('title').hidden = true; el('lobbyStart').hidden = true; el('shareBtn').hidden = true;
+  peer.on('open', () => showLobby());
+  peer.on('error', e => { if (e.type === 'unavailable-id') { leaveNet(); hostRoom(); } else if (e.type !== 'peer-unavailable') netError(e); });
+  peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
+  peer.on('connection', c => { c.on('data', m => hostRecv(c, m)); c.on('close', () => hostDrop(c)); });
+}
+function hostRecv(c, m) {
+  c.seen = Date.now();
+  if (!m || typeof m !== 'object' || m.t === 'ping') return;
+  if (m.t === 'hello') {
+    c.token = String(m.token || '').slice(0, 16);
+    if (G.netStarted) {
+      const i = G.players.findIndex(p => p.token === c.token);
+      if (i < 0) { c.send({ t: 'full' }); return; }
+      const p = G.players[i]; p.ai = false; p.offline = false; c.idx = i;
+      NET.conns = NET.conns.filter(x => x.token !== c.token); NET.conns.push(c);
+      c.send({ t: 'welcome', idx: i }); c.send({ t: 'state', s: snapshot() });
+      toast(`${p.name} 다시 연결!`); renderAll(); return;
+    }
+    if (NET.lobby.length >= 8 && !NET.lobby.some(l => l.token === c.token)) { c.send({ t: 'full' }); return; }
+    NET.lobby = NET.lobby.filter(l => l.token !== c.token); NET.conns = NET.conns.filter(x => x.token !== c.token);
+    NET.lobby.push({ name: String(m.name || '친구').slice(0, 8), token: c.token }); NET.conns.push(c);
+    sendAll({ t: 'lobby', names: NET.lobby.map(l => l.name) }); showLobby(); sfx('buy');
+    return;
+  }
+  if (m.t === 'act' && G.netStarted && c.idx != null) hostAct(G.players[c.idx], m);
+}
+function hostDrop(c) {
+  if (c.dropped) return; c.dropped = true;
+  NET.conns = NET.conns.filter(x => x !== c);
+  if (!NET.mode) return;
+  if (!G.netStarted) { NET.lobby = NET.lobby.filter(l => l.host || l.token !== c.token); sendAll({ t: 'lobby', names: NET.lobby.map(l => l.name) }); showLobby(); return; }
+  const p = G.players[c.idx]; if (!p || NET.conns.some(x => x.idx === c.idx)) return;
+  p.ai = true; p.offline = true; p.fav = p.fav || shuffle(Object.keys(CLASSES)).slice(0, 2);
+  if (p.alive) toast(`${p.name} 연결 끊김 · AI가 대신해요`); renderAll();
+}
+function hostAct(p, m) {
+  if (!p || !p.alive || G.phase !== 'plan') return;
+  if (m.a === 'buy') buy(p, m.i | 0);
+  else if (m.a === 'roll') { if (p.gold >= 2) { p.gold -= 2; rollShop(p); } }
+  else if (m.a === 'xp') { if (p.gold >= 4 && p.lv < MAXLV) { p.gold -= 4; addXp(p, 4); } }
+  else if (m.a === 'sell') { const u = [...p.board, ...p.bench].find(x => x && x.id === m.id); if (u) sell(p, u); }
+  else if (m.a === 'move') moveUnit(p, m.from, m.to);
+  else if (m.a === 'ready') p.ready = true;
+  NET.dirty = true;
+  if (G.opp === p) syncView(G.me, G.opp);
+  renderAll();
+}
+function showLobby(names) {
+  names = names || NET.lobby.map(l => l.name);
+  el('lobby').hidden = false; el('title').hidden = true; el('shareBtn').hidden = false;
+  el('lobbyCode').textContent = NET.code;
+  el('lobbyMsg').textContent = NET.mode === 'host' ? '친구에게 방 코드나 초대 링크를 보내세요. 다 모이면 시작!' : '방장이 시작하기를 기다리는 중…';
+  el('lobbyList').innerHTML = names.map((n, i) => `<div class="lp"><span>${i === 0 ? '👑 ' : ''}${esc(n)}</span><span style="color:var(--dim)">${i === 0 ? '방장' : '참가'}</span></div>`).join('')
+    + (names.length < 8 ? `<div class="lp" style="color:var(--dim)"><span>빈자리 ${8 - names.length}</span><span>AI</span></div>` : '');
+  el('lobbyStart').hidden = NET.mode !== 'host';
+}
+function hostStart() {
+  const humans = NET.lobby;
+  G.players = humans.map(l => { const p = newPlayer(l.name, false); p.token = l.token; p.human = true; return p; });
+  const names = shuffle(AI_NAMES.filter(n => !humans.some(h => h.name === n)));
+  while (G.players.length < 8) G.players.push(newPlayer(names.pop(), true));
+  for (const c of NET.conns) c.idx = G.players.findIndex(p => p.token === c.token);
+  G.netStarted = true; el('lobby').hidden = true;
+  for (const c of NET.conns) if (c.open) c.send({ t: 'welcome', idx: c.idx });
+  startGame(true);
+}
+function makePairs() {
+  const P = G.players, alive = P.map((p, i) => i).filter(i => P[i].alive);
+  G.oppOf = P.map(() => -1); G.pairs = [];
+  if (isPve()) return;
+  const order = shuffle(alive.slice());
+  for (let k = 0; k + 1 < order.length; k += 2) { G.pairs.push([order[k], order[k + 1], false]); G.oppOf[order[k]] = order[k + 1]; G.oppOf[order[k + 1]] = order[k]; }
+  // odd one out fights a copy of someone (only their own result counts)
+  if (order.length % 2) { const i = order[order.length - 1], others = alive.filter(x => x !== i); if (others.length) { const g = pick(others); G.pairs.push([i, g, true]); G.oppOf[i] = g; } }
+}
+const allReady = () => G.players.every(p => !p.alive || !p.human || p.offline || p.ready);
+function snapshot() {
+  return { stage: G.stage, rnum: G.rnum, phase: G.phase, timer: G.timer, pairs: G.oppOf || [],
+    players: G.players.map(p => ({ name: p.name, hp: p.hp, gold: p.gold, lv: p.lv, xp: p.xp, board: p.board, bench: p.bench, shop: p.shop, streak: p.streak, alive: p.alive, place: p.place, human: !!p.human, offline: !!p.offline, ready: !!p.ready })) };
+}
+const creepNow = () => isPve() ? PVE(G.stage)[G.stage === 1 ? G.rnum - 1 : 0] : null;
+function netStartFight() {
+  if (G.phase !== 'plan') return;
+  const P = G.players;
+  for (const p of P) if (p.alive) enforceCap(p);
+  if (G.me.alive) saveDeck();
+  G.phase = 'combat'; G.sel = null; el('info').hidden = true;
+  const creep = creepNow(), jobs = [], seed = () => Math.floor(Math.random() * 2147483647);
+  if (creep) P.forEach((p, i) => { if (p.alive) jobs.push({ a: i, b: null, seed: seed() }); });
+  else for (const [a, b, ghost] of G.pairs) jobs.push({ a, b, ghost, seed: seed() });
+  // the host decides every fight instantly; players watch the same fight replayed with the same seed
+  G.bgResults = []; G.fightEnd = 0;
+  for (const j of jobs) {
+    const B = startBattle(P[j.a], j.b != null ? P[j.b] : null, false, creep, j.seed);
+    for (let i = 0; i < 800 && !B.over; i++) stepBattle(B, .05);
+    if (!B.over) B.winner = 'draw';
+    G.bgResults.push([P[j.a], j.b != null ? P[j.b] : null, B, j.ghost]); G.fightEnd = Math.max(G.fightEnd, B.t);
+  }
+  const mine = i => { const j = jobs.find(j => j.a === i || (j.b === i && !j.ghost)); return j ? { a: j.a, b: j.b, seed: j.seed, flip: j.a !== i } : null; };
+  const snap = snapshot();
+  for (const c of NET.conns) if (c.open && c.idx != null && P[c.idx].alive) c.send({ t: 'fight', s: snap, f: mine(c.idx) });
+  const my = G.me.alive ? mine(0) : null;
+  G.battle = null;
+  if (my) { G.mySide = my.flip ? 'B' : 'A'; G.battle = startBattle(P[my.a], my.b != null ? P[my.b] : null, true, creep, my.seed); G.acc = 0; beginBattleView(G.battle); }
+  G.combatT = 0; renderAll();
+}
+function tellResult(B) {
+  const me = G.mySide || 'A';
+  if (B.winner === me) { toast(isPve() ? '몬스터 처치! 골드 획득' : '승리!'); sfx('win'); }
+  else if (B.winner === 'draw') toast('무승부');
+  else { toast(isPve() ? '몬스터에게 졌어요' : '패배…'); sfx('lose'); }
+}
+function netFinishFight() {
+  for (const [p, q, b, ghost] of G.bgResults) applyResult(p, q, b, ghost);
+  const aliveBefore = G.players.filter(p => p.alive).length;
+  const dead = G.players.filter(p => p.alive && p.hp <= 0).sort((a, b) => a.hp - b.hp);
+  let place = aliveBefore;
+  for (const p of dead) { p.alive = false; p.place = place--; for (const u of [...p.board, ...p.bench]) if (u) G.pool[u.key] += [0, 1, 3, 9][u.star]; }
+  if (!G.me.alive && !G.hostOut) { G.hostOut = true; toast('탈락! 방장은 끝까지 방을 지켜요'); }
+  G.phase = 'result'; G.timer = 2.2; renderAll();
+}
+function netGameOver() {
+  G.endMode = 'net';
+  const place = G.me.alive ? 1 : G.me.place;
+  el('endTitle').textContent = place === 1 ? '1등! 우승!' : `${place}등`;
+  el('endMsg').innerHTML = (place === 1 ? '친구들과의 대결에서 최후의 1인이 됐어요!' : `${roundName()}에서 탈락했어요.`) + (G.phase !== 'over' ? '<br>게임은 계속 진행돼요.' : '');
+  el('againBtn').textContent = '처음 화면'; el('end').hidden = false;
+  if (G.phase === 'over' || NET.mode === 'client') try { const rec = JSON.parse(localStorage.getItem('mug-chess') || '{}'); rec.games = (rec.games || 0) + 1; rec.best = Math.min(rec.best || 8, place); if (place === 1) rec.wins = (rec.wins || 0) + 1; localStorage.setItem('mug-chess', JSON.stringify(rec)); } catch (e) {}
+}
+// ---- friend (client) ----
+function joinRoom(code) {
+  code = code.trim().toUpperCase(); el('netMsg').hidden = true;
+  if (!/^[A-Z0-9]{4}$/.test(code)) { el('netMsg').textContent = '방 코드 4자리를 넣어 주세요.'; el('netMsg').hidden = false; return; }
+  saveName();
+  const peer = newPeer(); if (!peer) return;
+  Object.assign(NET, { mode: 'client', peer, code, token: netToken() });
+  el('lobbyMsg').textContent = '방에 연결하는 중…'; el('lobbyCode').textContent = code; el('lobbyList').innerHTML = '';
+  el('lobbyStart').hidden = true; el('shareBtn').hidden = true; el('lobby').hidden = false; el('title').hidden = true;
+  peer.on('open', () => {
+    const c = peer.connect('mgwchess-' + code, { reliable: true }); NET.conn = c;
+    c.on('open', () => { NET.hostSeen = Date.now(); c.send({ t: 'hello', name: myName(), token: NET.token }); });
+    c.on('data', clientRecv);
+    c.on('close', () => { if (NET.mode === 'client' && !NET.leaving) hostGone(); });
+  });
+  peer.on('error', e => netError(e));
+}
+function hostGone() {
+  leaveNet(); G.endMode = 'net';
+  if (G.phase === 'title' || !G.me) return netFail('방장과의 연결이 끊겼어요.');
+  el('endTitle').textContent = '연결 끊김'; el('endMsg').textContent = '방장과의 연결이 끊겼어요. 같은 방 코드로 다시 들어오면 자리를 이어받아요.';
+  el('againBtn').textContent = '처음 화면'; el('end').hidden = false;
+}
+function loadSnap(s) {
+  const prev = G.me;
+  G.players = s.players; G.stage = s.stage; G.rnum = s.rnum; G.timer = s.timer; G.oppOf = s.pairs;
+  G.me = G.players[NET.myIdx];
+  const oi = s.pairs[NET.myIdx]; G.opp = oi != null && oi >= 0 ? G.players[oi] : null;
+  if (G.sel) G.sel = [...G.me.board, ...G.me.bench].find(u => u && u.id === G.sel.id) || null;
+  return prev;
+}
+function clientRecv(m) {
+  NET.hostSeen = Date.now();
+  if (!m || typeof m !== 'object') return;
+  if (m.t === 'lobby') showLobby(m.names);
+  else if (m.t === 'full') netError({ type: 'full' });
+  else if (m.t === 'welcome') { NET.myIdx = m.idx; G.netStarted = true; G.endMode = null; for (const id of ['lobby', 'title', 'end']) el(id).hidden = true; }
+  else if (m.t === 'state') {
+    const prevPhase = G.phase, prev = loadSnap(m.s);
+    // ★ merges happen on the host: tell the player about their own upgrades
+    if (prev && m.s.phase === 'plan') {
+      const best = l => { const o = {}; for (const u of l) if (u) o[u.key] = Math.max(o[u.key] || 0, u.star); return o; };
+      const a = best([...prev.board, ...prev.bench]), b = best([...G.me.board, ...G.me.bench]);
+      for (const k in b) if (a[k] && b[k] > a[k]) { toast(`${UNITS[k].n} ★${b[k]}!`); sfx('up'); }
+      if (prev.lv < G.me.lv) { toast(`레벨 ${G.me.lv}! 배치 +1`); sfx('up'); }
+    }
+    if (m.s.phase === 'plan') {
+      if (prevPhase !== 'plan') { endBattleView(); G.battle = null; G.mySide = 'A'; toast(isPve() ? `${roundName()} 몬스터 라운드` : `${roundName()} · 상대 ${G.opp ? G.opp.name : '-'}`); }
+      G.phase = 'plan'; syncView(G.me, G.opp);
+    } else if (m.s.phase === 'over') { if (G.phase !== 'over') { G.phase = 'over'; netGameOver(); } return renderAll(); }
+    else if (prevPhase === 'plan' || prevPhase === 'title') { G.phase = 'combat'; clearView(); }
+    if (!G.me.alive && !G.shownOut) { G.shownOut = true; netGameOver(); }
+    renderAll();
+  }
+  else if (m.t === 'fight') {
+    loadSnap(m.s); G.phase = 'combat'; G.sel = null; el('info').hidden = true;
+    endBattleView(); G.battle = null;
+    if (m.f && G.me.alive) { G.mySide = m.f.flip ? 'B' : 'A'; G.battle = startBattle(G.players[m.f.a], m.f.b != null ? G.players[m.f.b] : null, true, creepNow(), m.f.seed); G.acc = 0; beginBattleView(G.battle); }
+    else clearView();
+    renderAll();
+  }
+}
+// ---- deck code duel (works any time, no connection needed) ----
+function deckCode(p) {
+  const b = []; p.board.forEach((u, i) => { if (u) b.push([i, u.key, u.star]); });
+  return 'MGC1.' + btoa(unescape(encodeURIComponent(JSON.stringify({ n: NET.mode || p.name === '나' ? myName() : p.name, lv: p.lv, b })))).replace(/=+$/, '');
+}
+function readDeck(code) {
+  try {
+    const o = JSON.parse(decodeURIComponent(escape(atob(String(code).trim().replace(/^MGC1\./, '').replace(/\s+/g, '')))));
+    const p = newPlayer(String(o.n || '친구').slice(0, 8), false); p.lv = Math.max(1, Math.min(MAXLV, o.lv | 0));
+    for (const [i, k, st] of o.b || []) if (UNITS[k] && Number.isInteger(i) && i >= 0 && i < p.board.length && [1, 2, 3].includes(st)) p.board[i] = mkUnit(k, st);
+    return boardUnits(p).length ? p : null;
+  } catch (e) { return null; }
+}
+function saveDeck() { if (G.me && boardUnits(G.me).length) try { localStorage.setItem('mug-chess-deck', deckCode(G.me)); } catch (e) {} }
+const savedDeck = () => { try { return localStorage.getItem('mug-chess-deck') || ''; } catch (e) { return ''; } };
+function copyText(t, msg) {
+  const done = () => toast(msg);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => showCopy(t));
+  else showCopy(t);
+}
+function showCopy(t) {
+  el('info').innerHTML = `<div class="iw"><div class="in">길게 눌러 복사하세요</div><textarea readonly style="width:100%;height:54px;font-size:11px;background:#120f0a;color:var(--text);border:1px solid var(--line2);border-radius:6px;user-select:text;-webkit-user-select:text">${esc(t)}</textarea></div>`;
+  el('info').hidden = false;
+}
+function openDuel() {
+  const me = readDeck(savedDeck());
+  el('duelMine').innerHTML = me ? `<b>내 진영</b> (Lv.${me.lv}) : ${boardUnits(me).map(u => '★'.repeat(u.star) + UNITS[u.key].n).join(', ')}` : '아직 저장된 내 진영이 없어요. 한 판 하면 전투 직전 진영이 저장돼요.';
+  el('duel').hidden = false; el('title').hidden = true; el('netMsg').hidden = true;
+}
+function startDuel() {
+  const me = readDeck(savedDeck()), foe = readDeck(el('duelIn').value);
+  if (!me) { toast('먼저 한 판 해서 내 진영을 만들어 주세요'); return; }
+  if (!foe) { toast('진영 코드를 확인해 주세요'); return; }
+  me.name = '나'; el('duel').hidden = true; el('end').hidden = true;
+  G.players = [me, foe]; G.me = me; G.opp = foe; G.phase = 'duel'; G.mySide = 'A'; G.endMode = 'duel';
+  document.body.classList.add('duelmode');
+  el('stage').textContent = '진영 대결'; el('phase').textContent = `vs ${foe.name}`;
+  G.battle = startBattle(me, foe, true, null); G.acc = 0; beginBattleView(G.battle);
+}
+function duelOver() {
+  if (G.phase !== 'duel') return;
+  const w = G.battle.winner;
+  el('endTitle').textContent = w === 'A' ? '승리!' : w === 'B' ? '패배…' : '무승부';
+  el('endMsg').textContent = `${G.opp.name}의 진영과 대결했어요. 결과는 매번 조금씩 달라질 수 있어요.`;
+  el('againBtn').textContent = '다시 대결'; el('end').hidden = false; sfx(w === 'A' ? 'win' : 'lose');
+}
+// heartbeat: WebRTC often keeps a dead link 'open' for a long time, so both sides check for silence
+setInterval(() => {
+  const now = Date.now();
+  if (NET.mode === 'client' && NET.conn && NET.conn.open) {
+    try { NET.conn.send({ t: 'ping' }); } catch (e) {}
+    if (G.netStarted && now - (NET.hostSeen || now) > 20000) hostGone();
+  }
+  if (NET.mode === 'host') for (const c of NET.conns.slice()) if (now - (c.seen || now) > 9000) { try { c.close(); } catch (e) {} hostDrop(c); }
+}, 2000);
+el('hostBtn').onclick = () => { audio(); hostRoom(); };
+el('joinBtn').onclick = () => { audio(); joinRoom(el('codeIn').value); };
+el('lobbyStart').onclick = () => { audio(); hostStart(); };
+el('lobbyLeave').onclick = () => toTitle();
+el('shareBtn').onclick = () => {
+  const url = location.origin + location.pathname + '?room=' + NET.code, text = `무과금 오토체스 같이 하자! 방 코드 ${NET.code}`;
+  if (navigator.share) navigator.share({ title: '무과금 오토체스', text, url }).catch(() => {});
+  else copyText(text + '\n' + url, '초대 링크를 복사했어요');
+};
+el('duelBtn').onclick = () => { audio(); openDuel(); };
+el('duelGo').onclick = () => { audio(); startDuel(); };
+el('duelBack').onclick = () => toTitle();
+el('bDeck').onclick = () => { if (G.me) copyText(deckCode(G.me), '진영 코드를 복사했어요. 친구에게 보내세요!'); };
+try { el('nameIn').value = localStorage.getItem('mug-chess-name') || ''; } catch (e) {}
+{ const r = new URLSearchParams(location.search).get('room'); if (r) el('codeIn').value = r.toUpperCase().slice(0, 4); }
 
 /* ================= UI ================= */
 let toastTm = 0;
 function toast(t) { const e = el('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toastTm); toastTm = setTimeout(() => e.classList.remove('show'), 1600); }
 function renderAll() {
   const p = G.me; if (!p) return;
+  if (NET.mode === 'host') NET.dirty = true;
   el('stage').textContent = roundName() + (isPve() ? ' · 몬스터' : '');
   el('gold').textContent = p.gold + 'G';
   el('lvl').innerHTML = `Lv.${p.lv} · 배치 ${boardUnits(p).length}/${p.lv}<div class="xb"><i style="width:${p.lv >= MAXLV ? 100 : p.xp / XP_NEED[p.lv] * 100}%"></i></div>`;
   el('bRoll').disabled = G.phase !== 'plan' || p.gold < 2;
   el('bXp').disabled = G.phase !== 'plan' || p.gold < 4 || p.lv >= MAXLV;
-  el('bFight').disabled = G.phase !== 'plan';
+  el('bFight').disabled = G.phase !== 'plan' || !p.alive || (!!NET.mode && !!p.ready);
+  el('bFight').textContent = NET.mode ? (p.ready ? '대기 중' : '준비 완료') : '전투';
+  el('bDeck').hidden = G.phase !== 'plan' || !boardUnits(p).length;
   const owned = new Set([...p.board, ...p.bench].filter(Boolean).map(u => u.key));
   el('shop').innerHTML = p.shop.map((k, i) => {
     if (!k) return `<div class="card empty" style="--cc:#333"></div>`;
@@ -854,7 +1232,7 @@ function renderAll() {
   }).join('');
   // players
   const ps = G.players.slice().sort((a, b) => (b.alive - a.alive) || b.hp - a.hp || a.place - b.place);
-  el('players').innerHTML = ps.map(q => `<div class="pl${q === p ? ' me' : ''}${q === G.opp ? ' foe' : ''}${q.alive ? '' : ' out'}"><b>${q === G.opp ? '⚔ ' : ''}${q.name}</b><span>${q.alive ? Math.max(0, q.hp) : q.place + '등'}</span><div class="hb"><i style="width:${Math.max(0, q.hp)}%;background:${q === p ? 'var(--gold)' : 'var(--good)'}"></i></div></div>`).join('');
+  el('players').innerHTML = ps.map(q => `<div class="pl${q === p ? ' me' : ''}${q === G.opp ? ' foe' : ''}${q.alive ? '' : ' out'}${q.human && q !== p ? ' hu' : ''}"><b>${q === G.opp ? '⚔ ' : ''}${esc(q.name)}${q.human && q.offline ? ' (AI)' : ''}${NET.mode && G.phase === 'plan' && q.human && q.ready ? ' ✓' : ''}</b><span>${q.alive ? Math.max(0, q.hp) : q.place + '등'}</span><div class="hb"><i style="width:${Math.max(0, q.hp)}%;background:${q === p ? 'var(--gold)' : 'var(--good)'}"></i></div></div>`).join('');
   phaseText();
 }
 function phaseText() {
@@ -873,7 +1251,7 @@ function drawOverlay() {
       const p = scr(a.root.position.x, a.h + .25, a.root.position.z); if (!p) continue;
       const w = 34;
       c.fillStyle = 'rgba(0,0,0,.75)'; c.fillRect(p[0] - w / 2 - 1, p[1] - 1, w + 2, 9);
-      c.fillStyle = f.side === 'A' ? '#5bd06e' : '#e0503a'; c.fillRect(p[0] - w / 2, p[1], w * f.hp / f.maxHp, 4);
+      c.fillStyle = f.side === (G.mySide || 'A') ? '#5bd06e' : '#e0503a'; c.fillRect(p[0] - w / 2, p[1], w * f.hp / f.maxHp, 4);
       if (f.shield > 0) { c.fillStyle = '#fff'; c.fillRect(p[0] - w / 2, p[1], Math.min(w, w * f.shield / f.maxHp), 2); }
       if (f.maxMana < 999) { c.fillStyle = '#5aa0ff'; c.fillRect(p[0] - w / 2, p[1] + 5, w * f.mana / f.maxMana, 2); }
       c.fillStyle = '#ffd070'; c.fillText('★'.repeat(f.star), p[0], p[1] - 3);
@@ -904,16 +1282,26 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   if (G.phase === 'plan') {
-    G.timer -= dt; if (G.timer <= 0) startFight();
+    G.timer -= dt;
+    if (NET.mode === 'host') { if (G.timer <= 0 || allReady()) netStartFight(); }
+    else if (!NET.mode && G.timer <= 0) startFight();
     for (const a of viewActors.values()) { if (a.target) { const p = a.root.position; p.x += (a.target[0] - p.x) * Math.min(1, dt * 12); p.z += (a.target[1] - p.z) * Math.min(1, dt * 12); } a.mixer.update(dt); }
     phaseText();
-  } else if (G.phase === 'combat') {
-    stepBattle(G.battle, dt); battleFrame(G.battle, dt);
-    if (G.battle.over) finishFight();
+  } else if (G.phase === 'combat' || G.phase === 'duel') {
+    // fixed 0.05 s steps: the same steps the host's instant simulation uses
+    if (G.battle) { G.acc = (G.acc || 0) + dt; while (G.acc >= .05 && !G.battle.over) { stepBattle(G.battle, .05); G.acc -= .05; } battleFrame(G.battle, dt); }
+    if (G.phase === 'duel') { if (G.battle.over && !G.battle.told) { G.battle.told = true; setTimeout(duelOver, 1400); } }
+    else if (!NET.mode) { if (G.battle.over) finishFight(); }
+    else {
+      if (G.battle && G.battle.over && !G.battle.told) { G.battle.told = true; tellResult(G.battle); }
+      if (NET.mode === 'host') { G.combatT += dt; if (G.combatT >= G.fightEnd + .6 && (!G.battle || G.battle.over)) netFinishFight(); }
+    }
   } else if (G.phase === 'result') {
-    battleFrame(G.battle, dt); G.timer -= dt; if (G.timer <= 0) nextRound();
+    if (G.battle) battleFrame(G.battle, dt);
+    if (NET.mode !== 'client') { G.timer -= dt; if (G.timer <= 0) nextRound(); }
   }
   if (renderer) { VX.update(dt); MGFX.render(); drawOverlay(); }
+  if (NET.mode === 'host' && G.netStarted && (NET.dirty || now - NET.lastSend > 1000)) { NET.dirty = false; NET.lastSend = now; sendAll({ t: 'state', s: snapshot() }); }
   requestAnimationFrame(frame);
 }
 async function start() {
@@ -927,7 +1315,7 @@ el('bFx').onclick = () => { FXOPT.on = !FXOPT.on; try { localStorage.setItem('mu
 fxBtn();
 start();
 requestAnimationFrame(frame);
-window.__C = G; G.dbg = { get va() { return viewActors; }, syncView, renderAll, startFight, aiPlan, stepBattle, teamPower };
+window.__C = G; G.net = NET; G.dbg = { snapshot, readDeck, deckCode, startDuel, makePairs, get va() { return viewActors; }, syncView, renderAll, startFight, aiPlan, stepBattle, teamPower };
 })();
 </script>
 </body>
