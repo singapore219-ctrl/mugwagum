@@ -196,8 +196,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
   #menu{grid-template-columns:repeat(7,44px);gap:5px}
   .mbtn{height:34px}
   #townbar{top:auto;bottom:16px;right:calc(max(10px, env(safe-area-inset-right, 0px)) + 216px);flex-direction:row}
-  #townbar button{min-width:76px;padding:8px 10px}
-  #log{left:calc(max(12px, env(safe-area-inset-left, 0px)) + 136px);bottom:10px;width:min(34vw, 380px);max-height:76px}
+  #townbar button{min-width:62px;padding:8px 9px}
+  #log{left:calc(max(12px, env(safe-area-inset-left, 0px)) + 136px);bottom:10px;width:min(30vw, 340px);max-height:76px}
   #jbase{bottom:14px;width:108px;height:108px}
   #joy{height:60%}
   #raidbar{top:calc(env(safe-area-inset-top, 0px) + 8px);width:min(34vw, 340px)}
@@ -351,6 +351,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
   <div id="townbar" hidden>
     <button data-open="shop">상점</button>
     <button data-open="tele">텔레포트</button>
+    <button data-open="bank">창고</button>
   </div>
   <div id="acts">
     <button class="act" id="bRet">귀환<small id="cRet">0</small></button>
@@ -625,8 +626,44 @@ const CHESS_URL = location.protocol.startsWith('http') && !/claude/.test(locatio
 // each rebirth makes the next 120 levels take longer
 const need = L => Math.floor((30 + 18 * Math.pow(L, 2.4)) * (1 + .4 * (S && S.reb || 0)));
 const SAVE_KEY = 'mugwagum-hunt-v1';
-function save() { if (!S) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} }
+function save() { if (!S) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); localStorage.setItem('mugwagum-adena', String(Math.floor(S.adena))); } catch (e) {} }
 function load() { try { const s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+/* ---------- character slots ----------
+   The playing character always lives in SAVE_KEY; the others wait in mugwagum-slot-N.
+   Switching parks the current one, moves the chosen one into SAVE_KEY and reloads the page. */
+const SLOT_MAX = 3, SLOTS_KEY = 'mugwagum-slots', slotKey = i => 'mugwagum-slot-' + i;
+function slotMeta() { try { return Object.assign({ active: 0 }, JSON.parse(localStorage.getItem(SLOTS_KEY) || '{}')); } catch (e) { return { active: 0 }; } }
+function slotData(i) {
+  if (i === slotMeta().active) return S || load();
+  try { return JSON.parse(localStorage.getItem(slotKey(i)) || 'null'); } catch (e) { return null; }
+}
+function switchSlot(i) {
+  const m = slotMeta(); if (i === m.active || i < 0 || i >= SLOT_MAX) return;
+  try {
+    if (S) { delete S.away; localStorage.setItem(slotKey(m.active), JSON.stringify(S)); localStorage.setItem(ADENA_KEY, String(Math.floor(S.adena))); }
+    const t = localStorage.getItem(slotKey(i));
+    if (t) localStorage.setItem(SAVE_KEY, t); else localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem(slotKey(i));
+    m.active = i; localStorage.setItem(SLOTS_KEY, JSON.stringify(m));
+  } catch (e) { toast('저장 공간에 접근할 수 없어요'); return; }
+  S = null; R.ready = false; location.reload();
+}
+/* ---------- shared warehouse: adena, stackable items and gear move between characters ---------- */
+const BANK_KEY = 'mugwagum-bank';
+// adena is one wallet for every character: kept in its own key and copied into S on load / out on save
+const ADENA_KEY = 'mugwagum-adena';
+function sharedAdena() { try { const v = localStorage.getItem(ADENA_KEY); return v == null ? null : Math.max(0, +v || 0); } catch (e) { return null; } }
+function bankGet() { try { return Object.assign({ adena: 0, stack: {}, gear: [] }, JSON.parse(localStorage.getItem(BANK_KEY) || '{}')); } catch (e) { return { adena: 0, stack: {}, gear: [] }; } }
+function bankPut(b) { try { localStorage.setItem(BANK_KEY, JSON.stringify(b)); return true; } catch (e) { toast('창고에 저장하지 못했어요'); return false; } }
+const BANK_ITEMS = () => Object.keys(ITEMS).filter(k => !k.startsWith('j_'));
+function bankAct(a, v) {
+  const b = bankGet();
+  if (a === 'bid') { const [k, m] = v.split(':'), n = m === 'all' ? cnt(k) : Math.min(cnt(k), +m); if (n <= 0) return; S.stack[k] -= n; b.stack[k] = (b.stack[k] || 0) + n; }
+  else if (a === 'bit') { const [k, m] = v.split(':'), n = m === 'all' ? (b.stack[k] || 0) : Math.min(b.stack[k] || 0, +m); if (n <= 0) return; b.stack[k] -= n; if (!b.stack[k]) delete b.stack[k]; addItem(k, n); }
+  else if (a === 'bgd') { const g = gearById(+v); if (!g || isEq(g.id)) return; S.gear = S.gear.filter(x => x !== g); b.gear.push({ b: g.b, e: g.e }); }
+  else if (a === 'bgt') { const g = b.gear[+v]; if (!g) return; b.gear.splice(+v, 1); addGear(g.b, g.e); }
+  if (bankPut(b)) save();
+}
 const gearById = id => S.gear.find(g => g.id === id);
 const isEq = id => SLOTS.some(s => S.eq[s] === id);
 const gname = g => (g.e ? `+${g.e} ` : '') + GEAR[g.b].n;
@@ -2792,12 +2829,12 @@ function hud() {
 }
 
 /* ================= SHEETS ================= */
-const TITLES = { pet: '펫', poly: '변신', party: '파티', bag: '가방', enc: '강화', char: '캐릭터 정보', set: '설정', shop: '상점 · 상인 메리', tele: '텔레포트 · 텔레포터 루카' };
+const TITLES = { bank: '창고 · 창고지기 한스', pet: '펫', poly: '변신', party: '파티', bag: '가방', enc: '강화', char: '캐릭터 정보', set: '설정', shop: '상점 · 상인 메리', tele: '텔레포트 · 텔레포터 루카' };
 function openSheet(n) {
   if (!S || R.dead) return;
   if (n !== 'party') R.partyPick = null;
   R.confirmReb = false;
-  if ((n === 'shop' || n === 'tele') && !ZONES[S.zone].town) return;
+  if ((n === 'shop' || n === 'tele' || n === 'bank') && !ZONES[S.zone].town) return;
   R.sheet = n; R.confirmReset = false; el('sheet').hidden = false; el('sheetBody').scrollTop = 0; renderSheet();
 }
 function closeSheet() { R.sheet = null; el('sheet').hidden = true; R.encRes = null; }
@@ -2847,6 +2884,31 @@ function fuseView() {
       <div class="btns"><button class="btn" data-a="fusein" data-v="${id}" ${sp > 0 && f.picks.length < 4 ? '' : 'disabled'}>넣기</button></div></div>`;
   }
   return h;
+}
+function bankView() {
+  const b = bankGet();
+  let h = `<p class="note" style="margin-top:6px">창고는 모든 캐릭터가 함께 써요. 여기 맡긴 아이템과 장비는 다른 캐릭터로 접속해서 찾을 수 있어요. 아데나는 원래 모든 캐릭터가 같이 써요.</p>
+    <div class="sec">창고에 있는 아이템</div>`;
+  const inBank = Object.keys(b.stack).filter(k => b.stack[k] > 0 && ITEMS[k]);
+  if (!inBank.length) h += `<p class="note">비어 있어요.</p>`;
+  for (const k of inBank) h += `<div class="row">${itemIco(k)}<div class="info"><div class="n">${ITEMS[k].n}</div><div class="s">${fmt(b.stack[k])}개</div></div><div class="btns"><button class="btn" data-a="bit" data-v="${k}:10">10개</button><button class="btn pri" data-a="bit" data-v="${k}:all">전부 찾기</button></div></div>`;
+  for (let i = 0; i < b.gear.length; i++) { const g = b.gear[i]; h += `<div class="row">${gearIco(g)}<div class="info"><div class="n" style="color:${ecol(g.e)}">${gname(g)}</div><div class="s">${gearStat(g)}</div></div><div class="btns"><button class="btn pri" data-a="bgt" data-v="${i}">찾기</button></div></div>`; }
+  h += `<div class="sec">맡길 수 있는 내 아이템</div>`;
+  const mine = BANK_ITEMS().filter(k => cnt(k) > 0);
+  for (const k of mine) h += `<div class="row">${itemIco(k)}<div class="info"><div class="n">${ITEMS[k].n}</div><div class="s">${fmt(cnt(k))}개</div></div><div class="btns"><button class="btn" data-a="bid" data-v="${k}:10">10개</button><button class="btn" data-a="bid" data-v="${k}:all">전부</button></div></div>`;
+  for (const g of sortedGear().filter(g => !isEq(g.id))) h += `<div class="row">${gearIco(g)}<div class="info"><div class="n" style="color:${ecol(g.e)}">${gname(g)}</div><div class="s">${gearStat(g)}</div></div><div class="btns"><button class="btn" data-a="bgd" data-v="${g.id}">맡기기</button></div></div>`;
+  if (!mine.length && !S.gear.some(g => !isEq(g.id))) h += `<p class="note">맡길 아이템이 없어요. 착용 중인 장비는 맡길 수 없어요.</p>`;
+  return h;
+}
+function slotsView() {
+  const m = slotMeta(); let h = '';
+  for (let i = 0; i < SLOT_MAX; i++) {
+    const d = slotData(i), on = i === m.active;
+    if (d && d.cls && CLS[d.cls]) h += `<div class="row${on ? ' sel' : ''}"><i class="ico spr" style="${sprStyle('cls', ['knight', 'elf', 'mage'].indexOf(d.cls))};background-size:300% 112%;background-position-y:12%"></i><div class="info"><div class="n">${d.name} <span style="color:var(--gold2);font-size:11px">Lv.${d.lv}${d.reb ? ' ✦' + d.reb : ''}</span></div><div class="s">${CLS[d.cls].n}${d.zone != null && ZONES[d.zone] ? ' · ' + ZONES[d.zone].n : ''}</div></div>
+      <div class="btns">${on ? '<span class="tag">접속 중</span>' : `<button class="btn pri" data-a="slotgo" data-v="${i}">접속</button>`}</div></div>`;
+    else h += `<div class="row" style="opacity:.75"><span class="ico" style="background:#2a2217;color:var(--dim)">+</span><div class="info"><div class="n">빈 슬롯 ${i + 1}</div><div class="s">새 캐릭터를 만들 수 있어요</div></div><div class="btns"><button class="btn" data-a="slotgo" data-v="${i}">새 캐릭터</button></div></div>`;
+  }
+  return h + `<p class="note">다른 캐릭터로 바꾸면 지금 캐릭터는 그 자리에서 저장되고 쉬어요(자리 비움 사냥은 접속 중인 캐릭터만 돼요). <b>아데나는 모든 캐릭터가 함께 써요.</b> 아이템과 장비는 마을의 <b>창고</b>로 주고받을 수 있어요.</p>`;
 }
 const VIEWS = {
   pet() {
@@ -2977,6 +3039,7 @@ const VIEWS = {
       ${ZONES.slice(1).filter(z => !z.raid).sort((a, b) => parseInt(a.lv) - parseInt(b.lv)).map(z => `<div class="row"><div class="info"><div class="n">${z.n}</div><div class="s">권장 Lv.${z.lv}${z.boss ? ` · 보스 ${MON[z.boss].n}` : ''} · ${z.mons.map(k => MON[k].n).join(', ')}</div></div></div>`).join('')}
       <p class="note">3D 모델: KayKit (Kay Lousberg, CC0)</p>`;
   },
+  bank() { return bankView(); },
   set() {
     const o = S.opts, tog = (k, t) => `<div class="set"><span>${t}</span><button class="tog ${o[k] ? 'on' : ''}" data-a="tog" data-v="${k}" aria-pressed="${!!o[k]}"></button></div>`;
     return `<div class="set"><span>자동 물약 <b id="potv" style="color:var(--gold2)">${o.pot ? `HP ${o.pot}% 이하` : '끔'}</b></span><input type="range" id="potr" min="0" max="90" step="10" value="${o.pot}"></div>
@@ -2990,6 +3053,8 @@ const VIEWS = {
       <p class="note">조작: 왼쪽 아래를 끌어서 이동, 몬스터를 누르면 공격, 빈 땅을 누르면 그 자리로 이동합니다. 화면을 끌면 시점이 돌아가고, 두 손가락으로 벌리거나 오므리면 확대·축소됩니다. PC에서는 WASD·방향키로 이동, Space 공격, Q 스킬, E 물약, R 자동사냥, T 순간이동, 마우스 휠·Z/X 확대·축소, 쉼표/마침표 회전, C 시점 초기화.</p>
       <p class="note">휴대폰이 뜨거워지거나 끊기면 저사양 모드를 켜 보세요. 저장은 이 기기 브라우저에만 됩니다.</p>
       <p class="note">앱처럼 쓰기: 안드로이드 크롬 ⋮ 메뉴 → 홈 화면에 추가, 아이폰 사파리 공유 버튼 → 홈 화면에 추가. 사냥터에서 자동 사냥을 켠 채 화면을 꺼도, 다시 켜면 그동안 사냥한 결과를 받아요. (최대 12시간)</p>
+      <div class="sec">캐릭터 (최대 ${SLOT_MAX}명)</div>
+      ${slotsView()}
       <div class="sec">다른 게임</div>
       <a class="btn wide" style="display:block;text-align:center;text-decoration:none" href="${CHESS_URL}">무과금 오토체스 하러 가기</a>
       <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="${CHESS_URL.replace('chess/', 'war/')}">무과금 영토전쟁 하러 가기</a>
@@ -2999,7 +3064,7 @@ const VIEWS = {
       ${R.saveCode ? `<textarea class="codebox" id="saveCodeOut" readonly>${R.saveCode}</textarea><p class="note">${R.saveCodeMsg || ''} 길이 ${fmt(R.saveCode.length)}자</p>` : ''}
       <textarea class="codebox" id="saveCodeIn" placeholder="다른 기기에서 복사한 저장 코드를 여기에 붙여넣기">${(R.importText || '').replace(/</g, '&lt;')}</textarea>
       <button class="btn wide" data-a="loadcode" ${R.importText ? '' : 'disabled'}>${R.confirmImport ? '지금 캐릭터를 덮어써요. 한 번 더 누르면 불러옵니다' : '저장 코드 불러오기'}</button>
-      <button class="btn wide danger" data-a="reset">${R.confirmReset ? '정말 삭제할까요? 한 번 더 누르면 삭제됩니다' : '캐릭터 삭제하고 새로 시작'}</button>`;
+      <button class="btn wide danger" data-a="reset">${R.confirmReset ? '정말 삭제할까요? 한 번 더 누르면 삭제됩니다' : '이 캐릭터 삭제하고 새로 시작'}</button>`;
   },
   shop() {
     let h = `<div class="sec">물약 · 주문서</div>`;
@@ -3205,6 +3270,8 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'savecode') { exportSave(); return; }
   else if (a === 'loadcode') { if (!R.confirmImport) R.confirmImport = true; else { importSave(); return; } }
   else if (a === 'awktog') { S.opts.awaken = S.opts.awaken === false; toast('다음에 사냥터에 들어갈 때부터 적용돼요'); }
+  else if (a === 'slotgo') { switchSlot(+v); return; }
+  else if (['bid', 'bit', 'bgd', 'bgt'].includes(a) && town) { bankAct(a, v); }
   else if (a === 'pktog') { S.opts.pkOn = S.opts.pkOn === false; }
   else if (a === 'posttog') { S.opts.post = S.opts.post === false; }
   else if (a === 'pkattack') { pkAttackBot(v); return; }
@@ -3424,6 +3491,7 @@ el('startBtn').addEventListener('click', () => {
 el('reviveBtn').addEventListener('click', () => { R.dead = false; S.hp = Math.round(D.maxHp * .6); S.mp = Math.round(D.maxMp * .6); el('death').hidden = true; P.act.curName = ''; enterZone(0); });
 function begin() {
   S.opts = Object.assign({ pot: 50, tele: true, haste: true, mpPot: true, sound: true, lowfx: false }, S.opts || {});
+  { const sa = sharedAdena(); if (sa != null) S.adena = sa; }
   if (!(S.zone < ZONES.length) || ZONES[S.zone].raid) S.zone = 0;
   if (P.act) killActor(P.act);
   P.act = makeActor({ model: CLS[S.cls].model, flash: true, st: '1h' }); P.act.kindKey = 'cls'; P.look = '';
