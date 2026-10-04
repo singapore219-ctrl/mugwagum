@@ -1202,6 +1202,8 @@ function setWeapons(a, r, l, glow) {
   if (a.wl) { a.wl.parent && a.wl.parent.remove(a.wl); a.wl = null; }
   if (r && a.hr) { a.wr = propClone(r, glow); if (a.wr) { a.hr.add(a.wr); if (a.hd) a.wr.scale.multiplyScalar(CHAR_SCALE * a.hd.slotScale); } }
   if (l && a.hl) { a.wl = propClone(l, glow && l.includes('bow') ? glow : null); if (a.wl) { a.hl.add(a.wl); if (a.hd) a.wl.scale.multiplyScalar(CHAR_SCALE * a.hd.slotScale); } }
+  // the bow prop faces its string away from the archer; on realistic bodies that reads as held backwards
+  if (a.hd) for (const w of [a.wr, a.wl]) if (w && /bow/i.test(w.name || '')) w.rotateY(Math.PI);
 }
 function play(a, name, opt = {}) {
   if (!a) return;
