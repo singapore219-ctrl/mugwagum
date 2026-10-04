@@ -67,6 +67,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
 #party .pm i{display:block;height:5px;border-radius:2px;background:rgba(0,0,0,.6);overflow:hidden}
 #party .pm i::after{content:"";display:block;height:100%;width:var(--w,100%);background:#59c46e}
 #party .pm.dead{opacity:.45}
+#party .phd{background:none;border:0;padding:0;font:inherit;font-size:10.5px;font-weight:700;color:#bfeccb;cursor:pointer;text-align:left}
+#party .pdots{display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle}
+#party .pdots i{width:22px;height:5px;border-radius:2px;background:rgba(0,0,0,.6);overflow:hidden;display:block}
+#party .pdots i::after{content:"";display:block;height:100%;width:var(--w,100%);background:#59c46e}
+#party .pdots i.dead{opacity:.4}
 #log .party b{color:#8fe8a8;font-weight:500}
 #log .party{color:#d8f5df}
 #buffs{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
@@ -184,14 +189,19 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
   #townbar{top:30%}
 }
 @media (orientation:landscape){
-  #stat{width:min(300px, 36vw);padding:6px 8px 7px}
-  .bar{height:13px;margin-top:4px}
-  .bar span{font-size:10px;line-height:11px}
-  .bar.ex{height:8px}
+  #stat{width:min(232px, 29vw);padding:5px 7px 6px}
+  .nrow .lv{font-size:13.5px} .nrow .nm{font-size:12px} .nrow .cl{font-size:10px}
+  .bar{height:12px;margin-top:3px}
+  .bar span{font-size:9.5px;line-height:10px}
+  .bar.ex{height:11px}
+  .bar.ex span{font-size:8.5px;line-height:9px}
   #buffs{flex-wrap:nowrap;overflow:hidden;gap:4px;margin-top:4px;-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}
   .chip{white-space:nowrap;flex:none}
-  #party{margin-top:4px;gap:2px}
-  #party .pm{font-size:10px}
+  #party{margin-top:3px;gap:1px;flex-direction:row;flex-wrap:wrap;align-items:center;column-gap:8px}
+  #party .phd{width:100%}
+  #party .pm{font-size:9.5px;grid-template-columns:auto 34px;gap:4px}
+  #party .pm b{max-width:62px}
+  #party .pm i{height:4px}
   #right{gap:4px}
   #menu{grid-template-columns:repeat(7,44px);gap:5px}
   .mbtn{height:34px}
@@ -204,7 +214,6 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
   #toast{top:30%}
 }
 @media (orientation:landscape) and (max-height:420px){
-  #party .pm:nth-child(n+4){display:none}
   #acts{transform:scale(.92);transform-origin:right bottom}
 }
 #rotate{display:none;position:fixed;inset:0;z-index:60;align-items:center;justify-content:center;flex-direction:column;gap:18px;padding:24px;text-align:center;
@@ -1205,6 +1214,8 @@ function setWeapons(a, r, l, glow) {
   if (l && a.hl) { a.wl = propClone(l, glow && l.includes('bow') ? glow : null); if (a.wl) { a.hl.add(a.wl); if (a.hd) a.wl.scale.multiplyScalar(CHAR_SCALE * a.hd.slotScale); } }
   // the bow prop faces its string away from the archer; on realistic bodies that reads as held backwards
   if (a.hd) for (const w of [a.wr, a.wl]) if (w && /bow/i.test(w.name || '')) w.rotateY(Math.PI);
+  // the open spellbook hangs edge-on from a realistic hand; lay it open, pages up, on the palm
+  if (a.hd) for (const w of [a.wr, a.wl]) if (w && /spellbook/i.test(w.name || '')) w.rotation.set(0, Math.PI / 2, 0);
 }
 function play(a, name, opt = {}) {
   if (!a) return;
@@ -2375,6 +2386,90 @@ const VX = (() => {
     burst(x, z, .7, 22, { color: [0xffd070, color], speed: 4, up: 1.5, life: .55, size: .3, grav: -5 }); scorch(x, z, r * .6, 3); shake(.12);
   }
 
+  // ---------- melee: a bright sword arc that sweeps and fades ----------
+  function slash(x, z, y = .9, r = 1.2, color = 0xdfeaff, dur = .3, tilt = rnd(-.5, .5)) {
+    const g = new THREE.RingGeometry(.72, 1, 36, 1, 0, Math.PI * .95), m = addMat(color);
+    const o = new THREE.Mesh(g, m); o.userData.own = true; o.position.set(x, y, z);
+    o.rotation.set(-Math.PI / 2 + tilt, 0, rnd(0, 6.28)); o.scale.setScalar(r);
+    const core = new THREE.Mesh(new THREE.RingGeometry(.9, .97, 36, 1, 0, Math.PI * .95), addMat(0xffffff)); core.userData.own = true; o.add(core);
+    add(o, e => { const p = e.t / dur; o.rotation.z += .09; const s = r * (.8 + p * .35); o.scale.set(s, s, s); m.opacity = 1 - p; core.material.opacity = 1 - p; return p < 1; });
+    burst(x, z, y, 10, { color: [0xffffff, color], speed: 3.5, life: .3, size: .18, grav: -3 });
+  }
+  // ---------- whirlwind: blades spinning around an entity ----------
+  function whirl(ent, r = 2.4, color = 0xe8f0ff, dur = .5) {
+    for (const [h, dir, th] of [[.75, 1, 1.6], [1.05, -1, 1.2]]) {
+      const m = addMat(color), o = new THREE.Mesh(new THREE.RingGeometry(.8, 1, 48, 1, 0, Math.PI * th), m); o.userData.own = true;
+      o.rotation.x = -Math.PI / 2;
+      add(o, e => { const p = e.t / dur, s = r * (.55 + p * .5); o.position.set(ent.x, h, ent.y); o.scale.set(s, s, s); o.rotation.z += dir * .45; m.opacity = (1 - p) * .9; return p < 1; });
+    }
+    for (let k = 0; k < (low() ? 14 : 28); k++) { const a = rnd(0, 6.28); emit({ x: ent.x + Math.cos(a) * r * .6, y: rnd(.1, 1), z: ent.y + Math.sin(a) * r * .6, vx: -Math.sin(a) * 5 + Math.cos(a) * 2, vy: rnd(0, 1), vz: Math.cos(a) * 5 + Math.sin(a) * 2, life: .45, size: rnd(.15, .3), color: k % 3 ? color : 0xb0a080, grav: -1, drag: 2.5 }); }
+    shockwave(ent.x, ent.y, r, color, .45);
+  }
+  // ---------- ground cracks glowing outward from a point ----------
+  function cracks(x, z, r, color = 0xffa040, dur = 1.4) {
+    const n = low() ? 6 : 9;
+    for (let i = 0; i < n; i++) {
+      const a = i / n * 6.283 + rnd(-.2, .2), len = r * rnd(.6, 1), m = addMat(color);
+      const o = new THREE.Mesh(new THREE.PlaneGeometry(.09, 1), m); o.userData.own = true;
+      o.rotation.set(-Math.PI / 2, 0, -a + Math.PI / 2); o.position.set(x, .045, z);
+      add(o, e => { const grow = Math.min(1, e.t / .15), L = len * grow; o.scale.set(1 + (1 - grow), L, 1); o.position.set(x + Math.cos(a) * L / 2, .045, z + Math.sin(a) * L / 2); m.opacity = Math.max(0, 1 - e.t / dur); return e.t < dur; });
+    }
+  }
+  // ---------- arrows raining from the sky onto an area ----------
+  function arrowRain(x, z, r, n, dur = .5, color = 0xbfe8a0, onLand) {
+    n = Math.round(n * (low() ? .6 : 1));
+    for (let i = 0; i < n; i++) {
+      const a = rnd(0, 6.28), d = Math.sqrt(Math.random()) * r, tx = x + Math.cos(a) * d, tz = z + Math.sin(a) * d, delay = rnd(0, dur), sx = tx - 1.2, sz = tz - .8, sy = 7;
+      const o = propClone('arrow_bow'); if (!o) continue;
+      o.scale.setScalar(CHAR_SCALE * 1.3); o.visible = false;
+      const dir = new THREE.Vector3(tx - sx, -sy, tz - sz).normalize(); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+      let landed = false;
+      add(o, e => {
+        const t = e.t - delay; if (t < 0) return true; o.visible = true;
+        const p = Math.min(1, t / .28);
+        o.position.set(sx + (tx - sx) * p, sy * (1 - p) + .15, sz + (tz - sz) * p);
+        if (p < 1) emit({ x: o.position.x, y: o.position.y + .3, z: o.position.z, life: .18, size: .16, color, grav: 0 });
+        else if (!landed) { landed = true; burst(tx, tz, .1, 4, { color: [0xd8c8a0, color], speed: 1.4, up: .8, life: .3, size: .16, grav: -4 }); if (onLand) onLand(tx, tz); }
+        return t < .28 + .35;
+      });
+    }
+  }
+  // ---------- a straight bright beam (piercing shot) ----------
+  function beam(a, b, color = 0xffe08a, dur = .3, w = .07) {
+    const d = b.clone().sub(a), L = d.length(), m = addMat(color);
+    const o = new THREE.Mesh(new THREE.CylinderGeometry(w, w, 1, 8, 1, true), m); o.userData.own = true;
+    o.position.copy(a).addScaledVector(d, .5); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize()); o.scale.set(1, L, 1);
+    add(o, e => { const p = e.t / dur; o.scale.set(1 + p * 2, L, 1 + p * 2); m.opacity = 1 - p; return p < 1; });
+  }
+  // ---------- toxic cloud lingering at a spot ----------
+  function toxic(ent, dur = 6) {
+    const holder = new THREE.Object3D();
+    add(holder, e => {
+      if (ent.dead) return false;
+      if (Math.random() < (low() ? .35 : .7)) emit({ x: ent.x + rnd(-.4, .4), y: rnd(.2, 1.2), z: ent.y + rnd(-.4, .4), vy: rnd(.3, .9), life: rnd(.6, 1), size: rnd(.3, .55), color: Math.random() < .5 ? 0x50e060 : 0x2a9a3a, grav: .2, drag: 1, a: .7 });
+      return e.t < dur;
+    });
+  }
+  // ---------- buff aura that follows an entity while the buff lasts ----------
+  function aura(ent, dur, kind) {
+    const cfg = {
+      rage: { c: [0xff4020, 0xffa060], rate: .8, up: [1.2, 2.4], r: .5, size: .26 },
+      avatar: { c: [0xff7a20, 0xffd070, 0xff4010], rate: 1.4, up: [1.6, 3], r: .55, size: .32 },
+      wind: { c: [0x8ff0d8, 0xd8fff4], rate: .9, up: [.2, .6], r: .7, size: .2, orbit: 1 },
+      eagle: { c: [0xffe08a, 0xfff6c8], rate: .6, up: [.1, .4], r: .35, size: .2, head: 1 },
+    }[kind]; if (!cfg) return;
+    const holder = new THREE.Object3D();
+    add(holder, e => {
+      const h = ent.act ? ent.act.h : 1.5;
+      if (Math.random() < cfg.rate * (low() ? .5 : 1)) {
+        const a = rnd(0, 6.28), rr = cfg.r * rnd(.6, 1.1);
+        emit({ x: ent.x + Math.cos(a) * rr, y: cfg.head ? h + .25 : rnd(.05, h * .6), z: ent.y + Math.sin(a) * rr,
+          vx: cfg.orbit ? -Math.sin(a) * 2 : 0, vy: rnd(cfg.up[0], cfg.up[1]), vz: cfg.orbit ? Math.cos(a) * 2 : 0, life: rnd(.5, .8), size: cfg.size * rnd(.7, 1.2), color: pick(cfg.c), grav: 0, drag: 1.5 });
+      }
+      return e.t < dur && !(ent === P && (R.dead || !buffOn(kind)));
+    });
+  }
+
   function update(dt) {
     if (!pts) return;
     // particles
@@ -2416,7 +2511,7 @@ const VX = (() => {
     for (const d of debris) { tmpM.makeScale(0, 0, 0); d.im.setMatrixAt(d.idx, tmpM); d.im.userData.free.push(d.idx); d.im.instanceMatrix.needsUpdate = true; } debris.length = 0;
     for (const e of effects) { scene.remove(e.obj); if (e.obj.userData.own) e.obj.geometry.dispose(); } effects.length = 0;
   }
-  return { init, update, clear, camShake, emit, burst, chunks, shockwave, fireball, scorch, shake, flash, lightning, spikes, dome, pillar, meteor, bigBoom, smallBoom };
+  return { init, update, clear, camShake, emit, burst, chunks, shockwave, fireball, scorch, shake, flash, lightning, spikes, dome, pillar, meteor, bigBoom, smallBoom, slash, whirl, cracks, arrowRain, beam, toxic, aura };
 })();
 
 function ftxt(e, txt, col, size = 14, h) { R.txt.push({ x: e.x, y: e.y, txt, col, size, t: 0, dur: .95, h: h != null ? h : (e.act ? e.act.h + .35 : 1.8), dx: rnd(-8, 8) }); }
@@ -2492,6 +2587,7 @@ function updateProj(dt) {
     if (p.obj) { p.obj.position.set(p.x, .95, p.y); if (!p.obj.isSprite) p.obj.rotation.set(0, Math.atan2(dx, dy), 0); }
     // glowing trails behind spell projectiles
     if (p.kind === 'fire') for (let k = 0; k < 2; k++) VX.emit({ x: p.x + rnd(-.12, .12), y: .95 + rnd(-.12, .12), z: p.y + rnd(-.12, .12), vy: rnd(.2, .8), life: .4, size: rnd(.3, .55), color: k ? 0xff5a10 : 0xffb050, grav: .5, drag: 2 });
+    else if (p.trail) VX.emit({ x: p.x, y: .95, z: p.y, life: .22, size: p.tsize || .22, color: p.trail, grav: 0 });
     else if (p.kind === 'ice' || p.kind === 'bolt' || p.kind === 'mbolt') VX.emit({ x: p.x + rnd(-.08, .08), y: .95 + rnd(-.08, .08), z: p.y + rnd(-.08, .08), vy: rnd(-.2, .2), life: .3, size: rnd(.15, .3), color: p.kind === 'ice' ? 0xdff6ff : p.kind === 'mbolt' ? 0xd0a0ff : 0x9fd0ff, grav: -.5, drag: 3 });
   }
 }
@@ -2721,27 +2817,30 @@ function castSkill(sk, t) {
   switch (sk.id) {
     case 'bash':
       attackAnim(P, 'Melee_2H_Attack_Spin', D.aspd * 1.2);
-      later(220, () => { if (!t.dead) { hitMon(P, t, rollDmg() * 2.3, true); fx('slash', t.x, t.y, { col: D.glow || 0xcfe3ff, dur: .35 }); fx('ring', t.x, t.y, { col: 0xcfe3ff, r1: 1.4, dur: .35 }); } });
+      later(220, () => { if (!t.dead) { hitMon(P, t, rollDmg() * 2.3, true); VX.slash(t.x, t.y, .9, 1.3, D.glow || 0xffe0a0); VX.shockwave(t.x, t.y, 1.5, 0xffd890, .35); VX.burst(t.x, t.y, .9, 16, { color: [0xffffff, 0xffd070], speed: 5, life: .35, size: .2, grav: -4 }); VX.shake(.1); } });
       break;
     case 'whirl':
       attackAnim(P, 'Melee_2H_Attack_Spin', .9);
-      later(260, () => { fx('ring', P.x, P.y, { col: 0xe8f0ff, r1: 2.6, dur: .45 }); fx('slash', P.x, P.y, { col: D.glow || 0xe8f0ff, dur: .4 }); aoeHit(P.x, P.y, 2.4, () => rollDmg() * 1.6); });
+      later(260, () => { VX.whirl(P, 2.5, D.glow || 0xe8f0ff); aoeHit(P.x, P.y, 2.4, () => rollDmg() * 1.6); });
       break;
     case 'triple':
       attackAnim(P, 'Ranged_Bow_Release', D.aspd * .8);
-      for (let k = 0; k < 3; k++) proj({ from: P, to: t, kind: 'arrow', sp: 16, delay: .12 + k * .1, onHit: () => hitMon(P, t, rollDmg() * .85) });
+      for (let k = 0; k < 3; k++) proj({ from: P, to: t, kind: 'arrow', sp: 18, delay: .12 + k * .1, trail: 0xc8ffb0, onHit: () => { hitMon(P, t, rollDmg() * .85); VX.burst(t.x, t.y, .9, 6, { color: [0xffffff, 0xc8ffb0], speed: 3, life: .25, size: .16 }); } });
       break;
     case 'rain': {
       attackAnim(P, 'Ranged_Bow_Release', .9);
       const cx = t.x, cy = t.y;
-      fx('ring', cx, cy, { col: 0x9fd0ff, r1: 2.6, dur: .8 });
-      for (let k = 0; k < 5; k++) later(250 + k * 70, () => fx('hit', cx + rnd(-1.6, 1.6), cy + rnd(-1.6, 1.6), { col: 0xbfe0ff, dur: .25, r1: .8, h: .3 }));
+      VX.shockwave(cx, cy, 2.6, 0x9fd0ff, .8);
+      VX.arrowRain(cx, cy, 2.4, 14, .45, 0xbfe0ff);
       later(450, () => aoeHit(cx, cy, 2.5, () => rollDmg() * 1.5));
       break;
     }
     case 'snipe':
       attackAnim(P, 'Ranged_Bow_Draw', 1.1);
-      proj({ from: P, to: t, kind: 'arrow', sp: 26, delay: .7, onHit: () => { hitMon(P, t, rollDmg() * 3.6, true); fx('hit', t.x, t.y, { col: 0xffe08a, dur: .3, r1: 2, h: 1 }); } });
+      for (let k = 0; k < 10; k++) later(k * 60, () => VX.emit({ x: P.x + rnd(-.3, .3), y: rnd(.8, 1.4), z: P.y + rnd(-.3, .3), vy: rnd(.3, .8), life: .5, size: .2, color: 0xffe08a, grav: 0 }));
+      proj({ from: P, to: t, kind: 'arrow', sp: 30, delay: .7, trail: 0xffe08a, tsize: .4, onHit: () => { const hv = e => new THREE.Vector3(e.x, e === P ? 1.2 : (e.act ? e.act.h * .55 : .9), e.y);
+        VX.beam(hv(P), hv(t).add(hv(t).sub(hv(P)).normalize().multiplyScalar(3)), 0xffe08a, .3); VX.fireball(t.x, .9, t.y, .7, 0xffd060, .3);
+        VX.burst(t.x, t.y, .9, 20, { color: [0xffffff, 0xffe08a], speed: 6, life: .4, size: .22, grav: -3 }); VX.shake(.15); hitMon(P, t, rollDmg() * 3.6, true); } });
       break;
     case 'fireball':
       attackAnim(P, 'Ranged_Magic_Spellcasting', D.aspd);
@@ -2776,35 +2875,39 @@ function castSkill(sk, t) {
     }
     case 'sbash':
       attackAnim(P, 'Melee_1H_Attack_Chop', D.aspd);
-      later(200, () => { if (t.dead) return; fx('ring', t.x, t.y, { col: 0xd8e0f0, r1: 1.8, dur: .4 }); fx('hit', t.x, t.y, { col: 0xffffff, dur: .3, r1: 1.4, h: .8 }); hitMon(P, t, rollDmg() * 2.8, true); aoeHit(t.x, t.y, 1.7, () => rollDmg()); });
+      later(200, () => { if (t.dead) return; VX.shockwave(t.x, t.y, 2, 0xdfe8ff, .4); VX.fireball(t.x, .8, t.y, .8, 0xcfe0ff, .3); VX.burst(t.x, t.y, .8, 18, { color: [0xffffff, 0xbfd8ff], speed: 5, life: .35, size: .2, grav: -5 }); VX.shake(.15); hitMon(P, t, rollDmg() * 2.8, true); aoeHit(t.x, t.y, 1.7, () => rollDmg()); });
       break;
     case 'quake':
       attackAnim(P, 'Melee_2H_Attack_Chop', 1.1);
-      later(380, () => { fx('ring', P.x, P.y, { col: 0xc89a5a, r1: 3.6, dur: .6 }); fx('boom', P.x, P.y, { col: 0x8a6a3a, r1: 3.4, dur: .6 }); aoeHit(P.x, P.y, 3.3, () => rollDmg() * 2.4); });
+      later(380, () => { VX.cracks(P.x, P.y, 3.4); VX.shockwave(P.x, P.y, 3.8, 0xffb060, .6); VX.shockwave(P.x, P.y, 2.4, 0xd8b080, .45); VX.chunks('rock', P.x, P.y, 16, { speed: 4, up: 5, r: 1, size: 1.3 }); VX.burst(P.x, P.y, .2, 30, { color: [0xc8a070, 0xffa040], speed: 5, up: 1, life: .8, size: .35, grav: -4 }); VX.scorch(P.x, P.y, 3); VX.shake(.45); aoeHit(P.x, P.y, 3.3, () => rollDmg() * 2.4); });
       break;
     case 'drain':
       attackAnim(P, 'Melee_2H_Attack_Slice', D.aspd);
-      later(220, () => { if (t.dead) return; const d = rollDmg() * 3; hitMon(P, t, d, true); const h = Math.round(d * .3); S.hp = Math.min(D.maxHp, S.hp + h); fx('heal', P.x, P.y, { col: 0xff5a6a, dur: .5, r1: 1.2 }); fx('slash', t.x, t.y, { col: 0xff3a4a, dur: .35 }); ftxt(P, '+' + h, '#ff8a9a', 13, 2.1); });
+      later(220, () => { if (t.dead) return; const d = rollDmg() * 3; hitMon(P, t, d, true); const h = Math.round(d * .3); S.hp = Math.min(D.maxHp, S.hp + h); VX.slash(t.x, t.y, .9, 1.3, 0xff3040); ftxt(P, '+' + h, '#ff8a9a', 13, 2.1);
+        // blood-red motes flow from the target back into the knight
+        for (let k = 0; k < 18; k++) VX.emit({ x: t.x + rnd(-.3, .3), y: rnd(.6, 1.2), z: t.y + rnd(-.3, .3), vx: (P.x - t.x) * rnd(1.4, 2.2), vy: rnd(.2, 1), vz: (P.y - t.y) * rnd(1.4, 2.2), life: .5, size: rnd(.18, .3), color: k % 2 ? 0xff3040 : 0xff8090, grav: 0, drag: .5 });
+        VX.shockwave(P.x, P.y, 1.4, 0xff4050, .4); });
       break;
     case 'multi': {
       attackAnim(P, 'Ranged_Bow_Release', .8);
       const ts = R.mons.filter(m => !m.dead && Math.hypot(m.x - P.x, m.y - P.y) < 6.5).sort((a, b) => Math.hypot(a.x - P.x, a.y - P.y) - Math.hypot(b.x - P.x, b.y - P.y)).slice(0, 5);
-      ts.forEach((m, i) => proj({ from: P, to: m, kind: 'arrow', sp: 18, delay: .15 + i * .05, onHit: () => hitMon(P, m, rollDmg() * 1.4, true) }));
+      ts.forEach((m, i) => proj({ from: P, to: m, kind: 'arrow', sp: 20, delay: .15 + i * .05, trail: 0x9fffb0, onHit: () => { hitMon(P, m, rollDmg() * 1.4, true); VX.burst(m.x, m.y, .9, 8, { color: [0xffffff, 0x9fffb0], speed: 3, life: .3, size: .18 }); } }));
+      VX.shockwave(P.x, P.y, 1.6, 0x9fffb0, .35);
       break;
     }
     case 'poison':
       attackAnim(P, 'Ranged_Bow_Release', .9);
-      proj({ from: P, to: t, kind: 'arrow', sp: 18, delay: .2, onHit: () => {
-        hitMon(P, t, rollDmg() * 2, true); fx('hit', t.x, t.y, { col: 0x60e060, dur: .4, r1: 1.2, h: .6 });
-        for (let k = 1; k <= 6; k++) later(k * 1000, () => { if (!t.dead) { hitMon(P, t, rollDmg() * .45, true); fx('hit', t.x, t.y, { col: 0x50c050, dur: .25, r1: .7, h: .4 }); } });
+      proj({ from: P, to: t, kind: 'arrow', sp: 18, delay: .2, trail: 0x50e060, onHit: () => {
+        hitMon(P, t, rollDmg() * 2, true); VX.burst(t.x, t.y, .9, 22, { color: [0x60ff70, 0x20a030, 0xc0ffa0], speed: 3.5, life: .6, size: .26, grav: -2 }); VX.toxic(t, 6);
+        for (let k = 1; k <= 6; k++) later(k * 1000, () => { if (!t.dead) { hitMon(P, t, rollDmg() * .45, true); VX.burst(t.x, t.y, .9, 6, { color: [0x60ff70, 0x20a030], speed: 1.5, life: .4, size: .22, grav: 0 }); } });
       } });
       break;
     case 'storm': {
       attackAnim(P, 'Ranged_Bow_Release', 1);
       const cx = t.x, cy = t.y;
-      fx('ring', cx, cy, { col: 0x9fd0ff, r1: 3.6, dur: 1 });
-      for (let k = 0; k < 10; k++) later(250 + k * 60, () => fx('hit', cx + rnd(-2.6, 2.6), cy + rnd(-2.6, 2.6), { col: 0xdff0ff, dur: .25, r1: .9, h: .4 }));
-      later(600, () => aoeHit(cx, cy, 3.5, () => rollDmg() * 2.6));
+      VX.whirl({ x: cx, y: cy }, 3.4, 0x9ff0e0, .9); VX.shockwave(cx, cy, 3.8, 0x9fd0ff, 1);
+      VX.arrowRain(cx, cy, 3.3, 24, .6, 0xdff8ff);
+      later(600, () => { VX.shake(.2); aoeHit(cx, cy, 3.5, () => rollDmg() * 2.6); });
       break;
     }
     case 'frost':
@@ -2830,6 +2933,10 @@ function castSkill(sk, t) {
     default: // buffs
       P.buffs[sk.buff] = R.t + sk.dur; recalc();
       if (sk.buff === 'mshield') VX.dome(P, sk.dur, 0x9a8aff);
+      else if (sk.buff === 'iron') VX.dome(P, sk.dur, 0xc89040);
+      else VX.aura(P, sk.dur, sk.buff);
+      if (sk.buff === 'avatar' || sk.buff === 'rage') { VX.shockwave(P.x, P.y, 2.6, sk.buff === 'rage' ? 0xff4020 : 0xff8a20, .5); VX.burst(P.x, P.y, .3, 26, { color: [0xff4010, 0xffa040, 0xffe080], speed: 3, up: 3, life: .8, size: .3, grav: 0 }); VX.shake(sk.buff === 'avatar' ? .25 : .1); }
+      if (sk.buff === 'wind' || sk.buff === 'eagle') VX.shockwave(P.x, P.y, 2, sk.buff === 'wind' ? 0x8ff0d8 : 0xffe08a, .45);
       fx('column', P.x, P.y, { col: { iron: 0xd8e0f0, rage: 0xff6a4a, avatar: 0xff9a3a, eagle: 0xffe08a, mshield: 0x8fb8ff }[sk.buff] || 0x9fe8a0, dur: .9 });
       fx('ring', P.x, P.y, { col: 0xffffff, r1: 1.8, dur: .5 });
       log(`${BUFFN[sk.buff]} 효과를 받았습니다. (${sk.dur}초)`, 'sys');
@@ -3254,7 +3361,10 @@ function hud() {
   if (camChanged()) b += `<button class="chip cam" data-cam="reset">시점 초기화</button>`;
   if (el('buffs').innerHTML !== b) el('buffs').innerHTML = b;
   $('[data-open=bag]').classList.toggle('alert', S.gear.some(g => upgradeDelta(g) > 0));
-  const ph = partyBots().map(m => `<div class="pm${m.dead ? ' dead' : ''}"><b>♦ ${m.name} <span style="color:var(--dim)">${CLS[m.cls].n}</span></b><i style="--w:${Math.max(0, m.hp / m.maxHp * 100)}%"></i></div>`).join('');
+  const pb = partyBots(), mini = S.opts.partyMini;
+  const ph = !pb.length ? '' : `<button class="phd" data-party="toggle">파티 ${pb.length} ${mini ? '▸' : '▾'}</button>` + (mini
+    ? `<span class="pdots">${pb.map(m => `<i class="${m.dead ? 'dead' : ''}" style="--w:${Math.max(0, m.hp / m.maxHp * 100)}%"></i>`).join('')}</span>`
+    : pb.map(m => `<div class="pm${m.dead ? ' dead' : ''}"><b>${m.name}</b><i style="--w:${Math.max(0, m.hp / m.maxHp * 100)}%"></i></div>`).join(''));
   if (el('party').innerHTML !== ph) el('party').innerHTML = ph;
   if ((R.dirty || R.sheet === 'party') && R.sheet && !R.encBusy && R.sheet !== 'set') renderSheet();
   R.dirty = false;
@@ -3858,6 +3968,7 @@ function lockLandscape() {
 }
 el('rotBtn').addEventListener('click', lockLandscape);
 if (matchMedia('(pointer: coarse)').matches) document.addEventListener('pointerdown', lockLandscape, { once: true });
+el('party').addEventListener('pointerdown', e => { if (!e.target.closest('[data-party]')) return; e.preventDefault(); e.stopPropagation(); S.opts.partyMini = !S.opts.partyMini; save(); });
 const bind = (id, fn) => el(id).addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); fn(); });
 bind('bAtk', actAttack); bind('bPot', actPot); bind('bAuto', actAuto);
 for (let i = 0; i < 4; i++) {
