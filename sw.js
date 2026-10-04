@@ -1,6 +1,6 @@
 // Keeps the game openable offline once it has been loaded.
 // The page itself is fetched fresh when online; engine and model files come from the cache.
-const CACHE = 'mugwagum-20261005004354';
+const CACHE = 'mugwagum-20261005073802';
 const CORE = ['./', './index.html', './lib/three.min.js', './lib/GLTFLoader.js', './lib/SkeletonUtils.js', './lib/BufferGeometryUtils.js',
   './icon-192.png', './icon-512.png', './manifest.webmanifest'];
 
