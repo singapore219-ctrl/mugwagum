@@ -954,7 +954,160 @@ async function loadAssets() {
   }
   const kb = new THREE.Box3().setFromObject(MODELS.Knight);
   CHAR_SCALE = CHAR_H / (kb.max.y - kb.min.y);
+  // the realistic knight is optional: if it fails to load the game keeps the KayKit one
+  try {
+    const kn = await new Promise((ok, bad) => {
+      const emb = window.__EMBED_MODELS__;
+      if (emb && emb.knightHD) return parseB64(emb.knightHD, ok, bad);
+      if (!location.protocol.startsWith('http')) return bad(new Error('file'));
+      const x = new XMLHttpRequest(); x.open('GET', `assets/models/knight.txt?v=${HD_V}`);
+      x.onload = () => { if (x.status >= 400) return bad(new Error('hd ' + x.status)); try { parseB64(x.responseText, ok, bad); } catch (e) { bad(e); } };
+      x.onerror = () => bad(new Error('hd')); x.send();
+    });
+    HD.knight = autoRig(kn.scene, MODELS.Knight, CHAR_H * 1.12);
+    HD.knight.mesh.castShadow = true; addRim(HD.knight.mesh.material);
+  } catch (e) { console.warn('HD knight unavailable', e); }
 }
+
+/* ---------- realistic models (AI-generated mesh, auto-rigged onto the KayKit skeleton at load) ---------- */
+const HD = {}, HD_V = 1;
+/* Auto-rig an unrigged A-pose humanoid mesh onto the KayKit skeleton layout.
+   Joints are placed from body proportions + mesh slices, every bone keeps the KayKit
+   bone direction (so KayKit clips play unchanged), and skin weights come from distance
+   to bone segments. Returns { root (Object3D), mesh (SkinnedMesh), retarget(clip) }. */
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const PRIMARY = { root: 'hips', hips: 'spine', spine: 'chest', chest: 'head', upperarml: 'lowerarml', lowerarml: 'wristl', wristl: 'handl', handl: 'handslotl',
+    upperarmr: 'lowerarmr', lowerarmr: 'wristr', wristr: 'handr', handr: 'handslotr', upperlegl: 'lowerlegl', lowerlegl: 'footl', footl: 'toesl',
+    upperlegr: 'lowerlegr', lowerlegr: 'footr', footr: 'toesr' };
+  const clean = n => n.replace(/_\d+$/, '');
+
+  // joint positions for a mesh standing on y=0, facing +z, character's left at +x, height H
+  function fitJoints(pos, H) {
+    const n = pos.count, P = [];
+    for (let i = 0; i < n; i++) P.push([pos.getX(i), pos.getY(i), pos.getZ(i)]);
+    const slice = (y0, y1, f) => P.filter(p => p[1] >= y0 * H && p[1] <= y1 * H && (!f || f(p)));
+    const mean = (a, k) => a.reduce((s, p) => s + p[k], 0) / Math.max(1, a.length);
+    const T = {};
+    const torso = slice(.55, .75, p => Math.abs(p[0]) < .12 * H), cz = mean(torso, 2);
+    T.root = V(0, 0, cz);
+    T.hips = V(0, .5 * H, cz); T.spine = V(0, .6 * H, cz); T.chest = V(0, .71 * H, cz); T.head = V(0, .865 * H, cz + .005 * H);
+    for (const [s, sg] of [['l', 1], ['r', -1]]) {
+      const knee = slice(.26, .31, p => p[0] * sg > .01 * H), kx = mean(knee, 0), kz = mean(knee, 2);
+      const ank = slice(.035, .08, p => p[0] * sg > .01 * H), ax = mean(ank, 0), az = mean(ank, 2);
+      const toeP = slice(0, .05, p => p[0] * sg > .01 * H).reduce((a, p) => p[2] > a[2] ? p : a, [0, 0, -1e9]);
+      T['upperleg' + s] = V(kx * .9, .48 * H, cz); T['lowerleg' + s] = V(kx, .285 * H, kz); T['foot' + s] = V(ax, .055 * H, az - .01 * H);
+      T['toes' + s] = V(ax, .015 * H, Math.max(az + .04 * H, toeP[2] - .02 * H));
+      // arm: shoulder joint inside the pauldron, hand tip = farthest vertex on that side
+      const tip = P.reduce((a, p) => p[0] * sg > a[0] * sg ? p : a, [0, 0, 0]);
+      const S = V(sg * .1 * H, .81 * H, cz), E = V(tip[0], tip[1], tip[2]), d = E.clone().sub(S);
+      T['upperarm' + s] = S;
+      T['lowerarm' + s] = S.clone().addScaledVector(d, .42);
+      T['wrist' + s] = S.clone().addScaledVector(d, .74);
+      T['hand' + s] = S.clone().addScaledVector(d, .8);
+      T['handslot' + s] = S.clone().addScaledVector(d, .9);
+    }
+    return T;
+  }
+
+  function weights(pos, bones, segs) {
+    const n = pos.count, idx = new Uint16Array(n * 4), wt = new Float32Array(n * 4), p = new THREE.Vector3(), c = new THREE.Vector3();
+    const line = new THREE.Line3();
+    for (let i = 0; i < n; i++) {
+      p.fromBufferAttribute(pos, i);
+      // pick the body part first by raw distance (so a hand next to the thigh stays on the arm),
+      // then blend only inside that part (+ chest at the shoulder)
+      const raw = segs.map(s => { line.set(s.a, s.b); line.closestPointToPoint(p, true, c); return c.distanceTo(p); });
+      let nearest = 0; for (let k = 1; k < segs.length; k++) if (raw[k] < raw[nearest]) nearest = k;
+      const fam = segs[nearest].fam;
+      const best = [];
+      segs.forEach((s, k) => {
+        if (fam !== s.fam && !(fam !== 'body' && s.name === 'chest') && !(fam === 'body' && s.name.startsWith('upperarm'))) return;
+        best.push([raw[k] / s.r, s.bi]);
+      });
+      best.sort((x, y) => x[0] - y[0]);
+      let sum = 0; const top = best.slice(0, 4).map(([d, bi]) => { const w = 1 / Math.pow(d + .02, 4); sum += w; return [bi, w]; });
+      top.forEach(([bi, w], k) => { idx[i * 4 + k] = bi; wt[i * 4 + k] = w / sum; });
+    }
+    return { idx, wt };
+  }
+
+  function autoRig(meshScene, kayModel, targetH) {
+    // ---- mesh: merge to one geometry, stand on y=0, scale to targetH
+    let src = null; meshScene.updateMatrixWorld(true);
+    meshScene.traverse(o => { if (o.isMesh && !src) src = o; });
+    const geo = src.geometry.clone(); geo.applyMatrix4(src.matrixWorld);
+    geo.computeBoundingBox(); const bb = geo.boundingBox, h = bb.max.y - bb.min.y, k = targetH / h;
+    geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2); geo.scale(k, k, k);
+    const H = targetH, pos = geo.attributes.position, T = fitJoints(pos, H);
+
+    // ---- KayKit rest pose (world)
+    kayModel.updateMatrixWorld(true);
+    let ksm = null; kayModel.traverse(o => { if (o.isSkinnedMesh && !ksm) ksm = o; });
+    const kb = {}; for (const b of ksm.skeleton.bones) kb[clean(b.name)] = b;
+    const kW = {}, kP = {}; for (const n in kb) { kW[n] = kb[n].getWorldQuaternion(new THREE.Quaternion()); kP[n] = kb[n].getWorldPosition(new THREE.Vector3()); }
+    const kRootScale = kb.root.getWorldScale(new THREE.Vector3()).y;
+
+    // ---- new skeleton with the same names / hierarchy
+    const order = [], bones = {}, W = {};
+    const walk = (kbone, parentName) => { const n = clean(kbone.name); if (!(n in T)) return; order.push([n, parentName]); for (const c of kbone.children) if (c.isBone) walk(c, n); };
+    walk(kb.root, null);
+    for (const [n, par] of order) {
+      const b = new THREE.Bone(); b.name = n; bones[n] = b;
+      const pc = PRIMARY[n];
+      let align = par ? W[par].clone().multiply(kW[par].clone().invert()) : new THREE.Quaternion();
+      if (pc && T[pc] && kP[pc]) {
+        const dk = kP[pc].clone().sub(kP[n]).normalize(), dt = T[pc].clone().sub(T[n]).normalize();
+        align = new THREE.Quaternion().setFromUnitVectors(dk, dt);
+      }
+      W[n] = align.clone().multiply(kW[n]);
+      if (par) {
+        bones[par].add(b);
+        const inv = W[par].clone().invert();
+        b.quaternion.copy(inv.clone().multiply(W[n]));
+        b.position.copy(T[n].clone().sub(T[par]).applyQuaternion(inv));
+      } else { b.quaternion.copy(W[n]); b.position.copy(T[n]); }
+    }
+    const boneList = order.map(([n]) => bones[n]);
+    const skeleton = new THREE.Skeleton(boneList);
+
+    // ---- weights from bone segments (radius tunes how far a bone reaches)
+    const R = { hips: .09, spine: .09, chest: .1, head: .07, upperleg: .06, lowerleg: .05, foot: .04, toes: .03, upperarm: .045, lowerarm: .04, wrist: .03, hand: .03 };
+    const segs = [];
+    boneList.forEach((b, bi) => {
+      const n = b.name; if (n === 'root' || n.startsWith('handslot')) return;
+      const base = n.replace(/[lr]$/, ''), r = (R[base] || .05) * H;
+      const a = T[n], pc = PRIMARY[n];
+      let e = pc && T[pc] ? T[pc] : n === 'head' ? V(0, H, a.z) : n.startsWith('toes') ? a.clone().add(V(0, 0, .04 * H)) : a.clone().add(V(0, .05 * H, 0));
+      if (n.startsWith('upperleg')) e = T[n.replace('upper', 'lower')];
+      const fam = /arml$|wristl$|handl$/.test(n) ? 'arml' : /armr$|wristr$|handr$/.test(n) ? 'armr' : 'body';
+      segs.push({ a: a.clone(), b: e.clone(), r, bi, fam, name: n });
+    });
+    const { idx, wt } = weights(pos, boneList, segs);
+    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+    geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wt, 4));
+
+    const mesh = new THREE.SkinnedMesh(geo, src.material);
+    const root = new THREE.Group();
+    root.add(bones.root); root.add(mesh);
+    root.updateMatrixWorld(true);
+    mesh.bind(skeleton);
+    mesh.frustumCulled = false;
+
+    // ---- clips: rotations as-is, hips height scaled, other position/scale tracks dropped
+    const hipsRatio = (T.hips.y - T.root.y) / (kP.hips.y - kP.root.y);
+    const retarget = clip => {
+      const tracks = [];
+      for (const t of clip.tracks) {
+        const [bn, prop] = t.name.split('.');
+        if (!bones[bn]) continue;
+        if (prop === 'quaternion') tracks.push(t.clone());
+        else if (prop === 'position' && bn === 'hips') { const c = t.clone(); for (let i = 0; i < c.values.length; i++) c.values[i] *= kRootScale * hipsRatio; tracks.push(c); }
+      }
+      return new THREE.AnimationClip(clip.name, clip.duration, tracks);
+    };
+    const cache = {};
+    return { root, mesh, skeleton, bones, T, H, retarget, slotScale: kb.handslotr.getWorldScale(new THREE.Vector3()).x, clip: n => cache[n] || (CLIPS[n] ? (cache[n] = retarget(CLIPS[n])) : null) };
+  }
 
 /* ---------- actors ---------- */
 function styleAnims(st, sk) {
@@ -984,9 +1137,9 @@ function addRim(mat) {
   mat.customProgramCacheKey = () => 'rim';
 }
 function makeActor(o) {
-  const root = new THREE.Group();
-  const m = THREE.SkeletonUtils.clone(MODELS[o.model]);
-  m.scale.setScalar(CHAR_SCALE * (o.s || 1));
+  const root = new THREE.Group(), hd = o.hd && S && S.opts.hdModels !== false ? HD[o.hd] : null;
+  const m = THREE.SkeletonUtils.clone(hd ? hd.root : MODELS[o.model]);
+  m.scale.setScalar(hd ? (o.s || 1) : CHAR_SCALE * (o.s || 1));
   const mats = [];
   m.traverse(n => {
     if (!n.isMesh) return;
@@ -1001,7 +1154,7 @@ function makeActor(o) {
   });
   root.add(m);
   const a = { root, m, mats, mixer: new THREE.AnimationMixer(m), acts: {}, cur: null, curName: '', lock: 0, A: styleAnims(o.st || '1h', o.sk),
-    h: CHAR_H * (o.s || 1), hr: m.getObjectByName('handslotr'), hl: m.getObjectByName('handslotl'), wr: null, wl: null, atkI: 0 };
+    h: (hd ? hd.H : CHAR_H) * (o.s || 1), hr: m.getObjectByName('handslotr'), hl: m.getObjectByName('handslotl'), wr: null, wl: null, atkI: 0, hd };
   setWeapons(a, o.r, o.l, o.wglow);
   play(a, a.A.idle); a.mixer.update(Math.random() * 2);
   scene.add(root);
@@ -1010,11 +1163,13 @@ function makeActor(o) {
 function setWeapons(a, r, l, glow) {
   if (a.wr) { a.wr.parent && a.wr.parent.remove(a.wr); a.wr = null; }
   if (a.wl) { a.wl.parent && a.wl.parent.remove(a.wl); a.wl = null; }
-  if (r && a.hr) { a.wr = propClone(r, glow); if (a.wr) a.hr.add(a.wr); }
-  if (l && a.hl) { a.wl = propClone(l, glow && l.includes('bow') ? glow : null); if (a.wl) a.hl.add(a.wl); }
+  if (r && a.hr) { a.wr = propClone(r, glow); if (a.wr) { a.hr.add(a.wr); if (a.hd) a.wr.scale.multiplyScalar(CHAR_SCALE * a.hd.slotScale); } }
+  if (l && a.hl) { a.wl = propClone(l, glow && l.includes('bow') ? glow : null); if (a.wl) { a.hl.add(a.wl); if (a.hd) a.wl.scale.multiplyScalar(CHAR_SCALE * a.hd.slotScale); } }
 }
 function play(a, name, opt = {}) {
-  const clip = CLIPS[name] || (/Idle/.test(name) ? CLIPS.Idle_A : null); if (!clip || !a) return;
+  if (!a) return;
+  const lib = a.hd ? a.hd.clip : n => CLIPS[n];
+  const clip = lib(name) || (/Idle/.test(name) ? lib('Idle_A') : null); if (!clip) return;
   if (a.curName === name && !opt.once) { if (opt.speed) a.cur.setEffectiveTimeScale(opt.speed); return; }
   let act = a.acts[name]; if (!act) act = a.acts[name] = a.mixer.clipAction(clip);
   act.reset(); act.enabled = true; act.setEffectiveTimeScale(opt.speed || 1); act.setEffectiveWeight(1);
@@ -1189,7 +1344,7 @@ function dressPlayer() {
     const rot = P.act.root.rotation.y; killActor(P.act);
     const d = pa && MON[pa];
     P.act = makeActor(d ? { model: d.m, s: polyScale(pa), tint: d.tint, glow: d.glow || (POLY[pa] === 4 ? '#ffb547' : null), flash: true, st: d.st, sk: d.sk }
-      : { model: CLS[S.cls].model, flash: true, st: '1h' });
+      : { model: CLS[S.cls].model, flash: true, st: '1h', hd: S.cls === 'knight' ? 'knight' : null });
     P.act.kindKey = want; P.act.root.rotation.y = rot;
   }
   if (pa) {
@@ -1574,7 +1729,7 @@ function spawnMon(k, boss) {
   return m;
 }
 function botModel(cls) {
-  if (cls === 'knight') return pick([{ model: 'Knight', r: 'sword_1handed', l: 'shield_badge', st: '1h' }, { model: 'Barbarian', r: 'axe_2handed', st: '2h' }, { model: 'Rogue', r: 'dagger', l: 'dagger', st: '1h' }]);
+  if (cls === 'knight') return pick([{ model: 'Knight', r: 'sword_1handed', l: 'shield_badge', st: '1h', hd: 'knight' }, { model: 'Barbarian', r: 'axe_2handed', st: '2h' }, { model: 'Rogue', r: 'dagger', l: 'dagger', st: '1h' }]);
   return cls === 'elf' ? { model: 'Ranger', l: 'bow_withString', st: 'bow' } : { model: 'Mage', r: 'staff', st: 'magic' };
 }
 /* ---------- AI party ---------- */
@@ -1588,7 +1743,7 @@ function makePartyBot(info) {
   const b = { kind: 'b', name: info.name, cls: info.cls, lv: S.lv, x: P.x + rnd(-1.5, 1.5), y: P.y + rnd(1, 2), rot: 0, hp: 0, maxHp: 1, moving: false, hurt: 0, target: null, cd: 0,
     wx: 0, wy: 0, wT: 0, say: '', sayT: 0, dead: false, respT: 0, healCd: 0, skCd: 0, telT: 1e9, town: !!Z.town, party: true };
   partyStats(b); b.hp = b.maxHp;
-  b.bm = info.cls === 'knight' ? { model: 'Knight', r: 'sword_1handed', l: 'shield_badge', st: '1h' } : botModel(info.cls);
+  b.bm = info.cls === 'knight' ? { model: 'Knight', r: 'sword_1handed', l: 'shield_badge', st: '1h', hd: 'knight' } : botModel(info.cls);
   const ro = rosterOf(info.name);
   b.act = makeActor({ ...b.bm, wglow: ro ? glowFor(ro.we) : null });
   return b;
@@ -3046,7 +3201,7 @@ const VIEWS = {
       <div class="sec">자동 사냥 때 쓸 스킬 <span style="font-weight:500">스킬 버튼을 길게 눌러도 바뀌어요</span></div>
       ${mySkills().map(k => `<div class="set"><span style="display:flex;align-items:center;gap:8px">${skIco(k)}${k.n}${S.lv < k.lv ? ` <span class="tag">Lv.${k.lv}</span>` : ''}</span><button class="tog ${autoOn(k) ? 'on' : ''}" data-a="skauto" data-v="${k.id}" aria-pressed="${autoOn(k)}"></button></div>`).join('')}
       <div class="sec">자동 기능</div>
-      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자·화면 효과 끄기)')}<div class="set"><span>화면 효과 (빛 번짐·색감 보정)</span><button class="tog ${S.opts.post !== false ? 'on' : ''}" data-a="posttog" aria-pressed="${S.opts.post !== false}"></button></div><div class="set"><span>각성 몬스터 (환생 후)</span><button class="tog ${S.opts.awaken !== false ? 'on' : ''}" data-a="awktog" aria-pressed="${S.opts.awaken !== false}"></button></div><div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
+      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자·화면 효과 끄기)')}<div class="set"><span>사실적인 기사 모델 (다시 접속하면 적용)</span><button class="tog ${S.opts.hdModels !== false ? 'on' : ''}" data-a="hdtog" aria-pressed="${S.opts.hdModels !== false}"></button></div><div class="set"><span>화면 효과 (빛 번짐·색감 보정)</span><button class="tog ${S.opts.post !== false ? 'on' : ''}" data-a="posttog" aria-pressed="${S.opts.post !== false}"></button></div><div class="set"><span>각성 몬스터 (환생 후)</span><button class="tog ${S.opts.awaken !== false ? 'on' : ''}" data-a="awktog" aria-pressed="${S.opts.awaken !== false}"></button></div><div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
       <div class="set"><span>카메라 거리 <b id="camzv" style="color:var(--gold2)">${Math.round(camOpt().z * 100)}%</b></span><input type="range" id="camz" min="50" max="180" step="5" value="${Math.round(camOpt().z * 100)}"></div>
       <div class="set"><span>카메라 각도 <b id="campv" style="color:var(--gold2)">${Math.round(camOpt().pitch)}°</b></span><input type="range" id="camp" min="30" max="82" step="1" value="${Math.round(camOpt().pitch)}"></div>
       <div class="set"><span>시점 회전·거리·각도</span><button class="btn" data-a="camreset">기본값으로</button></div>
@@ -3274,6 +3429,7 @@ el('sheetBody').addEventListener('click', e => {
   else if (['bid', 'bit', 'bgd', 'bgt'].includes(a) && town) { bankAct(a, v); }
   else if (a === 'pktog') { S.opts.pkOn = S.opts.pkOn === false; }
   else if (a === 'posttog') { S.opts.post = S.opts.post === false; }
+  else if (a === 'hdtog') { S.opts.hdModels = S.opts.hdModels === false; toast('캐릭터를 다시 불러올 때 적용돼요'); }
   else if (a === 'pkattack') { pkAttackBot(v); return; }
   else if (a === 'invite') { inviteBot(R.bots.find(b => b.name === v && !b.party)); }
   else if (a === 'kick') { kickBot(v); }
@@ -3494,7 +3650,7 @@ function begin() {
   { const sa = sharedAdena(); if (sa != null) S.adena = sa; }
   if (!(S.zone < ZONES.length) || ZONES[S.zone].raid) S.zone = 0;
   if (P.act) killActor(P.act);
-  P.act = makeActor({ model: CLS[S.cls].model, flash: true, st: '1h' }); P.act.kindKey = 'cls'; P.look = '';
+  P.act = makeActor({ model: CLS[S.cls].model, flash: true, st: '1h', hd: S.cls === 'knight' ? 'knight' : null }); P.act.kindKey = 'cls'; P.look = '';
   recalc();
   if (S.hp <= 0) S.hp = D.maxHp * .5;
   R.ready = true; R.dead = false; R.auto = !!S.autoOn; P.cds = {}; P.buffs = {}; P.queue = null;
