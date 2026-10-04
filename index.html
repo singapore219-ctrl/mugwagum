@@ -422,7 +422,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
   <div class="gacha" id="gacha" hidden>
     <h2 id="gachaTitle">변신 카드</h2>
     <div class="cards" id="gachaCards"></div>
-    <button class="btn pri" id="gachaOk" style="min-width:160px">확인</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn" id="gachaAgain" hidden style="min-width:160px"></button><button class="btn pri" id="gachaOk" style="min-width:160px">확인</button></div>
   </div>
   <div class="ov dead" id="death" hidden>
     <div class="box">
@@ -1327,7 +1327,7 @@ function rollPoly() {
   return pick(ids);
 }
 function polyDraw(n, ticket) {
-  if (ticket) { if (!cnt('pticket')) return; S.stack.pticket--; n = 1; }
+  if (ticket) { n = Math.max(1, Math.min(n || 1, cnt('pticket'))); if (!cnt('pticket')) return; S.stack.pticket -= n; }
   else {
     if (!ZONES[S.zone].town) { toast('변신 카드는 마을에서 뽑을 수 있어요'); return; }
     const cost = n === 10 ? POLY_COST10 : POLY_COST;
@@ -1343,7 +1343,10 @@ function polyDraw(n, ticket) {
   }
   const best = Math.max(...res.map(r => r.g));
   if (best >= 3) SFX.rare(); else SFX.win();
-  el('gachaTitle').textContent = n === 10 ? '변신 카드 10회' : '변신 카드';
+  el('gachaTitle').textContent = ticket ? `변신 카드 1회권${n > 1 ? ' ' + n + '장' : ''}` : n === 10 ? '변신 카드 10회' : '변신 카드';
+  const cost = n === 10 ? POLY_COST10 : POLY_COST;
+  setAgain(ticket ? { label: () => `1회권 다시 사용 (${cnt('pticket')}장 남음)`, can: () => cnt('pticket') > 0, fn: () => polyDraw(Math.min(n, cnt('pticket')), true) }
+    : { label: () => `${n}회 다시 뽑기 · ${fmt(cost)}`, can: () => S.adena >= cost, fn: () => polyDraw(n) });
   el('gachaCards').className = 'cards' + (n === 1 ? ' one' : '');
   el('gachaCards').innerHTML = res.map((r, i) => polyCard(r.id, r.g, r.isNew ? 'NEW' : '★' + r.stars, i)).join('');
   el('gacha').hidden = false;
@@ -1354,7 +1357,7 @@ function polyDraw(n, ticket) {
 const FUSE_RATE = [1, .8, .5, .25];
 const fuseState = () => R.fuse || (R.fuse = { g: 0, picks: [] });
 const fuseSpare = id => (polyState().owned[id] || 0) - (id === polyActive() ? 1 : 0) - fuseState().picks.filter(x => x === id).length;
-function fuseAuto() {
+function fuseAuto(quiet) {
   const f = fuseState();
   // spend the most-duplicated forms first so collections stay intact
   while (f.picks.length < 4) {
@@ -1363,22 +1366,75 @@ function fuseAuto() {
     if (!pool.length) break;
     pool.sort((a, b) => fuseSpare(b) - fuseSpare(a)); f.picks.push(pool[0]);
   }
-  if (f.picks.length < 4) toast('넣을 수 있는 변신이 부족해요');
+  if (f.picks.length < 4 && !quiet) toast('넣을 수 있는 변신이 부족해요');
 }
-function fuseGo() {
-  const f = fuseState(), ps = polyState(); if (f.picks.length < 4 || f.g >= 4) return;
-  for (const id of f.picks) { ps.owned[id]--; if (ps.owned[id] <= 0) delete ps.owned[id]; }
-  const ok = Math.random() < FUSE_RATE[f.g], g = ok ? f.g + 1 : f.g;
-  const ids = Object.keys(POLY).filter(k => POLY[k] === g), id = pick(ids), isNew = !ps.owned[id];
-  ps.owned[id] = Math.min(5, (ps.owned[id] || 0) + 1);
-  f.picks = [];
-  if (ok && g >= 3) log(`${S.name}님이 변신 합성으로 [${PGRADE[g].k}] ${MON[id].n}${J(MON[id].n, '을', '를')} 얻었습니다!`, 'ann');
-  else log(ok ? `변신 합성 성공: [${PGRADE[g].k}] ${MON[id].n}` : `변신 합성 실패: [${PGRADE[g].k}] ${MON[id].n}${J(MON[id].n, '이', '가')} 돌아왔어요`, ok ? 'loot' : 'warn');
-  if (ok) (g >= 3 ? SFX.rare : SFX.win)(); else SFX.fail();
-  el('gachaTitle').textContent = ok ? '합성 성공!' : '합성 실패';
-  el('gachaCards').className = 'cards one';
-  el('gachaCards').innerHTML = polyCard(id, g, isNew ? 'NEW' : '★' + ps.owned[id], 0);
+// how many fusions the spare copies of the current grade allow
+/* ---------- coupons ----------
+   Codes are stored only as hashes. Each code works once per device (all characters share the record).
+   Rewards: adena goes to the shared wallet, items to the playing character. */
+const cyrb53 = (str, seed = 0) => {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0, ch; i < str.length; i++) { ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507); h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507); h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+};
+const COUPONS = {
+  4368617400567886: { n: '무과금 감사 쿠폰', adena: 3000000, items: { pticket: 10 } },
+  926634889825435: { n: '환영 쿠폰', items: { red: 200, clear: 100, tele: 50, ret: 20 } },
+  2725477816679382: { n: '축복 쿠폰', items: { bew: 5, bea: 5, pew: 2, pea: 2 } },
+};
+function redeemCoupon(code) {
+  code = code.trim().toUpperCase().replace(/\s+/g, '');
+  const key = cyrb53('mgw:' + code), c = COUPONS[key];
+  let used = []; try { used = JSON.parse(localStorage.getItem('mugwagum-coupons') || '[]'); } catch (e) {}
+  R.couponOk = false;
+  if (!code) R.couponMsg = '쿠폰 번호를 입력해 주세요.';
+  else if (!c) R.couponMsg = '없는 쿠폰 번호예요.';
+  else if (c.until && Date.now() > c.until) R.couponMsg = '기간이 끝난 쿠폰이에요.';
+  else if (used.includes(key)) R.couponMsg = '이미 사용한 쿠폰이에요.';
+  else {
+    used.push(key); try { localStorage.setItem('mugwagum-coupons', JSON.stringify(used)); } catch (e) {}
+    const got = [];
+    if (c.adena) { S.adena += c.adena; got.push(`${fmt(c.adena)} 아데나`); }
+    for (const [k, n] of Object.entries(c.items || {})) { addItem(k, n); got.push(`${ITEMS[k].n} ${n}`); }
+    R.couponOk = true; R.couponMsg = `${c.n}: ${got.join(', ')} 받았어요!`; R.couponText = '';
+    log(`쿠폰 사용: ${got.join(', ')}`, 'loot'); toast(c.n + ' 사용!', 'blue'); SFX.rare(); save();
+  }
+  renderSheet();
+}
+function fuseCapacity() {
+  const f = fuseState(); let spare = 0;
+  for (const id of Object.keys(POLY)) if (POLY[id] === f.g) spare += Math.max(0, (polyState().owned[id] || 0) - (id === polyActive() ? 1 : 0));
+  return Math.floor(spare / 4);
+}
+function fuseGo(times = 1, want = times) {
+  const f = fuseState(), ps = polyState(); if (f.g >= 4) return;
+  const res = [], g0 = f.g;
+  for (let k = 0; k < times; k++) {
+    if (times > 1 || f.picks.length < 4) { if (times > 1) f.picks = []; fuseAuto(true); }
+    if (f.picks.length < 4) break;
+    for (const id of f.picks) { ps.owned[id]--; if (ps.owned[id] <= 0) delete ps.owned[id]; }
+    const ok = Math.random() < FUSE_RATE[g0], g = ok ? g0 + 1 : g0;
+    const ids = Object.keys(POLY).filter(k2 => POLY[k2] === g), id = pick(ids), isNew = !ps.owned[id];
+    ps.owned[id] = Math.min(5, (ps.owned[id] || 0) + 1);
+    f.picks = [];
+    res.push({ id, g, ok, isNew });
+    if (ok && g >= 3) log(`${S.name}님이 변신 합성으로 [${PGRADE[g].k}] ${MON[id].n}${J(MON[id].n, '을', '를')} 얻었습니다!`, 'ann');
+  }
+  if (!res.length) { toast('넣을 수 있는 변신이 부족해요'); return; }
+  const win = res.filter(r => r.ok).length;
+  if (res.length === 1) log(win ? `변신 합성 성공: [${PGRADE[res[0].g].k}] ${MON[res[0].id].n}` : `변신 합성 실패: [${PGRADE[res[0].g].k}] ${MON[res[0].id].n}${J(MON[res[0].id].n, '이', '가')} 돌아왔어요`, win ? 'loot' : 'warn');
+  else log(`변신 합성 ${res.length}회: 성공 ${win}, 실패 ${res.length - win}`, win ? 'loot' : 'warn');
+  if (win) (res.some(r => r.ok && r.g >= 3) ? SFX.rare : SFX.win)(); else SFX.fail();
+  el('gachaTitle').textContent = res.length === 1 ? (win ? '합성 성공!' : '합성 실패') : `합성 ${res.length}회 · 성공 ${win} · 실패 ${res.length - win}`;
+  // many results: show the best ten (higher grade first)
+  const show = res.length > 10 ? res.slice().sort((x, y) => y.g - x.g || y.ok - x.ok).slice(0, 10) : res;
+  el('gachaCards').className = 'cards' + (show.length === 1 ? ' one' : '');
+  el('gachaCards').innerHTML = show.map((r, i) => polyCard(r.id, r.g, r.isNew ? 'NEW' : r.ok ? '성공' : '실패', i)).join('');
   el('gacha').hidden = false;
+  const next = () => want > 1 ? Math.min(want, fuseCapacity()) : 1;
+  setAgain({ label: () => fuseCapacity() ? `${PGRADE[g0].k} ${next()}회 다시 합성` : `${PGRADE[g0].k} 재료 부족`, can: () => fuseCapacity() > 0 && fuseState().g === g0, fn: () => { fuseState().g = g0; fuseGo(next(), want); } });
   R.dirty = true; save();
 }
 function polyUse(id) {
@@ -3417,7 +3473,8 @@ function fuseView() {
     <div class="seg four">${[0, 1, 2, 3].map(g => `<button data-a="fuseg" data-v="${g}" class="${f.g === g ? 'on' : ''}" style="color:${PGRADE[g].col}">${PGRADE[g].k}</button>`).join('')}</div>
     <p class="note">${G.k} 변신 4장 → <b style="color:${N.col}">${N.k}</b> 변신 1장 · 성공 ${Math.round(FUSE_RATE[f.g] * 100)}%${FUSE_RATE[f.g] < 1 ? ` (실패하면 ${G.k} 변신 1장이 돌아와요)` : ''}. ★ 하나가 한 장이고, 쓰고 있는 변신은 한 장을 남겨요.</p>
     <div class="fslots">${[0, 1, 2, 3].map(i => { const id = f.picks[i]; return id ? `<button class="fslot on" data-a="fuseout" data-v="${i}" style="--gc:${G.col}">${MON[id].n}<small>빼기</small></button>` : `<div class="fslot">빈 칸</div>`; }).join('')}</div>
-    <div class="seg" style="grid-template-columns:1fr 1fr 1.4fr"><button data-a="fuseauto">자동 채우기</button><button data-a="fuseclear">비우기</button><button data-a="fusego" class="${f.picks.length === 4 ? 'on' : ''}" ${f.picks.length === 4 ? '' : 'disabled'}>합성하기</button></div>`;
+    <div class="seg" style="grid-template-columns:1fr 1fr 1.4fr"><button data-a="fuseauto">자동 채우기</button><button data-a="fuseclear">비우기</button><button data-a="fusego" class="${f.picks.length === 4 ? 'on' : ''}" ${f.picks.length === 4 ? '' : 'disabled'}>합성하기</button></div>
+    <div class="seg" style="grid-template-columns:1fr 1fr"><button data-a="fusemany" data-v="10" ${fuseCapacity() >= 2 ? '' : 'disabled'}>10회 연속 합성</button><button data-a="fusemany" data-v="999" ${fuseCapacity() >= 2 ? '' : 'disabled'}>가능한 만큼 (${fuseCapacity()}회)</button></div>`;
   const ids = Object.keys(POLY).filter(id => POLY[id] === f.g && ps.owned[id]).sort((a, b) => ps.owned[b] - ps.owned[a]);
   if (!ids.length) h += `<p class="note">${G.k} 등급 변신이 없어요.</p>`;
   for (const id of ids) {
@@ -3474,7 +3531,7 @@ const VIEWS = {
     else h += `<p class="note">변신하지 않았어요. 아래에서 가진 변신을 고르세요.</p>`;
     h += `<div class="sec">변신 카드 뽑기</div>
       <div class="seg"><button data-a="polydraw" data-v="1" ${!town || S.adena < POLY_COST ? 'disabled' : ''}>1회 · ${fmt(POLY_COST)}</button><button data-a="polydraw" data-v="10" ${!town || S.adena < POLY_COST10 ? 'disabled' : ''}>10회 · ${fmt(POLY_COST10)}</button></div>
-      ${cnt('pticket') ? `<button class="btn pri wide" data-a="polyticket">변신 카드 1회권 사용 (${cnt('pticket')}장)</button>` : ''}
+      ${cnt('pticket') ? `<div class="seg"><button data-a="polyticket" data-v="1">1회권 1장 사용 (${cnt('pticket')}장)</button><button data-a="polyticket" data-v="10" ${cnt('pticket') >= 2 ? '' : 'disabled'}>1회권 ${Math.min(10, cnt('pticket'))}장 한 번에</button></div>` : ''}
       <p class="note">${town ? '' : '카드는 마을에서 뽑을 수 있어요(1회권은 어디서나). '}확률: ${PGRADE.map(g => `${g.k} ${+(g.p * 100).toFixed(1)}%`).join(' · ')}. 같은 변신을 또 뽑으면 ★가 올라 능력치가 8%씩 늘어요(최대 ★5). 유형: ${Object.entries(PTYPE).map(([k, v]) => `${k}(${v.desc})`).join(', ')}.</p>
       ${fuseView()}
       <div class="sec">도감 (${Object.keys(ps.owned).length}/${Object.keys(POLY).length})</div>`;
@@ -3601,6 +3658,9 @@ const VIEWS = {
       <div class="sec">다른 게임</div>
       <a class="btn wide" style="display:block;text-align:center;text-decoration:none" href="${CHESS_URL}">무과금 오토체스 하러 가기</a>
       <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="${CHESS_URL.replace('chess/', 'war/')}">무과금 영토전쟁 하러 가기</a>
+      <div class="sec">쿠폰</div>
+      <div class="set" style="gap:8px"><input id="couponIn" maxlength="24" placeholder="쿠폰 번호 입력" autocomplete="off" value="${(R.couponText || '').replace(/"/g, '')}" style="flex:1;min-width:0;background:#120f0a;border:1px solid var(--line2);border-radius:8px;color:var(--text);padding:9px 10px;font:inherit;font-size:14px;user-select:text;-webkit-user-select:text;text-transform:uppercase"><button class="btn pri" data-a="coupon">사용</button></div>
+      ${R.couponMsg ? `<p class="note" style="margin-top:4px;color:${R.couponOk ? 'var(--good)' : 'var(--bad)'}">${R.couponMsg}</p>` : ''}
       <div class="sec">저장 코드</div>
       <p class="note" style="margin-top:0">캐릭터 전체(레벨, 장비, 강화, 아이템, 변신, 파티, AI 유저 기록)를 글자로 바꾼 코드예요. 복사해서 Claude에게 보내면 진행 상황을 분석받을 수 있고, 다른 기기에서 불러오면 그대로 이어서 할 수 있어요.</p>
       <button class="btn wide" data-a="savecode">저장 코드 만들고 복사</button>
@@ -3835,7 +3895,7 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'camreset') camReset();
   else if (a === 'skauto') { const sk = mySkills().find(k => k.id === v); if (sk) toggleAuto(sk); }
   else if (a === 'polydraw') { polyDraw(+v); }
-  else if (a === 'polyticket') { polyDraw(1, true); }
+  else if (a === 'polyticket') { polyDraw(+v || 1, true); }
   else if (a === 'polyuse') { polyUse(v); }
   else if (a === 'polyoff') { polyUse(null); }
   else if (a === 'polylook') { S.opts.polyLook = S.opts.polyLook === false; recalc(); }
@@ -3845,6 +3905,8 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'fuseclear') { fuseState().picks = []; }
   else if (a === 'fuseauto') { fuseAuto(); }
   else if (a === 'fusego') { fuseGo(); }
+  else if (a === 'coupon') { redeemCoupon(R.couponText || ''); }
+  else if (a === 'fusemany') { fuseGo(Math.min(+v, fuseCapacity()), +v); }
   else if (a === 'tog') { S.opts[v] = !S.opts[v]; if (v === 'lowfx') applyQuality(); }
   else if (a === 'reset') {
     if (!R.confirmReset) R.confirmReset = true;
@@ -3853,6 +3915,7 @@ el('sheetBody').addEventListener('click', e => {
   save(); renderSheet();
 });
 el('sheetBody').addEventListener('input', e => {
+  if (e.target.id === 'couponIn') { R.couponText = e.target.value; return; }
   if (e.target.id === 'saveCodeIn') {
     const had = !!R.importText; R.importText = e.target.value.trim(); R.confirmImport = false;
     const btn = el('sheetBody').querySelector('[data-a=loadcode]'); if (btn) { btn.disabled = !R.importText; btn.textContent = '저장 코드 불러오기'; }
@@ -4146,7 +4209,14 @@ function resumeAway() {
   log(`자리 비운 동안 ${fmt(r.kills)}마리를 처치했습니다.`, 'sys');
 }
 el('awayOk').addEventListener('click', () => { el('away').hidden = true; });
-el('gachaOk').addEventListener('click', () => { el('gacha').hidden = true; renderSheet(); });
+el('gachaOk').addEventListener('click', () => { el('gacha').hidden = true; R.again = null; renderSheet(); });
+// repeat the last draw / fusion straight from the result screen
+function setAgain(a) {
+  R.again = a; const b = el('gachaAgain');
+  if (!a) { b.hidden = true; return; }
+  b.hidden = false; b.textContent = a.label(); b.disabled = !a.can();
+}
+el('gachaAgain').addEventListener('click', () => { const a = R.again; if (!a || !a.can()) return; audioOn(); a.fn(); renderSheet(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) markAway(); else resumeAway(); });
 window.addEventListener('pagehide', markAway);
 /* ---------- install prompt (works when the page is served as an installable site) ---------- */
