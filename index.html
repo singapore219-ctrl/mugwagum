@@ -710,7 +710,7 @@ function recalc() {
     if (o.cdr) D.cdr = o.cdr;
   }
   S.hp = Math.min(S.hp, D.maxHp); S.mp = Math.min(S.mp, D.maxMp);
-  const look = `${D.wtier}|${D.glow}|${S.eq.helm != null}|${S.poly && S.poly.active || ''}`;
+  const look = `${D.wtier}|${D.glow}|${S.eq.helm != null}|${S.poly && S.poly.active || ''}|${S.opts.polyLook !== false}`;
   if (P.act && P.look !== look) { P.look = look; dressPlayer(); }
 }
 // kind: hit (one target) / aoe (around self or target) / triple / chain / heal / buff
@@ -1339,7 +1339,8 @@ function polyUse(id) {
   R.dirty = true; save();
 }
 function dressPlayer() {
-  const pa = polyActive(), want = pa ? 'poly:' + pa : 'cls';
+  // 변신 외형 숨기기: stats still come from the polymorph, the body stays the class model
+  const pa = S.opts.polyLook === false ? null : polyActive(), want = pa ? 'poly:' + pa : 'cls';
   if (P.act.kindKey !== want) {
     const rot = P.act.root.rotation.y; killActor(P.act);
     const d = pa && MON[pa];
@@ -3082,7 +3083,8 @@ const VIEWS = {
     const ps = polyState(), a = polyActive(), pb = polyBonus(), town = ZONES[S.zone].town;
     let h = `<div class="sec">현재 변신</div>`;
     if (a) h += `<div class="row">${polyIco(a, true)}<div class="info"><div class="n">${MON[a].n}<span class="grade" style="--gc:${PGRADE[POLY[a]].col}">${PGRADE[POLY[a]].k}</span></div>
-      <div class="s">★${pb.stars} · ${pb.type}형 · ${polyStatText(pb.stats)}</div></div><div class="btns"><button class="btn" data-a="polyoff">해제</button></div></div>`;
+      <div class="s">★${pb.stars} · ${pb.type}형 · ${polyStatText(pb.stats)}</div></div><div class="btns"><button class="btn" data-a="polyoff">해제</button></div></div>
+      <div class="set"><span>변신 모습 보이기<br><span style="color:var(--dim);font-size:11.5px">끄면 능력치는 그대로 받고 겉모습만 원래 캐릭터로 보여요</span></span><button class="tog ${S.opts.polyLook !== false ? 'on' : ''}" data-a="polylook" aria-pressed="${S.opts.polyLook !== false}"></button></div>`;
     else h += `<p class="note">변신하지 않았어요. 아래에서 가진 변신을 고르세요.</p>`;
     h += `<div class="sec">변신 카드 뽑기</div>
       <div class="seg"><button data-a="polydraw" data-v="1" ${!town || S.adena < POLY_COST ? 'disabled' : ''}>1회 · ${fmt(POLY_COST)}</button><button data-a="polydraw" data-v="10" ${!town || S.adena < POLY_COST10 ? 'disabled' : ''}>10회 · ${fmt(POLY_COST10)}</button></div>
@@ -3450,6 +3452,7 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'polyticket') { polyDraw(1, true); }
   else if (a === 'polyuse') { polyUse(v); }
   else if (a === 'polyoff') { polyUse(null); }
+  else if (a === 'polylook') { S.opts.polyLook = S.opts.polyLook === false; recalc(); }
   else if (a === 'fuseg') { fuseState().g = +v; fuseState().picks = []; }
   else if (a === 'fusein') { const f = fuseState(); if (f.picks.length < 4 && fuseSpare(v) > 0) f.picks.push(v); }
   else if (a === 'fuseout') { fuseState().picks.splice(+v, 1); }
