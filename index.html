@@ -955,7 +955,7 @@ async function loadAssets() {
   const kb = new THREE.Box3().setFromObject(MODELS.Knight);
   CHAR_SCALE = CHAR_H / (kb.max.y - kb.min.y);
   // realistic class models are optional: any that fail to load keep the KayKit look
-  const hdLoad = name => new Promise((ok, bad) => {
+  hdLoad = name => new Promise((ok, bad) => {
     const emb = window.__EMBED_MODELS__;
     if (emb && emb[name + 'HD']) return parseB64(emb[name + 'HD'], ok, bad);
     if (!location.protocol.startsWith('http')) return bad(new Error('file'));
@@ -970,7 +970,19 @@ async function loadAssets() {
 }
 
 /* ---------- realistic models (AI-generated mesh, auto-rigged onto the KayKit skeleton at load) ---------- */
-const HD = {}, HD_V = 2, HD_SIZE = { knight: 1.12, elf: 1.06, mage: 1.1 };
+const HD = {}, HD_V = 3, HD_SIZE = { knight: 1.12, elf: 1.06, mage: 1.1 };
+// polymorph / monster models (TRELLIS) load the first time they are needed; actors made before that keep the KayKit body
+const HD_LAZY = { abysslord: 1.0 }, HD_PENDING = {};
+let hdLoad = null;
+function hdWant(k) {
+  if (HD[k] || HD_PENDING[k] || !HD_LAZY[k] || !hdLoad) return;
+  HD_PENDING[k] = true;
+  hdLoad(k).then(g => {
+    HD[k] = autoRig(g.scene, MODELS.Knight, CHAR_H * HD_LAZY[k]);
+    HD[k].mesh.castShadow = true; addRim(HD[k].mesh.material);
+    if (P.act && P.act.kindKey === 'poly:' + k) { P.act.kindKey = ''; dressPlayer(); }
+  }).catch(e => console.warn('HD ' + k + ' unavailable', e));
+}
 /* Auto-rig an unrigged A-pose humanoid mesh onto the KayKit skeleton layout.
    Joints are placed from body proportions + mesh slices, every bone keeps the KayKit
    bone direction (so KayKit clips play unchanged), and skin weights come from distance
@@ -1034,6 +1046,7 @@ const HD = {}, HD_V = 2, HD_SIZE = { knight: 1.12, elf: 1.06, mage: 1.1 };
   function autoRig(meshScene, kayModel, targetH) {
     // ---- mesh: merge to one geometry, stand on y=0, scale to targetH
     let src = null; meshScene.updateMatrixWorld(true);
+    meshScene.traverse(o => { if (o.isMesh && !o.geometry.attributes.normal) o.geometry.computeVertexNormals(); });
     meshScene.traverse(o => { if (o.isMesh && !src) src = o; });
     const geo = src.geometry.clone(); geo.applyMatrix4(src.matrixWorld);
     geo.computeBoundingBox(); const bb = geo.boundingBox, h = bb.max.y - bb.min.y, k = targetH / h;
@@ -1137,7 +1150,9 @@ function addRim(mat) {
   mat.customProgramCacheKey = () => 'rim';
 }
 function makeActor(o) {
-  const root = new THREE.Group(), hd = o.hd && S && S.opts.hdModels !== false ? HD[o.hd] : null;
+  const useHd = o.hd && S && S.opts.hdModels !== false, hd = useHd ? HD[o.hd] : null;
+  if (useHd && !hd) hdWant(o.hd);
+  const root = new THREE.Group();
   const m = THREE.SkeletonUtils.clone(hd ? hd.root : MODELS[o.model]);
   m.scale.setScalar(hd ? (o.s || 1) : CHAR_SCALE * (o.s || 1));
   const mats = [];
@@ -1147,8 +1162,8 @@ function makeActor(o) {
     addRim(n.material);
     if (o.tint || o.flash || o.glow) {
       n.material = n.material.clone(); addRim(n.material); mats.push(n.material);
-      if (o.tint) n.material.color.multiply(new THREE.Color(o.tint));
-      if (o.glow) { n.material.emissive = new THREE.Color(o.glow); n.material.emissiveIntensity = .35; }
+      if (o.tint && !hd) n.material.color.multiply(new THREE.Color(o.tint));
+      if (o.glow) { n.material.emissive = new THREE.Color(o.glow); n.material.emissiveIntensity = hd ? .05 : .35; }
       n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity;
     }
   });
@@ -1344,7 +1359,7 @@ function dressPlayer() {
   if (P.act.kindKey !== want) {
     const rot = P.act.root.rotation.y; killActor(P.act);
     const d = pa && MON[pa];
-    P.act = makeActor(d ? { model: d.m, s: polyScale(pa), tint: d.tint, glow: d.glow || (POLY[pa] === 4 ? '#ffb547' : null), flash: true, st: d.st, sk: d.sk }
+    P.act = makeActor(d ? { model: d.m, s: polyScale(pa), tint: d.tint, glow: d.glow || (POLY[pa] === 4 ? '#ffb547' : null), flash: true, st: d.st, sk: d.sk, hd: pa }
       : { model: CLS[S.cls].model, flash: true, st: '1h', hd: S.cls });
     P.act.kindKey = want; P.act.root.rotation.y = rot;
   }
@@ -1724,7 +1739,7 @@ function spawnMon(k, boss) {
   const m = { kind: 'm', k, d, lv, x, y, rot: rnd(0, 6.28), hp, maxHp: hp, dmg, moving: false, slow: false, hurt: 0, target: null, cd: rnd(0, 1),
     wx: x, wy: y, wT: rnd(0, 3), dmgBy: { p: 0, b: 0 }, dead: false, fade: 0, boss: !!d.boss, spd: d.boss ? 2.1 : 2.5, awk: awk > 0 };
   if (awk) m.d = { ...d, ag: 1 };
-  m.act = makeActor({ model: d.m, s: d.s, tint: d.tint, glow: d.glow, flash: true, r: d.r, l: d.l, st: d.st, sk: d.sk });
+  m.act = makeActor({ model: d.m, s: d.s, tint: d.tint, glow: d.glow, flash: true, r: d.r, l: d.l, st: d.st, sk: d.sk, hd: k });
   R.mons.push(m);
   if (d.boss) fx('ring', x, y, { col: 0xff5a3a, r1: 4, dur: 1.2 });
   return m;
