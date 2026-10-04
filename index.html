@@ -954,23 +954,23 @@ async function loadAssets() {
   }
   const kb = new THREE.Box3().setFromObject(MODELS.Knight);
   CHAR_SCALE = CHAR_H / (kb.max.y - kb.min.y);
-  // the realistic knight is optional: if it fails to load the game keeps the KayKit one
-  try {
-    const kn = await new Promise((ok, bad) => {
-      const emb = window.__EMBED_MODELS__;
-      if (emb && emb.knightHD) return parseB64(emb.knightHD, ok, bad);
-      if (!location.protocol.startsWith('http')) return bad(new Error('file'));
-      const x = new XMLHttpRequest(); x.open('GET', `assets/models/knight.txt?v=${HD_V}`);
-      x.onload = () => { if (x.status >= 400) return bad(new Error('hd ' + x.status)); try { parseB64(x.responseText, ok, bad); } catch (e) { bad(e); } };
-      x.onerror = () => bad(new Error('hd')); x.send();
-    });
-    HD.knight = autoRig(kn.scene, MODELS.Knight, CHAR_H * 1.12);
-    HD.knight.mesh.castShadow = true; addRim(HD.knight.mesh.material);
-  } catch (e) { console.warn('HD knight unavailable', e); }
+  // realistic class models are optional: any that fail to load keep the KayKit look
+  const hdLoad = name => new Promise((ok, bad) => {
+    const emb = window.__EMBED_MODELS__;
+    if (emb && emb[name + 'HD']) return parseB64(emb[name + 'HD'], ok, bad);
+    if (!location.protocol.startsWith('http')) return bad(new Error('file'));
+    const x = new XMLHttpRequest(); x.open('GET', `assets/models/${name}.txt?v=${HD_V}`);
+    x.onload = () => { if (x.status >= 400) return bad(new Error('hd ' + x.status)); try { parseB64(x.responseText, ok, bad); } catch (e) { bad(e); } };
+    x.onerror = () => bad(new Error('hd')); x.send();
+  });
+  await Promise.all(Object.entries(HD_SIZE).map(([name, h]) => hdLoad(name).then(g => {
+    HD[name] = autoRig(g.scene, MODELS.Knight, CHAR_H * h);
+    HD[name].mesh.castShadow = true; addRim(HD[name].mesh.material);
+  }).catch(e => console.warn('HD ' + name + ' unavailable', e))));
 }
 
 /* ---------- realistic models (AI-generated mesh, auto-rigged onto the KayKit skeleton at load) ---------- */
-const HD = {}, HD_V = 1;
+const HD = {}, HD_V = 2, HD_SIZE = { knight: 1.12, elf: 1.06, mage: 1.1 };
 /* Auto-rig an unrigged A-pose humanoid mesh onto the KayKit skeleton layout.
    Joints are placed from body proportions + mesh slices, every bone keeps the KayKit
    bone direction (so KayKit clips play unchanged), and skin weights come from distance
@@ -1345,7 +1345,7 @@ function dressPlayer() {
     const rot = P.act.root.rotation.y; killActor(P.act);
     const d = pa && MON[pa];
     P.act = makeActor(d ? { model: d.m, s: polyScale(pa), tint: d.tint, glow: d.glow || (POLY[pa] === 4 ? '#ffb547' : null), flash: true, st: d.st, sk: d.sk }
-      : { model: CLS[S.cls].model, flash: true, st: '1h', hd: S.cls === 'knight' ? 'knight' : null });
+      : { model: CLS[S.cls].model, flash: true, st: '1h', hd: S.cls });
     P.act.kindKey = want; P.act.root.rotation.y = rot;
   }
   if (pa) {
@@ -1731,7 +1731,7 @@ function spawnMon(k, boss) {
 }
 function botModel(cls) {
   if (cls === 'knight') return pick([{ model: 'Knight', r: 'sword_1handed', l: 'shield_badge', st: '1h', hd: 'knight' }, { model: 'Barbarian', r: 'axe_2handed', st: '2h' }, { model: 'Rogue', r: 'dagger', l: 'dagger', st: '1h' }]);
-  return cls === 'elf' ? { model: 'Ranger', l: 'bow_withString', st: 'bow' } : { model: 'Mage', r: 'staff', st: 'magic' };
+  return cls === 'elf' ? { model: 'Ranger', l: 'bow_withString', st: 'bow', hd: 'elf' } : { model: 'Mage', r: 'staff', st: 'magic', hd: 'mage' };
 }
 /* ---------- AI party ---------- */
 const PARTY_MAX = 3;
@@ -3203,7 +3203,7 @@ const VIEWS = {
       <div class="sec">자동 사냥 때 쓸 스킬 <span style="font-weight:500">스킬 버튼을 길게 눌러도 바뀌어요</span></div>
       ${mySkills().map(k => `<div class="set"><span style="display:flex;align-items:center;gap:8px">${skIco(k)}${k.n}${S.lv < k.lv ? ` <span class="tag">Lv.${k.lv}</span>` : ''}</span><button class="tog ${autoOn(k) ? 'on' : ''}" data-a="skauto" data-v="${k.id}" aria-pressed="${autoOn(k)}"></button></div>`).join('')}
       <div class="sec">자동 기능</div>
-      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자·화면 효과 끄기)')}<div class="set"><span>사실적인 기사 모델 (다시 접속하면 적용)</span><button class="tog ${S.opts.hdModels !== false ? 'on' : ''}" data-a="hdtog" aria-pressed="${S.opts.hdModels !== false}"></button></div><div class="set"><span>화면 효과 (빛 번짐·색감 보정)</span><button class="tog ${S.opts.post !== false ? 'on' : ''}" data-a="posttog" aria-pressed="${S.opts.post !== false}"></button></div><div class="set"><span>각성 몬스터 (환생 후)</span><button class="tog ${S.opts.awaken !== false ? 'on' : ''}" data-a="awktog" aria-pressed="${S.opts.awaken !== false}"></button></div><div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
+      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자·화면 효과 끄기)')}<div class="set"><span>사실적인 캐릭터 모델 (다시 접속하면 적용)</span><button class="tog ${S.opts.hdModels !== false ? 'on' : ''}" data-a="hdtog" aria-pressed="${S.opts.hdModels !== false}"></button></div><div class="set"><span>화면 효과 (빛 번짐·색감 보정)</span><button class="tog ${S.opts.post !== false ? 'on' : ''}" data-a="posttog" aria-pressed="${S.opts.post !== false}"></button></div><div class="set"><span>각성 몬스터 (환생 후)</span><button class="tog ${S.opts.awaken !== false ? 'on' : ''}" data-a="awktog" aria-pressed="${S.opts.awaken !== false}"></button></div><div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
       <div class="set"><span>카메라 거리 <b id="camzv" style="color:var(--gold2)">${Math.round(camOpt().z * 100)}%</b></span><input type="range" id="camz" min="50" max="180" step="5" value="${Math.round(camOpt().z * 100)}"></div>
       <div class="set"><span>카메라 각도 <b id="campv" style="color:var(--gold2)">${Math.round(camOpt().pitch)}°</b></span><input type="range" id="camp" min="30" max="82" step="1" value="${Math.round(camOpt().pitch)}"></div>
       <div class="set"><span>시점 회전·거리·각도</span><button class="btn" data-a="camreset">기본값으로</button></div>
@@ -3653,7 +3653,7 @@ function begin() {
   { const sa = sharedAdena(); if (sa != null) S.adena = sa; }
   if (!(S.zone < ZONES.length) || ZONES[S.zone].raid) S.zone = 0;
   if (P.act) killActor(P.act);
-  P.act = makeActor({ model: CLS[S.cls].model, flash: true, st: '1h', hd: S.cls === 'knight' ? 'knight' : null }); P.act.kindKey = 'cls'; P.look = '';
+  P.act = makeActor({ model: CLS[S.cls].model, flash: true, st: '1h', hd: S.cls }); P.act.kindKey = 'cls'; P.look = '';
   recalc();
   if (S.hp <= 0) S.hp = D.maxHp * .5;
   R.ready = true; R.dead = false; R.auto = !!S.autoOn; P.cds = {}; P.buffs = {}; P.queue = null;
