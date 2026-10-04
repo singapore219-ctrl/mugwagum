@@ -133,6 +133,18 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
 .act.sk.skimg .skn{display:none}
 .act.sk.skimg .skm{position:absolute;left:0;right:0;bottom:3px;font-size:9.5px;font-weight:700;text-shadow:0 0 3px #000,0 1px 2px #000,0 0 6px #000}
 .ico.skimg{border-color:rgba(216,174,79,.5)}
+.spr{background-repeat:no-repeat;background-color:#16120d;border-color:rgba(216,174,79,.45)}
+.card.art{position:relative;overflow:hidden;border:0;background:linear-gradient(170deg,color-mix(in srgb,var(--gc) 30%,#16120d),#0d0a07 75%);justify-content:flex-end;padding:0 10% 13%}
+.card.art .pa,.card.art .pf{position:absolute;inset:0;background-repeat:no-repeat}
+.card.art .pa{inset:5% 6%}
+.card.art.leg .pa::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.85))}
+.card.art .g,.card.art .cn,.card.art .ct{position:relative;text-shadow:0 1px 3px #000,0 0 6px #000}
+.ov.title{justify-content:flex-start;padding-left:max(5vw, env(safe-area-inset-left, 0px));
+  background:linear-gradient(90deg,rgba(8,6,4,.93) 0%,rgba(8,6,4,.78) 38%,rgba(8,6,4,.15) 66%,rgba(8,6,4,0)),url(assets/ui/login.webp?v=1) 70% center/cover no-repeat,#0e0c09}
+.ov.title .box{width:min(440px,46vw)}
+@media (orientation:portrait){ .ov.title{justify-content:center;padding-left:16px;background:linear-gradient(rgba(8,6,4,.82),rgba(8,6,4,.92)),url(assets/ui/login.webp?v=1) 70% center/cover no-repeat,#0e0c09} .ov.title .box{width:min(440px,100%)} }
+.cc .cimg{display:block;margin:0 auto 6px;width:100%;max-width:120px;aspect-ratio:8/9;border-radius:7px;border:1px solid var(--line2)}
+#adena .coin{display:inline-block;width:15px;height:15px;border-radius:50%;vertical-align:-3px;margin-right:4px}
 #bS1{right:94px;bottom:2px;width:56px;height:56px}
 #bS2{right:152px;bottom:44px}
 #bS3{right:100px;bottom:66px}
@@ -318,7 +330,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
     </div>
     <div id="right">
       <div id="zone">-</div>
-      <div id="adena"><b id="ad">0</b> 아데나</div>
+      <div id="adena"><i class="coin spr" id="adCoin"></i><b id="ad">0</b> 아데나</div>
       <div id="menu">
         <button class="mbtn" data-open="bag">가방</button>
         <button class="mbtn" data-open="enc">강화</button>
@@ -352,14 +364,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
     <div id="sheetHead"><div id="sheetTitle">가방</div><button id="sheetX" aria-label="닫기">✕</button></div>
     <div id="sheetBody"></div>
   </div>
-  <div class="ov" id="loading">
+  <div class="ov title" id="loading">
     <div class="box">
       <div class="logo">무과금 사냥터</div>
       <p class="sub" id="loadMsg">사냥터를 준비하고 있어요…</p>
       <div class="loadbar"><i id="loadBar"></i></div>
     </div>
   </div>
-  <div class="ov" id="create" hidden>
+  <div class="ov title" id="create" hidden>
     <div class="box">
       <div class="logo">무과금 사냥터</div>
       <p class="sub">과금 없이 혼자 즐기는 사냥터입니다.<br>물약 사서 사냥하고, 드랍템 모아서 강화하세요.</p>
@@ -740,13 +752,31 @@ let toastTm = 0;
 function toast(txt, cls = '') { const t = el('toast'); t.textContent = txt; t.className = 'show ' + cls; clearTimeout(toastTm); toastTm = setTimeout(() => t.className = cls, 1600); }
 function flashHurt() { const h = el('hurt'); h.classList.add('on'); setTimeout(() => h.classList.remove('on'), 60); }
 const icoHtml = (bg, g) => `<span class="ico" style="background:${bg}">${g}</span>`;
+// 2D art sprite sheets in assets/ui (see build_ui_art.py): name -> [file, columns, rows]
+const SPR = { items: ['items', 6, 3], gear: ['gear', 7, 7], pets: ['pets', 5, 1], face: ['polyface', 6, 2], card: ['polycard', 6, 2], frame: ['frames', 5, 1], cls: ['classes', 3, 1] };
+const uiUrl = f => (window.__UI__ && window.__UI__[f]) || `assets/ui/${f}.webp?v=${UI_V}`;
+const sprStyle = (k, i) => { const [f, c, r] = SPR[k]; return `background-image:url(${uiUrl(f)});background-size:${c * 100}% ${r * 100}%;background-position:${c > 1 ? (i % c) / (c - 1) * 100 : 0}% ${r > 1 ? Math.floor(i / c) / (r - 1) * 100 : 0}%`; };
+const sprIco = (k, i, extra = '', cls = 'ico') => `<span class="${cls} spr" style="${sprStyle(k, i)}${extra}"></span>`;
+const ITEMI = { red: 0, blue: 1, ew: 2, ea: 3, ret: 4, tele: 5, adena: 6, loot: 7, orange: 8, clear: 9, elixir: 10, green: 11, bew: 12, bea: 13, pew: 14, pea: 15, pticket: 16 };
+if (el('adCoin')) el('adCoin').style.cssText = sprStyle('items', 6);
+const GEARSLOT = { sword: 0, bow: 1, staff: 2, helm: 3, armor: 4, gloves: 5, boots: 6 };
+const PETI = { orc: 0, skel: 1, archer: 2, priest: 3, gold: 4 };
+const LEGI = { fallen: 0, lord: 1, frostlord: 2, sandking: 3, swampqueen: 4, empress: 5, judge: 6, abysslord: 7, shroomking: 8, volcheart: 9, ghostcaptain: 10, duskking: 11 };
+const polyIco = (id, own) => own && LEGI[id] != null ? sprIco('face', LEGI[id], `;border-color:${PGRADE[POLY[id]].col}`) : icoHtml(own ? PGRADE[POLY[id]].col : '#2a2217', own ? MON[id].n[0] : '?');
+const petIco = (k, own) => PETI[k] != null ? sprIco('pets', PETI[k], own ? '' : ';filter:grayscale(1) brightness(.55)') : icoHtml('#d8ae4f', PETS[k].n[0]);
+// a polymorph card: grade frame over legendary art (or a tinted panel), name and stars on top
+const polyCard = (id, g, tag, i) => `<div class="card art${LEGI[id] != null ? ' leg' : ''}" style="--gc:${PGRADE[g].col};--d:${(i * .12).toFixed(2)}s">
+  ${LEGI[id] != null ? `<i class="pa" style="${sprStyle('card', LEGI[id])}"></i>` : ''}<i class="pf" style="${sprStyle('frame', g)}"></i>
+  <span class="g">${PGRADE[g].k}</span><span class="cn">${MON[id].n}</span><span class="ct">${tag}</span></div>`;
 function gearIco(g, big) {
   const b = GEAR[g.b], bg = b.slot === 'weapon' ? '#a9b4c4' : ['#9a7a52', '#b08850', '#8e98a4', '#b8d4e6', '#6fc49a', '#f3d98a', '#ff9a6a'][b.tier - 1];
   const glyph = b.slot === 'weapon' ? WGLYPH[b.wt] : AGLYPH[b.slot];
   const glow = g.e >= 7 ? ecol(g.e) : '';
+  const si = (b.tier - 1) * 7 + GEARSLOT[b.slot === 'weapon' ? b.wt : b.slot];
+  if (b.tier <= 7 && !Number.isNaN(si)) return sprIco('gear', si, glow ? `;box-shadow:0 0 14px ${glow};border-color:${glow}` : '', 'ico' + (big ? ' big' : ''));
   return `<span class="ico${big ? ' big' : ''}" style="background:${bg}${glow ? `;box-shadow:0 0 14px ${glow}` : ''}">${glyph}</span>`;
 }
-const itemIco = k => icoHtml(ITEMS[k].ic[0], ITEMS[k].ic[1]);
+const itemIco = k => ITEMI[k] != null ? sprIco('items', ITEMI[k]) : k.startsWith('j_') ? sprIco('items', ITEMI.loot) : icoHtml(ITEMS[k].ic[0], ITEMS[k].ic[1]);
 function gearStat(g) {
   const b = GEAR[g.b];
   if (b.slot === 'weapon') return `공격 ${b.min}-${b.max}${g.e ? ` +${g.e + Math.max(0, g.e - 6)}` : ''} · ${CLS[Object.keys(CLS).find(c => CLS[c].wt === b.wt)].n} 전용`;
@@ -1001,7 +1031,7 @@ function polyDraw(n, ticket) {
   if (best >= 3) SFX.rare(); else SFX.win();
   el('gachaTitle').textContent = n === 10 ? '변신 카드 10회' : '변신 카드';
   el('gachaCards').className = 'cards' + (n === 1 ? ' one' : '');
-  el('gachaCards').innerHTML = res.map((r, i) => `<div class="card" style="--gc:${PGRADE[r.g].col};--d:${(i * .12).toFixed(2)}s"><span class="g">${PGRADE[r.g].k}</span><span class="cn">${MON[r.id].n}</span><span class="ct">${r.isNew ? 'NEW' : '★' + r.stars}</span></div>`).join('');
+  el('gachaCards').innerHTML = res.map((r, i) => polyCard(r.id, r.g, r.isNew ? 'NEW' : '★' + r.stars, i)).join('');
   el('gacha').hidden = false;
   R.dirty = true; save();
 }
@@ -1033,7 +1063,7 @@ function fuseGo() {
   if (ok) (g >= 3 ? SFX.rare : SFX.win)(); else SFX.fail();
   el('gachaTitle').textContent = ok ? '합성 성공!' : '합성 실패';
   el('gachaCards').className = 'cards one';
-  el('gachaCards').innerHTML = `<div class="card" style="--gc:${PGRADE[g].col};--d:0s"><span class="g">${PGRADE[g].k}</span><span class="cn">${MON[id].n}</span><span class="ct">${isNew ? 'NEW' : '★' + ps.owned[id]}</span></div>`;
+  el('gachaCards').innerHTML = polyCard(id, g, isNew ? 'NEW' : '★' + ps.owned[id], 0);
   el('gacha').hidden = false;
   R.dirty = true; save();
 }
@@ -2742,7 +2772,7 @@ function fuseView() {
   if (!ids.length) h += `<p class="note">${G.k} 등급 변신이 없어요.</p>`;
   for (const id of ids) {
     const sp = fuseSpare(id);
-    h += `<div class="row">${icoHtml(G.col, MON[id].n[0])}<div class="info"><div class="n">${MON[id].n} <span style="color:var(--gold2);font-size:11px">★${ps.owned[id]}</span>${id === polyActive() ? '<span class="tag">변신 중</span>' : ''}</div><div class="s">넣을 수 있는 장 ${Math.max(0, sp)}</div></div>
+    h += `<div class="row">${polyIco(id, true)}<div class="info"><div class="n">${MON[id].n} <span style="color:var(--gold2);font-size:11px">★${ps.owned[id]}</span>${id === polyActive() ? '<span class="tag">변신 중</span>' : ''}</div><div class="s">넣을 수 있는 장 ${Math.max(0, sp)}</div></div>
       <div class="btns"><button class="btn" data-a="fusein" data-v="${id}" ${sp > 0 && f.picks.length < 4 ? '' : 'disabled'}>넣기</button></div></div>`;
   }
   return h;
@@ -2753,7 +2783,7 @@ const VIEWS = {
     let h = `<p class="note" style="margin-top:6px">펫은 한 마리만 데리고 다닐 수 있어요. 내가 잡은 몬스터로 레벨이 오르고(최대 Lv.60), 쓰러져도 20초 뒤 돌아와요. 분양은 마을에서만 할 수 있어요.</p>`;
     for (const k in PETS) {
       const d = PETS[k], o = ps.owned[k];
-      h += `<div class="row">${icoHtml(o ? (d.glow || '#d8ae4f') : '#2a2217', d.n[0] === '꼬' ? d.n[3] : d.n[0])}<div class="info"><div class="n">${d.n}<span class="tag">${d.role}</span>${o ? ` <span style="color:var(--gold2);font-size:11px">Lv.${o.lv}</span>` : ''}</div>
+      h += `<div class="row">${petIco(k, !!o)}<div class="info"><div class="n">${d.n}<span class="tag">${d.role}</span>${o ? ` <span style="color:var(--gold2);font-size:11px">Lv.${o.lv}</span>` : ''}</div>
         <div class="s">${d.desc}${o ? ` · 공격 ${Math.round(petStats(k).dmg)} · HP ${fmt(petStats(k).maxHp)}` : ` · ${fmt(d.price)} 아데나`}</div>
         ${o && o.lv < 60 ? `<div class="pexp"><i style="width:${o.exp / petNeed(o.lv) * 100}%"></i></div>` : ''}</div>
         <div class="btns">${o ? (a === k ? `<button class="btn" data-a="petoff">해제</button>` : `<button class="btn pri" data-a="petuse" data-v="${k}">소환</button>`) : `<button class="btn" data-a="petbuy" data-v="${k}" ${!town || S.adena < d.price ? 'disabled' : ''}>분양</button>`}</div></div>`;
@@ -2763,7 +2793,7 @@ const VIEWS = {
   poly() {
     const ps = polyState(), a = polyActive(), pb = polyBonus(), town = ZONES[S.zone].town;
     let h = `<div class="sec">현재 변신</div>`;
-    if (a) h += `<div class="row">${icoHtml(PGRADE[POLY[a]].col, MON[a].n[0])}<div class="info"><div class="n">${MON[a].n}<span class="grade" style="--gc:${PGRADE[POLY[a]].col}">${PGRADE[POLY[a]].k}</span></div>
+    if (a) h += `<div class="row">${polyIco(a, true)}<div class="info"><div class="n">${MON[a].n}<span class="grade" style="--gc:${PGRADE[POLY[a]].col}">${PGRADE[POLY[a]].k}</span></div>
       <div class="s">★${pb.stars} · ${pb.type}형 · ${polyStatText(pb.stats)}</div></div><div class="btns"><button class="btn" data-a="polyoff">해제</button></div></div>`;
     else h += `<p class="note">변신하지 않았어요. 아래에서 가진 변신을 고르세요.</p>`;
     h += `<div class="sec">변신 카드 뽑기</div>
@@ -2775,7 +2805,7 @@ const VIEWS = {
     const ids = Object.keys(POLY).sort((x, y) => POLY[y] - POLY[x]);
     for (const id of ids) {
       const g = PGRADE[POLY[id]], own = ps.owned[id];
-      h += `<div class="row" style="${own ? '' : 'opacity:.4'}">${icoHtml(own ? g.col : '#2a2217', own ? MON[id].n[0] : '?')}<div class="info"><div class="n">${MON[id].n}<span class="grade" style="--gc:${g.col}">${g.k}</span>${own ? ` <span style="color:var(--gold2);font-size:11px">★${own}</span>` : ''}</div>
+      h += `<div class="row" style="${own ? '' : 'opacity:.4'}">${polyIco(id, own)}<div class="info"><div class="n">${MON[id].n}<span class="grade" style="--gc:${g.col}">${g.k}</span>${own ? ` <span style="color:var(--gold2);font-size:11px">★${own}</span>` : ''}</div>
         <div class="s">${polyType(id)}형 · ${polyStatText(polyStatsOf(id, own || 1))}</div></div>
         <div class="btns">${own && id !== a ? `<button class="btn pri" data-a="polyuse" data-v="${id}">변신</button>` : id === a ? '<span class="tag">변신 중</span>' : ''}</div></div>`;
     }
@@ -3301,7 +3331,7 @@ function showCreate() {
   const wrap = el('classes'); wrap.innerHTML = '';
   for (const k in CLS) {
     const b = document.createElement('button'); b.className = 'cc' + (k === chosen ? ' on' : ''); b.type = 'button';
-    b.innerHTML = `${PORTRAITS[k] ? `<img src="${PORTRAITS[k]}" alt="">` : ''}<b>${CLS[k].n}</b><span>${CLS[k].desc}</span>`;
+    b.innerHTML = `<i class="cimg spr" style="${sprStyle('cls', ['knight', 'elf', 'mage'].indexOf(k))}"></i><b>${CLS[k].n}</b><span>${CLS[k].desc}</span>`;
     b.addEventListener('click', () => { chosen = k; wrap.querySelectorAll('.cc').forEach(x => x.classList.remove('on')); b.classList.add('on'); });
     wrap.appendChild(b);
   }
