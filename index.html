@@ -19,6 +19,12 @@
 <script src="lib/GLTFLoader.js"></script>
 <script src="lib/SkeletonUtils.js"></script>
 <script src="lib/BufferGeometryUtils.js"></script>
+<script src="lib/CopyShader.js"></script>
+<script src="lib/LuminosityHighPassShader.js"></script>
+<script src="lib/EffectComposer.js"></script>
+<script src="lib/RenderPass.js"></script>
+<script src="lib/ShaderPass.js"></script>
+<script src="lib/UnrealBloomPass.js"></script>
 <style>
 :root{
   color-scheme: dark;
@@ -786,7 +792,7 @@ function gearStat(g) {
 /* ================= 3D ENGINE ================= */
 const glc = el('gl'), ovc = el('ov'), octx = ovc.getContext('2d');
 let W = 0, H = 0, dpr = 1, renderer, scene, camera, hemi, sun, zoneGroup, fxGroup, playerLight;
-let MODELS = {}, CLIPS = {}, PROPS = {}, PROPSIZE = {}, CHAR_SCALE = .6, CHAR_H = 1.45, GLOW_TEX = null;
+let MODELS = {}, CLIPS = {}, PROPS = {}, PROPSIZE = {}, CHAR_SCALE = .6, CHAR_H = 1.45, GLOW_TEX = null, RING_TEX = null, BEAM_TEX = null;
 const TMP = new THREE.Vector3(), TMP2 = new THREE.Vector3();
 const MOBILE = Math.min(screen.width, screen.height) < 700;
 
@@ -808,11 +814,65 @@ function initGL() {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.25, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64); GLOW_TEX = new THREE.CanvasTexture(c);
+  RING_TEX = softTex('ring'); BEAM_TEX = softTex('beam');
+  setupPost();
   resize();
+}
+/* ---------- post-processing ----------
+   The scene renders linear HDR into a half-float target; bloom picks up bright metal, magic and fire,
+   then one grade pass does ACES tone mapping, a touch of contrast/saturation, a vignette and sRGB output.
+   Off in 저사양 모드 or when the 화면 효과 option is off. */
+let post = null;
+const GRADE_SHADER = {
+  uniforms: { tDiffuse: { value: null }, exposure: { value: 1 }, vig: { value: .32 }, sat: { value: 1.08 }, con: { value: 1.06 }, warm: { value: new THREE.Vector3(1.03, 1, .95) } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float exposure, vig, sat, con; uniform vec3 warm; varying vec2 vUv;
+    vec3 rrt(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
+    vec3 aces(vec3 c){ const mat3 i = mat3(vec3(0.59719,0.07600,0.02840), vec3(0.35458,0.90834,0.13383), vec3(0.04823,0.01566,0.83777));
+      const mat3 o = mat3(vec3(1.60475,-0.10208,-0.00327), vec3(-0.53108,1.10813,-0.07276), vec3(-0.07367,-0.00605,1.07602));
+      c *= exposure / 0.6; c = i * c; c = rrt(c); c = o * c; return clamp(c, 0.0, 1.0); }
+    vec3 srgb(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(0.0031308, c)); }
+    void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb * warm; c = aces(c);
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c = mix(vec3(l), c, sat); c = (c - 0.5) * con + 0.5;
+      vec2 d = vUv - 0.5; c *= 1.0 - vig * smoothstep(0.35, 0.95, length(d * vec2(1.25, 1.0)));
+      gl_FragColor = vec4(srgb(clamp(c, 0.0, 1.0)), 1.0); }`,
+};
+function setupPost() {
+  if (!THREE.EffectComposer || !THREE.UnrealBloomPass) return;
+  const gl2 = renderer.capabilities.isWebGL2, hf = gl2 && renderer.extensions.has('EXT_color_buffer_float');
+  const rt = new THREE.WebGLRenderTarget(4, 4, { type: hf ? THREE.HalfFloatType : THREE.UnsignedByteType, samples: gl2 ? (MOBILE ? 2 : 4) : 0 });
+  const composer = new THREE.EffectComposer(renderer, rt);
+  composer.addPass(new THREE.RenderPass(scene, camera));
+  const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), .55, .45, .82);
+  composer.addPass(bloom);
+  const grade = new THREE.ShaderPass(GRADE_SHADER);
+  composer.addPass(grade);
+  post = { composer, bloom, grade, on: true };
+}
+function postEnabled() { return !!post && !(S && S.opts.lowfx) && !(S && S.opts.post === false); }
+function render3d() {
+  if (postEnabled()) { post.grade.uniforms.exposure.value = renderer.toneMappingExposure; post.composer.render(); }
+  else renderer.render(scene, camera);
+}
+// soft additive textures for rings and light columns
+function softTex(kind) {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  if (kind === 'ring') {
+    const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.55, 'rgba(255,255,255,.08)'); gr.addColorStop(.78, 'rgba(255,255,255,.55)');
+    gr.addColorStop(.86, 'rgba(255,255,255,1)'); gr.addColorStop(.93, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  } else {
+    const gr = g.createLinearGradient(0, 0, 0, 128);
+    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.35, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,1)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  }
+  return new THREE.CanvasTexture(c);
 }
 function resize() {
   const g = el('game'); W = g.clientWidth; H = g.clientHeight; dpr = Math.min(window.devicePixelRatio || 1, MOBILE ? 1.75 : 2);
   if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); }
+  if (post) { post.composer.setPixelRatio(dpr); post.composer.setSize(W, H); post.bloom.resolution.set(W / 2, H / 2); }
   ovc.width = Math.round(W * dpr); ovc.height = Math.round(H * dpr);
 }
 window.addEventListener('resize', resize);
@@ -876,6 +936,16 @@ function propClone(name, glow) {
   if (glow) c.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(glow); o.material.emissiveIntensity = .9; } });
   return c;
 }
+// rim light: brightens edges facing away from the camera, cheap (no extra draw calls)
+function addRim(mat) {
+  if (!mat || mat.userData.rim || !mat.isMeshStandardMaterial) return;
+  mat.userData.rim = true;
+  mat.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <output_fragment>',
+      'float rimF = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 2.6);\n  outgoingLight += vec3(1.0, 0.86, 0.66) * rimF * 0.45;\n#include <output_fragment>');
+  };
+  mat.customProgramCacheKey = () => 'rim';
+}
 function makeActor(o) {
   const root = new THREE.Group();
   const m = THREE.SkeletonUtils.clone(MODELS[o.model]);
@@ -884,8 +954,9 @@ function makeActor(o) {
   m.traverse(n => {
     if (!n.isMesh) return;
     n.castShadow = true; n.frustumCulled = false;
+    addRim(n.material);
     if (o.tint || o.flash || o.glow) {
-      n.material = n.material.clone(); mats.push(n.material);
+      n.material = n.material.clone(); addRim(n.material); mats.push(n.material);
       if (o.tint) n.material.color.multiply(new THREE.Color(o.tint));
       if (o.glow) { n.material.emissive = new THREE.Color(o.glow); n.material.emissiveIntensity = .35; }
       n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity;
@@ -1186,7 +1257,7 @@ function buildZone(z) {
   scene.background = new THREE.Color(Z.sky);
   scene.fog = new THREE.Fog(Z.fog[0], Z.fog[1], Z.fog[2]); fogZ = -1;
   const LIGHT = Z.light || [[.7, 1.45, 0xfff0d8], [.7, 1.5, 0xfff4e0], [.6, 1.15, 0xe8ffd8], [.35, .45, 0x8fa0ff], [.5, 1, 0xffa070], [.75, 1.15, 0xe2f0ff]][z];
-  hemi.intensity = LIGHT[0]; sun.intensity = LIGHT[1]; sun.color.set(LIGHT[2]);
+  hemi.intensity = LIGHT[0] * .85; sun.intensity = LIGHT[1] * 1.18; sun.color.set(LIGHT[2]);
   hemi.groundColor.set(Z.hemiG != null ? Z.hemiG : z === 3 ? 0x1a1a2a : z === 4 ? 0x3a1a10 : z === 5 ? 0x6a8098 : 0x4a3a28);
   playerLight.intensity = Z.plight != null ? Z.plight : z === 3 ? 2.2 : z === 4 ? .8 : 0;
   const own = o => { o.userData.own = true; return o; };
@@ -1861,15 +1932,15 @@ function enterZone(z) {
 }
 
 /* ================= FX ================= */
-const RING_G = new THREE.RingGeometry(.82, 1, 40), COL_G = new THREE.CylinderGeometry(.5, .5, 1, 20, 1, true);
+const RING_G = new THREE.RingGeometry(.82, 1, 40), COL_G = new THREE.CylinderGeometry(.5, .5, 1, 20, 1, true), FX_PLANE = new THREE.PlaneGeometry(2.2, 2.2);
 function fx(k, x, y, o = {}) {
   let obj;
   const col = new THREE.Color(o.col != null ? o.col : 0xffffff);
   const addMat = () => new THREE.MeshBasicMaterial({ color: col, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  if (k === 'ring' || k === 'heal' || k === 'lvl' || k === 'boom') { obj = new THREE.Mesh(RING_G, addMat()); obj.rotation.x = -Math.PI / 2; obj.position.set(x, .05, y); }
-  else if (k === 'spark' || k === 'column') { obj = new THREE.Mesh(COL_G, addMat()); obj.position.set(x, 1.2, y); obj.scale.set(1, 2.4, 1); }
+  if (k === 'ring' || k === 'heal' || k === 'lvl' || k === 'boom') { const mt = addMat(); mt.map = RING_TEX; if (k === 'boom') mt.color.multiplyScalar(1.6); obj = new THREE.Mesh(FX_PLANE, mt); obj.rotation.x = -Math.PI / 2; obj.position.set(x, .06, y); }
+  else if (k === 'spark' || k === 'column') { const mt = addMat(); mt.map = BEAM_TEX; mt.color.multiplyScalar(1.4); obj = new THREE.Mesh(COL_G, mt); obj.position.set(x, 1.2, y); obj.scale.set(1, 2.4, 1); }
   else if (k === 'glow' || k === 'hit') { obj = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: col, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); obj.position.set(x, o.h != null ? o.h : .9, y); }
-  else { obj = new THREE.Mesh(new THREE.RingGeometry(.7, 1.05, 24, 1, 0, Math.PI * .9), addMat()); obj.userData.ownGeo = true; obj.position.set(x, .9, y); obj.rotation.set(-Math.PI / 2 + .5, 0, rnd(0, 6.28)); }
+  else { const mt = addMat(); mt.color.multiplyScalar(1.5); obj = new THREE.Mesh(new THREE.RingGeometry(.78, 1.02, 28, 1, 0, Math.PI * .9), mt); obj.userData.ownGeo = true; obj.position.set(x, .9, y); obj.rotation.set(-Math.PI / 2 + .5, 0, rnd(0, 6.28)); }
   fxGroup.add(obj);
   R.fx.push({ k, obj, t: 0, dur: o.dur || .6, r1: o.r1 || 1.5 });
   if (k === 'lvl') fx('column', x, y, { col: 0xffd070, dur: 1.3 });
@@ -2912,7 +2983,7 @@ const VIEWS = {
       <div class="sec">자동 사냥 때 쓸 스킬 <span style="font-weight:500">스킬 버튼을 길게 눌러도 바뀌어요</span></div>
       ${mySkills().map(k => `<div class="set"><span style="display:flex;align-items:center;gap:8px">${skIco(k)}${k.n}${S.lv < k.lv ? ` <span class="tag">Lv.${k.lv}</span>` : ''}</span><button class="tog ${autoOn(k) ? 'on' : ''}" data-a="skauto" data-v="${k.id}" aria-pressed="${autoOn(k)}"></button></div>`).join('')}
       <div class="sec">자동 기능</div>
-      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자 끄기)')}<div class="set"><span>각성 몬스터 (환생 후)</span><button class="tog ${S.opts.awaken !== false ? 'on' : ''}" data-a="awktog" aria-pressed="${S.opts.awaken !== false}"></button></div><div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
+      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자·화면 효과 끄기)')}<div class="set"><span>화면 효과 (빛 번짐·색감 보정)</span><button class="tog ${S.opts.post !== false ? 'on' : ''}" data-a="posttog" aria-pressed="${S.opts.post !== false}"></button></div><div class="set"><span>각성 몬스터 (환생 후)</span><button class="tog ${S.opts.awaken !== false ? 'on' : ''}" data-a="awktog" aria-pressed="${S.opts.awaken !== false}"></button></div><div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
       <div class="set"><span>카메라 거리 <b id="camzv" style="color:var(--gold2)">${Math.round(camOpt().z * 100)}%</b></span><input type="range" id="camz" min="50" max="180" step="5" value="${Math.round(camOpt().z * 100)}"></div>
       <div class="set"><span>카메라 각도 <b id="campv" style="color:var(--gold2)">${Math.round(camOpt().pitch)}°</b></span><input type="range" id="camp" min="30" max="82" step="1" value="${Math.round(camOpt().pitch)}"></div>
       <div class="set"><span>시점 회전·거리·각도</span><button class="btn" data-a="camreset">기본값으로</button></div>
@@ -3135,6 +3206,7 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'loadcode') { if (!R.confirmImport) R.confirmImport = true; else { importSave(); return; } }
   else if (a === 'awktog') { S.opts.awaken = S.opts.awaken === false; toast('다음에 사냥터에 들어갈 때부터 적용돼요'); }
   else if (a === 'pktog') { S.opts.pkOn = S.opts.pkOn === false; }
+  else if (a === 'posttog') { S.opts.post = S.opts.post === false; }
   else if (a === 'pkattack') { pkAttackBot(v); return; }
   else if (a === 'invite') { inviteBot(R.bots.find(b => b.name === v && !b.party)); }
   else if (a === 'kick') { kickBot(v); }
@@ -3471,7 +3543,7 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   if (S && R.ready && P.act) {
-    update(dt); renderer.render(scene, camera); drawOverlay();
+    update(dt); render3d(); drawOverlay();
     hudT += dt; if (hudT > .1) { hudT = 0; hud(); }
   } else if (renderer) { octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, ovc.width, ovc.height); }
   requestAnimationFrame(frame);
