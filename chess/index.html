@@ -11,6 +11,13 @@
 <script src="../lib/three.min.js"></script>
 <script src="../lib/GLTFLoader.js"></script>
 <script src="../lib/SkeletonUtils.js"></script>
+<script src="../lib/CopyShader.js"></script>
+<script src="../lib/LuminosityHighPassShader.js"></script>
+<script src="../lib/EffectComposer.js"></script>
+<script src="../lib/RenderPass.js"></script>
+<script src="../lib/ShaderPass.js"></script>
+<script src="../lib/UnrealBloomPass.js"></script>
+<script src="../lib/mgfx.js"></script>
 <style>
 :root{
   color-scheme: dark;
@@ -83,6 +90,9 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
 .loadbar{height:6px;border-radius:3px;background:#2a2217;overflow:hidden;margin-top:16px;border:1px solid var(--line)}
 .loadbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#a67f2c,#f1d58c)}
 @media (max-height:640px){ #traits{display:none} }
+.rcol{display:flex;flex-direction:column;align-items:flex-end}
+.fxb{pointer-events:auto;margin-top:5px;background:rgba(14,11,8,.8);border:1px solid #6b5a3a;color:#f1d58c;border-radius:12px;padding:3px 9px;font:700 10.5px inherit;font-family:inherit}
+.fxb.off{color:#9a8e78}
 </style>
 </head>
 <body>
@@ -91,7 +101,7 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
   <canvas id="ov"></canvas>
   <div id="top">
     <div id="stageBox"><div id="stage">1-1</div><div id="phase">준비</div></div>
-    <div id="players"></div>
+    <div class="rcol"><div id="players"></div><button id="bFx" class="fxb">효과 켬</button></div>
   </div>
   <div id="traits"></div>
   <div id="info" hidden></div>
@@ -142,6 +152,10 @@ const pick = a => a[Math.floor(Math.random() * a.length)];
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const THREE = window.THREE;
+const MOBILE = matchMedia('(pointer:coarse)').matches;
+// 화면 효과 (bloom, colour grade, full particles): one switch, remembered on this device; shared with 영토전쟁
+const FXOPT = { on: (() => { try { return localStorage.getItem('mug-fx') !== 'off'; } catch (e) { return true; } })() };
+const VX = window.MGFX.VX;
 
 /* ================= DATA ================= */
 const COST_COL = ['', '#9aa0a8', '#4fb06a', '#4a8fe0', '#b06ae0', '#e8b030'];
@@ -353,6 +367,7 @@ function initGL() {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(.3, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64); GLOW_TEX = new THREE.CanvasTexture(c);
+  MGFX.init({ renderer, scene, camera, host: el('game'), glowTex: GLOW_TEX, mobile: MOBILE, low: () => !FXOPT.on, post: () => FXOPT.on, exposure: 1.15, grade: { vig: .12, con: 1, sat: 1.05 } });
   buildBoard(); resize();
 }
 const lin = h => new THREE.Color(h).convertSRGBToLinear();
@@ -384,7 +399,7 @@ function buildBoard() {
 }
 function resize() {
   W = innerWidth; H = innerHeight; dpr = Math.min(devicePixelRatio || 1, 2);
-  if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); }
+  if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); MGFX.resize(W, H, dpr); }
   ovc.width = W * dpr; ovc.height = H * dpr;
   // fit the whole board + bench (about 9 wide, 11 deep) whatever the aspect
   const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(5 / (half * camera.aspect), 6.6 / half);
@@ -416,7 +431,13 @@ async function loadAssets() {
   for (const a of anims.animations) CLIPS[a.name] = a;
   for (const p of props.scene.children) PROPS[p.name] = p;
   const kb = new THREE.Box3().setFromObject(MODELS.Knight); CHAR_SCALE = 1.25 / (kb.max.y - kb.min.y);
+  MGFX.assets({ clips: CLIPS, props: PROPS, charScale: CHAR_SCALE });
+  try { await MGFX.hdSetup({ base: '../assets/models/', knight: MODELS.Knight, charH: 1.25, preload: ['knight', 'elf', 'mage'], onReady: hdReady }); } catch (e) { console.warn(e); }
 }
+// a realistic body finished loading: redraw the planning board with it (fights pick it up next round)
+function hdReady() { if (G.phase === 'plan' && G.me) { clearView(); syncView(G.me, G.opp); } }
+// unit key -> realistic model name (monster ids from 무과금 사냥터; same id needs no entry)
+const HDK = { recruit: 'knight', woodarcher: 'elf', appmage: 'mage', flamelord: 'lord', shadow: 'assassin', wolfling: 'goblin', skelling: 'skmin' };
 function styleAnims(st, sk) {
   return {
     idle: sk ? 'Skeletons_Idle' : st === 'bow' ? 'Ranged_Bow_Idle' : st === '2h' ? 'Idle_B' : 'Idle_A',
@@ -431,22 +452,23 @@ function propClone(name, glow) {
   return c;
 }
 function makeActor(key, star) {
-  const d = ALLU[key], root = new THREE.Group();
-  const m = THREE.SkeletonUtils.clone(MODELS[d.m]);
-  m.scale.setScalar(CHAR_SCALE * (d.s || 1) * (1 + (star - 1) * .12));
+  const d = ALLU[key], root = new THREE.Group(), hd = MGFX.hd(HDK[key] || key), sm = (d.s || 1) * (1 + (star - 1) * .12);
+  const m = THREE.SkeletonUtils.clone(hd ? hd.root : MODELS[d.m]);
+  m.scale.setScalar(hd ? sm : CHAR_SCALE * sm);
   const mats = [];
-  m.traverse(n => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; n.material = n.material.clone(); mats.push(n.material); if (d.tint) n.material.color.multiply(new THREE.Color(d.tint)); if (d.glow) { n.material.emissive = new THREE.Color(d.glow); n.material.emissiveIntensity = .25; } n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity; } });
+  m.traverse(n => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; n.material = n.material.clone(); MGFX.addRim(n.material); mats.push(n.material); if (d.tint && !hd) n.material.color.multiply(new THREE.Color(d.tint)); if (d.glow) { n.material.emissive = new THREE.Color(d.glow); n.material.emissiveIntensity = hd ? .05 : .14; } n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity; } });
   root.add(m);
-  const a = { root, m, mats, mixer: new THREE.AnimationMixer(m), acts: {}, cur: null, curName: '', lock: 0, A: styleAnims(d.st, d.sk), h: 1.25 * (d.s || 1) * (1 + (star - 1) * .12), atkI: 0 };
+  const a = { root, m, mats, hd, mixer: new THREE.AnimationMixer(m), acts: {}, cur: null, curName: '', lock: 0, A: styleAnims(d.st, d.sk), h: (hd ? hd.H : 1.25) * sm, atkI: 0 };
   const hr = m.getObjectByName('handslotr'), hl = m.getObjectByName('handslotl');
-  if (d.r && hr) { const w = propClone(d.r, star === 3 ? '#ffd070' : null); if (w) hr.add(w); }
-  if (d.l && hl) { const w = propClone(d.l); if (w) hl.add(w); }
+  if (d.r && hr) { const w = MGFX.fitProp(propClone(d.r, star === 3 ? '#ffd070' : null), hd); if (w) hr.add(w); }
+  if (d.l && hl) { const w = MGFX.fitProp(propClone(d.l), hd); if (w) hl.add(w); }
   play(a, a.A.idle); a.mixer.update(Math.random() * 2);
   scene.add(root);
   return a;
 }
 function play(a, name, opt = {}) {
-  const clip = CLIPS[name] || (/Idle/.test(name) ? CLIPS.Idle_A : null); if (!clip) return;
+  const lib = a.hd ? a.hd.clip : n => CLIPS[n];
+  const clip = lib(name) || (/Idle/.test(name) ? lib('Idle_A') : null); if (!clip) return;
   if (a.curName === name && !opt.once) return;
   let act = a.acts[name]; if (!act) act = a.acts[name] = a.mixer.clipAction(clip);
   act.reset(); act.setEffectiveTimeScale(opt.speed || 1); act.setEffectiveWeight(1);
@@ -549,11 +571,11 @@ function cast(B, f, t) {
   f.mana = 0;
   const foes = B.all.filter(o => !o.dead && o.side !== f.side), U = ALLU[f.key], st = f.star;
   if (B.visual) B.fx.push({ k: 'cast', f, t: 0 });
-  if (f.cls === '수호자') { f.shield += Math.round(f.maxHp * (.2 + .05 * U.c) * (1 + (st - 1) * .3)); }
-  else if (f.cls === '야만족') { for (const o of foes) if (dist(o, f) <= 1.3) dealDamage(B, f, o, f.ad * 2.2, false); if (B.visual) B.fx.push({ k: 'ring', x: f.x, z: f.z, col: 0xffa060, t: 0 }); }
+  if (f.cls === '수호자') { f.shield += Math.round(f.maxHp * (.2 + .05 * U.c) * (1 + (st - 1) * .3)); if (B.visual) B.fx.push({ k: 'shield', f, col: U.org === '빛' ? 0xffe080 : U.org === '서리' ? 0x8fd0ff : 0x8fb8ff, t: 0 }); }
+  else if (f.cls === '야만족') { for (const o of foes) if (dist(o, f) <= 1.3) dealDamage(B, f, o, f.ad * 2.2, false); if (B.visual) B.fx.push({ k: 'whirl', x: f.x, z: f.z, f, col: U.org === '서리' ? 0xcfeeff : U.org === '불꽃' ? 0xff8a3a : 0xffd0a0, t: 0 }); }
   else if (f.cls === '마법사') { const dmg = (150 + 70 * U.c) * [0, 1, 1.6, 2.6][st] * f.abilMul; dealDamage(B, f, t, dmg, true); for (const o of foes) if (o !== t && dist(o, t) <= 1.3) dealDamage(B, f, o, dmg * .5, true); if (B.visual) B.fx.push({ k: 'boom', x: t.x, z: t.z, col: U.org === '서리' ? 0x8fd0ff : U.org === '심연' ? 0xb060ff : U.org === '빛' ? 0xffe080 : 0xff8a3a, t: 0 }); }
-  else if (f.cls === '사냥꾼') { const near = foes.sort((a, b) => dist(a, f) - dist(b, f)).slice(0, 3); for (const o of near) dealDamage(B, f, o, f.ad * 1.6, false); if (B.visual) for (const o of near) B.fx.push({ k: 'arrow', x: f.x, z: f.z, to: o, t: 0 }); }
-  else if (f.cls === '암살자') { dealDamage(B, f, t, f.ad * 3, false); if (B.visual) B.fx.push({ k: 'ring', x: t.x, z: t.z, col: 0xd070ff, t: 0 }); }
+  else if (f.cls === '사냥꾼') { const near = foes.sort((a, b) => dist(a, f) - dist(b, f)).slice(0, 3); for (const o of near) dealDamage(B, f, o, f.ad * 1.6, false); if (B.visual) { for (const o of near) B.fx.push({ k: 'arrow', x: f.x, z: f.z, to: o, t: 0, big: 1 }); B.fx.push({ k: 'volley', x: f.x, z: f.z, t: 0 }); } }
+  else if (f.cls === '암살자') { dealDamage(B, f, t, f.ad * 3, false); if (B.visual) B.fx.push({ k: 'stab', x: t.x, z: t.z, col: U.org === '심연' ? 0xb060ff : 0xd070ff, t: 0 }); }
 }
 function stepBattle(B, dt) {
   if (B.over) return;
@@ -572,9 +594,9 @@ function stepBattle(B, dt) {
       if (f.mana >= f.maxMana) { cast(B, f, t); f.atkT = Math.max(f.atkT, .3); continue; }
       if (f.atkT <= 0) {
         f.atkT = 1 / f.as; f.mana = Math.min(f.maxMana, f.mana + 10 * f.mpMul);
-        if (B.visual) { f.anim = 'atk'; if (f.range > 1) B.fx.push({ k: f.cls === '마법사' ? 'bolt' : 'arrow', x: f.x, z: f.z, to: t, t: 0 }); }
+        if (B.visual) { f.anim = 'atk'; if (f.range > 1) B.fx.push({ k: f.cls === '마법사' ? 'bolt' : 'arrow', x: f.x, z: f.z, to: t, t: 0, col: ORG_COL[ALLU[f.key].org] }); }
         const tt = t; const delay = f.range > 1 ? .25 : .12;
-        (f.pending = f.pending || []).push([delay, () => dealDamage(B, f, tt, f.ad, false)]);
+        (f.pending = f.pending || []).push([delay, () => { dealDamage(B, f, tt, f.ad, false); if (B.visual && f.range <= 1) B.fx.push({ k: 'hit', x: tt.x, z: tt.z, t: 0 }); }]);
       }
     } else {
       // walk straight at the target; spacing below keeps bodies from overlapping
@@ -604,13 +626,30 @@ function simulateHeadless(pa, pb) {
 
 /* ---------- battle visuals ---------- */
 let battleActors = [];
+const ORG_COL = { 서리: 0x8fd0ff, 불꽃: 0xff8a3a, 심연: 0xb060ff, 빛: 0xffe080, 언데드: 0x70e0c0, 인간: 0x9fd0ff, 오크: 0x90e070 };
+// stand-in so VX helpers that follow an entity (dome, whirl) track a fighter (VX uses x / y for the ground plane)
+const follow = f => ({ get x() { return f.x; }, get y() { return f.z; }, get dead() { return f.dead; }, act: { h: 1.25 } });
+function battleVfx(e) {
+  if (e.k === 'boom') {
+    VX.smallBoom(e.x, e.z, 1.3 * HEX, e.col);
+    if (e.col === 0x8fd0ff) VX.spikes(e.x, e.z, 1.2, 8);
+    else if (e.col === 0xb060ff) VX.lightning(new THREE.Vector3(e.x + .3, 6, e.z - .3), new THREE.Vector3(e.x, .2, e.z), 0xc080ff);
+    else if (e.col === 0xffe080) VX.pillar(e.x, e.z, 0xffe080, 7);
+  }
+  if (e.k === 'whirl') { VX.whirl(follow(e.f), 1.4 * HEX, e.col); VX.shake(.15); }
+  if (e.k === 'stab') { VX.slash(e.x, e.z, .7, 1.1, e.col, .3); VX.slash(e.x, e.z, .8, .9, 0xffffff, .25); VX.burst(e.x, e.z, .7, 14, { color: [e.col, 0xffffff], speed: 3.5, life: .4, size: .2, grav: -3 }); }
+  if (e.k === 'shield') VX.dome(follow(e.f), 1.6, e.col);
+  if (e.k === 'volley') VX.burst(e.x, e.z, .9, 10, { color: [0xbfe8a0, 0xffffff], speed: 2, up: 1, life: .35, size: .18, grav: -2 });
+  if (e.k === 'cast') VX.burst(e.f.x, e.f.z, .3, 16, { color: [0xffe080, 0xfff4c0], speed: 1.2, up: 2.4, life: .6, size: .2, grav: 0, spread: .6 });
+  if (e.k === 'hit') VX.burst(e.x, e.z, .7, 5, { color: [0xffffff, 0xffd0a0], speed: 2.4, life: .22, size: .14, grav: -3 });
+}
 function beginBattleView(B) {
   clearView(); setArena(true);
   battleActors = B.all.map(f => { const a = makeActor(f.key, f.star); a.root.position.set(f.x, 0, f.z); a.root.rotation.y = f.side === 'A' ? Math.PI : 0; a.f = f; return a; });
   // bench stays visible
   G.me.bench.forEach((u, i) => { if (u) { const a = makeActor(u.key, u.star); const [x, z] = benchPos(i); a.root.position.set(x, 0, z); a.root.rotation.y = Math.PI; a.benchOnly = true; battleActors.push(a); } });
 }
-function endBattleView() { setArena(false); for (const a of battleActors) killActor(a); battleActors = []; for (const o of fxObjs) scene.remove(o.obj); fxObjs = []; }
+function endBattleView() { setArena(false); for (const a of battleActors) killActor(a); battleActors = []; for (const o of fxObjs) scene.remove(o.obj); fxObjs = []; VX.clear(); }
 let fxObjs = [];
 function battleFrame(B, dt) {
   for (const a of battleActors) {
@@ -630,9 +669,8 @@ function battleFrame(B, dt) {
   // effects
   for (const e of B.fx) {
     if (e.t === 0) {
-      if (e.k === 'arrow' || e.k === 'bolt') { const o = e.k === 'arrow' ? propClone('arrow_bow') : new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0x9fd0ff, blending: THREE.AdditiveBlending, depthWrite: false })); if (o) { o.scale.setScalar(e.k === 'arrow' ? CHAR_SCALE * 1.1 : .5); o.position.set(e.x, .6, e.z); scene.add(o); fxObjs.push({ obj: o, e, dur: .25 }); } }
-      if (e.k === 'boom' || e.k === 'ring') { const o = new THREE.Mesh(new THREE.RingGeometry(.6, 1, 32), new THREE.MeshBasicMaterial({ color: e.col, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); o.rotation.x = -Math.PI / 2; o.position.set(e.x, .05, e.z); scene.add(o); fxObjs.push({ obj: o, e, dur: .45, grow: e.k === 'boom' ? 1.8 : 1.4 }); }
-      if (e.k === 'cast') { const o = new THREE.Mesh(new THREE.CylinderGeometry(.35, .35, 1.6, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe080, transparent: true, opacity: .6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); o.position.set(e.f.x, .8, e.f.z); scene.add(o); fxObjs.push({ obj: o, e, dur: .4 }); }
+      if (e.k === 'arrow' || e.k === 'bolt') { const o = e.k === 'arrow' ? propClone('arrow_bow') : new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: e.col || 0x9fd0ff, blending: THREE.AdditiveBlending, depthWrite: false })); if (o) { o.scale.setScalar(e.k === 'arrow' ? CHAR_SCALE * 1.1 : .5); o.position.set(e.x, .6, e.z); scene.add(o); fxObjs.push({ obj: o, e, dur: .25 }); } }
+      battleVfx(e);
     }
     e.t += dt;
   }
@@ -640,7 +678,12 @@ function battleFrame(B, dt) {
   for (let i = fxObjs.length - 1; i >= 0; i--) {
     const o = fxObjs[i], p = o.e.t / o.dur;
     if (p >= 1) { scene.remove(o.obj); fxObjs.splice(i, 1); continue; }
-    if (o.e.to) { o.obj.position.set(o.e.x + (o.e.to.x - o.e.x) * p, .6, o.e.z + (o.e.to.z - o.e.z) * p); if (!o.obj.isSprite) o.obj.rotation.set(0, Math.atan2(o.e.to.x - o.e.x, o.e.to.z - o.e.z), 0); }
+    if (o.e.to) {
+      o.obj.position.set(o.e.x + (o.e.to.x - o.e.x) * p, .6 + Math.sin(p * Math.PI) * (o.e.k === 'arrow' ? .35 : .15), o.e.z + (o.e.to.z - o.e.z) * p); if (!o.obj.isSprite) o.obj.rotation.set(0, Math.atan2(o.e.to.x - o.e.x, o.e.to.z - o.e.z), 0);
+      const tc = o.e.k === 'bolt' ? o.e.col || 0x9fd0ff : o.e.big ? 0xbfe8a0 : 0; // glowing trail behind magic bolts and skill arrows
+      if (tc) VX.emit({ x: o.obj.position.x, y: o.obj.position.y, z: o.obj.position.z, vx: (Math.random() - .5) * .4, vy: (Math.random() - .5) * .4, vz: (Math.random() - .5) * .4, life: .3, size: o.e.k === 'bolt' ? .32 : .2, color: tc });
+      if (p + dt / o.dur >= 1 && !o.hit) { o.hit = true; VX.burst(o.e.to.x, o.e.to.z, .6, o.e.k === 'bolt' ? 10 : 5, { color: o.e.k === 'bolt' ? [0xffffff, tc] : [0xffe8c0, 0xd8c8a0], speed: 2.2, life: .3, size: .18, grav: -3 }); }
+    }
     if (o.grow) { const s = .3 + p * o.grow; o.obj.scale.set(s, s, s); o.obj.material.opacity = 1 - p; }
     if (o.e.k === 'cast') o.obj.material.opacity = .6 * (1 - p);
   }
@@ -870,7 +913,7 @@ function frame(now) {
   } else if (G.phase === 'result') {
     battleFrame(G.battle, dt); G.timer -= dt; if (G.timer <= 0) nextRound();
   }
-  if (renderer) { renderer.render(scene, camera); drawOverlay(); }
+  if (renderer) { VX.update(dt); MGFX.render(); drawOverlay(); }
   requestAnimationFrame(frame);
 }
 async function start() {
@@ -879,9 +922,12 @@ async function start() {
   el('loading').hidden = true; el('title').hidden = false;
   try { const rec = JSON.parse(localStorage.getItem('mug-chess') || '{}'); if (rec.games) el('record').textContent = `기록: ${rec.games}판 · 우승 ${rec.wins || 0}회 · 최고 ${rec.best}등`; } catch (e) {}
 }
+const fxBtn = () => { el('bFx').textContent = FXOPT.on ? '효과 켬' : '효과 끔'; el('bFx').classList.toggle('off', !FXOPT.on); };
+el('bFx').onclick = () => { FXOPT.on = !FXOPT.on; try { localStorage.setItem('mug-fx', FXOPT.on ? 'on' : 'off'); } catch (e) {} fxBtn(); };
+fxBtn();
 start();
 requestAnimationFrame(frame);
-window.__C = G; G.dbg = { syncView, renderAll, startFight, aiPlan, stepBattle, teamPower };
+window.__C = G; G.dbg = { get va() { return viewActors; }, syncView, renderAll, startFight, aiPlan, stepBattle, teamPower };
 })();
 </script>
 </body>

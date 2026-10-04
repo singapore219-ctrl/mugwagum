@@ -11,6 +11,13 @@
 <script src="../lib/three.min.js"></script>
 <script src="../lib/GLTFLoader.js"></script>
 <script src="../lib/SkeletonUtils.js"></script>
+<script src="../lib/CopyShader.js"></script>
+<script src="../lib/LuminosityHighPassShader.js"></script>
+<script src="../lib/EffectComposer.js"></script>
+<script src="../lib/RenderPass.js"></script>
+<script src="../lib/ShaderPass.js"></script>
+<script src="../lib/UnrealBloomPass.js"></script>
+<script src="../lib/mgfx.js"></script>
 <style>
 :root{
   color-scheme: dark;
@@ -110,6 +117,7 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
     <div id="ctl">
       <button class="chip" id="bSpeed">속도 ×1</button>
       <button class="chip on" id="bAuto">자동 진행</button>
+      <button class="chip" id="bFx">효과 켬</button>
     </div>
     <div id="toast"></div>
   </div>
@@ -151,6 +159,10 @@ const ri = (a, b) => Math.floor(rnd(a, b + 1));
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const THREE = window.THREE;
+const MOBILE = matchMedia('(pointer:coarse)').matches;
+// 화면 효과 (bloom, colour grade, full particles): one switch, remembered on this device; shared with 오토체스
+const FXOPT = { on: (() => { try { return localStorage.getItem('mug-fx') !== 'off'; } catch (e) { return true; } })() };
+const VX = window.MGFX.VX;
 function fmt(n) {
   n = Math.floor(n);
   if (n < 1e4) return n.toLocaleString('ko-KR');
@@ -206,7 +218,7 @@ const UNITS = {
   mage: { n: '마법사', m: 'Mage', r: 'staff', st: 'magic', col: '#c8a0ff', max: 4, hire: 160, train: 70, dmg: 8, as: 1.7, range: 9, aoe: 1.6, desc: '적 무리에 범위 마법을 쏴요' },
   priest: { n: '사제', m: 'Mage', tint: '#fff0c0', r: 'wand', l: 'spellbook_open', st: 'magic', col: '#ffe9a0', max: 2, hire: 400, train: 140, heal: 6, as: 2.2, desc: '성벽과 기사를 치료해요' },
 };
-const HERO = { n: '영웅 레오', m: 'Knight', tint: '#ffe8b0', s: 1.3, r: 'sword_2handed_color', st: '2h', glow: '#ffc040', hp: 260, dmg: 14, as: .9, range: 1.3, train: 60 };
+const HERO = { n: '영웅 레오', m: 'Knight', hd: 'knight', tint: '#ffe8b0', s: 1.3, r: 'sword_2handed_color', st: '2h', glow: '#ffc040', hp: 260, dmg: 14, as: .9, range: 1.3, train: 60 };
 const CASTLE = {
   wall: { n: '성벽 강화', col: '#c8a878', base: 50, k: 1.16, desc: lv => `최대 체력 ${fmt(wallMax(lv))}` },
   repair: { n: '석공 수리', col: '#a8c8a0', base: 80, k: 1.22, desc: lv => `초당 성벽 ${(lv * .4).toFixed(1)}% 회복` },
@@ -256,6 +268,7 @@ function initGL() {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(.3, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64); GLOW_TEX = new THREE.CanvasTexture(c);
+  MGFX.init({ renderer, scene, camera, host: view, glowTex: GLOW_TEX, mobile: MOBILE, low: () => !FXOPT.on, post: () => FXOPT.on, exposure: 1.1, grade: { vig: .2, con: 1.02 } });
   buildWorld(); resize();
 }
 let decor = [];
@@ -276,6 +289,7 @@ function buildWorld() {
 }
 function setTheme(r) {
   const R0 = regionOf(r);
+  MGFX.hd(BOSS_HD[r % REGIONS.length]); // warm up the boss body before wave 10
   ground.material.color.copy(lin(R0.g));
   scene.background = lin(R0.f); scene.fog = new THREE.Fog(lin(R0.f), 26, 48);
   for (const d of decor) scene.remove(d); decor = [];
@@ -296,7 +310,7 @@ function setTheme(r) {
 }
 function resize() {
   W = view.clientWidth; H = view.clientHeight; dpr = Math.min(devicePixelRatio || 1, 2);
-  if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); }
+  if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); MGFX.resize(W, H, dpr); }
   ovc.width = W * dpr; ovc.height = H * dpr;
   // keep the whole road width in view on narrow phones
   const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(6.4 / (half * camera.aspect), 9 / half);
@@ -327,6 +341,15 @@ async function loadAssets() {
   for (const a of anims.animations) CLIPS[a.name] = a;
   for (const p of props.scene.children) PROPS[p.name] = p;
   const kb = new THREE.Box3().setFromObject(MODELS.Knight); CHAR_SCALE = 1.05 / (kb.max.y - kb.min.y);
+  MGFX.assets({ clips: CLIPS, props: PROPS, charScale: CHAR_SCALE });
+  try { await MGFX.hdSetup({ base: '../assets/models/', knight: MODELS.Knight, charH: 1.05, preload: ['knight'], onReady: hdReady }); } catch (e) { console.warn(e); }
+}
+// realistic bodies: the hero and the region bosses (soldiers stay light so big waves run smoothly on phones)
+const BOSS_HD = ['', 'orcchief', '', 'fallen', 'yeti', 'lord', 'troll', 'abysslord', 'duskking', 'raid1'];
+function hdReady(k) {
+  if (!S || !S.started) return;
+  const hero = allies.find(a => a.hero);
+  if (k === 'knight' && hero && !hero.act.hd) { const old = hero.act; hero.act = makeActor(HERO); hero.act.root.position.copy(old.root.position); hero.act.root.rotation.y = old.root.rotation.y; killActor(old); }
 }
 function styleAnims(st, sk) {
   return {
@@ -342,21 +365,22 @@ function propClone(name, glow) {
   return c;
 }
 function makeActor(d, sc = 1) {
-  const root = new THREE.Group(), m = THREE.SkeletonUtils.clone(MODELS[d.m]);
-  m.scale.setScalar(CHAR_SCALE * (d.s || 1) * sc);
+  const hd = MGFX.hd(d.hd), root = new THREE.Group(), m = THREE.SkeletonUtils.clone(hd ? hd.root : MODELS[d.m]);
+  m.scale.setScalar((hd ? 1 : CHAR_SCALE) * (d.s || 1) * sc);
   const mats = [];
-  m.traverse(n => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; n.material = n.material.clone(); mats.push(n.material); if (d.tint) n.material.color.multiply(new THREE.Color(d.tint)); if (d.glow) { n.material.emissive = new THREE.Color(d.glow); n.material.emissiveIntensity = .3; } n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity; } });
+  m.traverse(n => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; n.material = n.material.clone(); MGFX.addRim(n.material); mats.push(n.material); if (d.tint && !hd) n.material.color.multiply(new THREE.Color(d.tint)); if (d.glow) { n.material.emissive = new THREE.Color(d.glow); n.material.emissiveIntensity = hd ? .05 : .2; } n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity; } });
   root.add(m);
-  const a = { root, m, mats, mixer: new THREE.AnimationMixer(m), acts: {}, cur: null, curName: '', lock: 0, A: styleAnims(d.st, d.sk), h: 1.05 * (d.s || 1) * sc, atkI: 0 };
+  const a = { root, m, mats, hd, mixer: new THREE.AnimationMixer(m), acts: {}, cur: null, curName: '', lock: 0, A: styleAnims(d.st, d.sk), h: (hd ? hd.H : 1.05) * (d.s || 1) * sc, atkI: 0 };
   const hr = m.getObjectByName('handslotr'), hl = m.getObjectByName('handslotl');
-  if (d.r && hr) { const w = propClone(d.r, d.wglow); if (w) hr.add(w); }
-  if (d.l && hl) { const w = propClone(d.l); if (w) hl.add(w); }
+  if (d.r && hr) { const w = MGFX.fitProp(propClone(d.r, d.wglow), hd); if (w) hr.add(w); }
+  if (d.l && hl) { const w = MGFX.fitProp(propClone(d.l), hd); if (w) hl.add(w); }
   play(a, a.A.idle); a.mixer.update(Math.random() * 2);
   scene.add(root);
   return a;
 }
 function play(a, name, opt = {}) {
-  const clip = CLIPS[name] || (/Idle/.test(name) ? CLIPS.Idle_A : null); if (!clip) return;
+  const lib = a.hd ? a.hd.clip : n => CLIPS[n];
+  const clip = lib(name) || (/Idle/.test(name) ? lib('Idle_A') : null); if (!clip) return;
   if (a.curName === name && !opt.once) return;
   let act = a.acts[name]; if (!act) act = a.acts[name] = a.mixer.clipAction(clip);
   act.reset(); act.setEffectiveTimeScale(opt.speed || 1); act.setEffectiveWeight(1);
@@ -402,7 +426,7 @@ function rebuildArmy() {
 }
 function makeFoe(key, boss) {
   const d = ET[key], w = GW(), R0 = regionOf(S.region);
-  const def = boss ? { ...d, s: R0.boss[2], glow: d.glow || '#ff4060' } : d;
+  const def = boss ? { ...d, s: R0.boss[2], glow: d.glow || '#ff4060', hd: BOSS_HD[S.region % REGIONS.length] } : d;
   const hp = enemyHp(w) * d.hp * (boss ? 34 : 1);
   const e = { side: 'foe', key, boss: !!boss, name: boss ? R0.boss[1] : d.n, x: rnd(-3.8, 3.8), z: SPAWN_Z + rnd(-1, 1), y: 0, hp, maxHp: hp,
     dmg: enemyDmg(w) * (boss ? 6 : d.rg ? .8 : 1), as: boss ? 1.6 : 1.2, range: d.rg || (boss ? 1.6 : 1.05), sp: d.sp * (boss ? .7 : 1) * .9, atkT: rnd(.2, .8), dead: false, hurt: 0,
@@ -428,7 +452,7 @@ function revive(a) {
   a.dead = false; a.hp = a.maxHp; a.x = a.px; a.z = a.pz; a.act.root.visible = true; a.act.died = false; a.act.curName = ''; play(a.act, a.act.A.idle);
   a.act.root.position.set(a.x, a.y, a.z);
 }
-function clearShots() { timers = []; for (const s of shots) scene.remove(s.obj); shots = []; for (const f of fxs) scene.remove(f.obj); fxs = []; }
+function clearShots() { VX.clear(); timers = []; for (const s of shots) scene.remove(s.obj); shots = []; for (const f of fxs) scene.remove(f.obj); fxs = []; }
 function shoot(from, to, kind, onHit) {
   let obj;
   if (kind === 'arrow') { obj = propClone('arrow_bow'); if (obj) obj.scale.setScalar(CHAR_SCALE * 1.1); }
@@ -439,9 +463,12 @@ function shoot(from, to, kind, onHit) {
   obj.position.set(sx, sy, sz); scene.add(obj);
   shots.push({ obj, sx, sy, sz, to, tx: to.x, tz: to.z, ty: (to.y || 0) + .6, t: 0, dur: clamp(Math.hypot(to.x - sx, to.z - sz) / 16, .12, .5), onHit });
 }
-function ring(x, z, col, size = 1.5, y = .05) {
-  const o = new THREE.Mesh(new THREE.RingGeometry(.6, 1, 32), new THREE.MeshBasicMaterial({ color: col, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-  o.rotation.x = -Math.PI / 2; o.position.set(x, y, z); scene.add(o); fxs.push({ obj: o, t: 0, dur: .45, grow: size });
+function ring(x, z, col, size = 1.5, y = .05) { VX.shockwave(x, z, size, col, .45, y + .02); }
+// follow a fighter with VX helpers (VX uses x / y for the ground plane)
+const follow = e => ({ get x() { return e.x; }, get y() { return e.z; }, get dead() { return e.dead; }, act: e.act });
+function magicHit(x, z, r, col) {
+  VX.fireball(x, .5, z, r * .7, col, .35); VX.shockwave(x, z, r, col, .4);
+  VX.burst(x, z, .5, 14, { color: [0xffffff, col], speed: 3, up: 1, life: .45, size: .24, grav: -4 });
 }
 function floatText(e, txt, col, big) { if (texts.length > 40) texts.shift(); texts.push({ x: e.x, z: e.z, y: (e.y || 0) + (e.act ? e.act.h : 1) + .2, txt, col, t: 0, big }); }
 function hurtFoe(f, dmg, src) {
@@ -454,6 +481,7 @@ function hurtFoe(f, dmg, src) {
 }
 function killFoe(f) {
   f.dead = true; f.hp = 0; B.killed++;
+  if (f.boss) { VX.bigBoom(f.x, f.z, 3, 0xff6a40); } else VX.burst(f.x, f.z, .5, 6, { color: [0x8a7a6a, 0x5a4a3a], speed: 1.4, up: 1, life: .5, size: .3, grav: -2, drag: 2 });
   const g = f.gold * goldMul(); S.gold += g; S.kills++;
   if (f.boss || Math.random() < .25) floatText(f, '+' + fmt(g), '#f1d58c');
   play(f.act, f.act.A.death, { once: true }); f.fade = 1.2;
@@ -498,7 +526,7 @@ function step(dt) {
     if (B.spawnT <= 0) {
       B.spawnT = rnd(.45, .9) * (S.wave === 10 ? 1.2 : 1);
       const k = B.toSpawn.shift();
-      if (k === 'BOSS') { B.boss = makeFoe(regionOf(S.region).boss[0], true); el('bossBox').hidden = false; el('bossName').textContent = B.boss.name; toast(`보스 ${B.boss.name} 등장!`); sfx('boss'); }
+      if (k === 'BOSS') { B.boss = makeFoe(regionOf(S.region).boss[0], true); VX.pillar(B.boss.x, B.boss.z, 0xff5070, 10); VX.shockwave(B.boss.x, B.boss.z, 4, 0xff4060, .7); VX.shake(.35); el('bossBox').hidden = false; el('bossName').textContent = B.boss.name; toast(`보스 ${B.boss.name} 등장!`); sfx('boss'); }
       else makeFoe(k);
     }
   }
@@ -536,7 +564,7 @@ function step(dt) {
       if (a.atkT <= 0) {
         a.atkT = a.as;
         const hurt = melee.filter(m => m.hp < m.maxHp).sort((p, q) => p.hp / p.maxHp - q.hp / q.maxHp)[0];
-        if (hurt) { shoot(a, hurt, 'heal', () => { hurt.hp = Math.min(hurt.maxHp, hurt.hp + a.heal * 4); }); a.anim = 'atk'; }
+        if (hurt) { shoot(a, hurt, 'heal', () => { hurt.hp = Math.min(hurt.maxHp, hurt.hp + a.heal * 4); VX.burst(hurt.x, hurt.z, .2, 12, { color: [0x9fffb0, 0xe8fff0], speed: .8, up: 2.2, life: .7, size: .2, grav: 0, spread: .6 }); }); a.anim = 'atk'; }
         if (B.wallHp < wallMaxNow()) { B.wallHp = Math.min(wallMaxNow(), B.wallHp + a.heal * 2.5); }
       }
       continue;
@@ -558,7 +586,7 @@ function step(dt) {
         a.skillT -= dt;
         if (a.skillT <= 0 && liveFoes.some(f => dist(f, a) < 2.6)) {
           a.skillT = 9; a.anim = 'atk';
-          ring(a.x, a.z, 0xffd060, 2.6); floatText(a, '검기 폭풍', '#ffe08a', true);
+          VX.whirl(follow(a), 2.6, 0xffe08a); VX.slash(a.x, a.z, .8, 1.6, 0xffd060, .35); VX.cracks(a.x, a.z, 2.4, 0xffc040, 1); VX.shake(.3); floatText(a, '검기 폭풍', '#ffe08a', true);
           for (const f of liveFoes) if (dist(f, a) < 2.6) hurtFoe(f, a.dmg * 4, a);
           sfx('skill');
         }
@@ -573,8 +601,8 @@ function step(dt) {
     if (!t) continue;
     a.atkT = a.as; a.anim = 'atk'; a.face = t;
     const dmg = a.dmg * rnd(.85, 1.15);
-    if (a.k === 'mage') shoot(a, t, 'mage', () => { ring(t.x, t.z, 0xb070ff, UNITS.mage.aoe); for (const f of foes) if (!f.dead && dist(f, t) < UNITS.mage.aoe) hurtFoe(f, dmg, a); });
-    else shoot(a, t, 'arrow', () => hurtFoe(t, dmg, a));
+    if (a.k === 'mage') shoot(a, t, 'mage', () => { magicHit(t.x, t.z, UNITS.mage.aoe, 0xb070ff); for (const f of foes) if (!f.dead && dist(f, t) < UNITS.mage.aoe) hurtFoe(f, dmg, a); });
+    else shoot(a, t, 'arrow', () => { hurtFoe(t, dmg, a); VX.burst(t.x, t.z, .6, 4, { color: [0xffe8c0, 0xd8c8a0], speed: 1.8, life: .25, size: .15, grav: -3 }); });
   }
   // spacing between bodies on the field
   const bodies = [...liveFoes, ...melee];
@@ -591,6 +619,7 @@ function step(dt) {
     if (s.to && !s.to.dead && s.to.x != null) { s.tx = s.to.x; s.tz = s.to.z; }
     s.obj.position.set(s.sx + (s.tx - s.sx) * p, s.sy + (s.ty - s.sy) * p + Math.sin(p * Math.PI) * .6, s.sz + (s.tz - s.sz) * p);
     if (!s.obj.isSprite) s.obj.rotation.set(0, Math.atan2(s.tx - s.sx, s.tz - s.sz), 0);
+    else if (Math.random() < .7) VX.emit({ x: s.obj.position.x, y: s.obj.position.y, z: s.obj.position.z, vx: (Math.random() - .5) * .5, vy: (Math.random() - .5) * .5, vz: (Math.random() - .5) * .5, life: .3, size: s.obj.scale.x * .55, color: s.obj.material.color });
     if (p >= 1) { scene.remove(s.obj); shots.splice(i, 1); s.onHit(); }
   }
   // wall regen
@@ -825,7 +854,7 @@ function frame(now) {
     uiT -= real; if (uiT <= 0) { uiT = .25; hud(); if (tab !== 'map') refreshButtons(); }
     saveT -= real; if (saveT <= 0) { saveT = 5; save(); }
   }
-  if (renderer) { renderer.render(scene, camera); drawOverlay(); }
+  if (renderer) { VX.update(running ? real * (S.speed || 1) : real); MGFX.render(); drawOverlay(); }
   requestAnimationFrame(frame);
 }
 // cheap per-tick update: only flip button enabled state so taps aren't eaten by re-rendering
@@ -842,6 +871,9 @@ function begin() {
   setTheme(S.region); rebuildArmy(); B.wallHp = wallMaxNow(); startWave(); renderList(); hud(); running = true; save();
 }
 el('startBtn').onclick = () => { audio(); begin(); };
+const fxBtn = () => { el('bFx').textContent = FXOPT.on ? '효과 켬' : '효과 끔'; el('bFx').classList.toggle('on', FXOPT.on); };
+el('bFx').onclick = () => { FXOPT.on = !FXOPT.on; try { localStorage.setItem('mug-fx', FXOPT.on ? 'on' : 'off'); } catch (e) {} fxBtn(); };
+fxBtn();
 async function start() {
   initGL();
   try { await loadAssets(); } catch (e) { el('loadMsg').textContent = '그래픽 파일을 불러오지 못했어요. 새로고침해 주세요.'; return; }
