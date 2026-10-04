@@ -626,7 +626,25 @@ const CHESS_URL = location.protocol.startsWith('http') && !/claude/.test(locatio
 // each rebirth makes the next 120 levels take longer
 const need = L => Math.floor((30 + 18 * Math.pow(L, 2.4)) * (1 + .4 * (S && S.reb || 0)));
 const SAVE_KEY = 'mugwagum-hunt-v1';
-function save() { if (!S) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); localStorage.setItem('mugwagum-adena', String(Math.floor(S.adena))); } catch (e) {} }
+function save() { if (!S) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); syncShared(); } catch (e) {} }
+/* ---------- shared between characters: adena wallet, polymorph collection, pets ----------
+   Each character keeps which polymorph / pet is active; what is owned lives in shared keys. */
+const SHARE_POLY = 'mugwagum-poly', SHARE_PETS = 'mugwagum-pets';
+function syncShared() {
+  if (!S) return;
+  localStorage.setItem('mugwagum-adena', String(Math.floor(S.adena)));
+  localStorage.setItem(SHARE_POLY, JSON.stringify(polyState().owned));
+  localStorage.setItem(SHARE_PETS, JSON.stringify(petState().owned));
+}
+function loadShared() {
+  const get = k => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
+  const sp = get(SHARE_POLY), pets = get(SHARE_PETS), ps = polyState(), pt = petState();
+  // first time per character: merge what it already had (higher ★ / higher pet level wins)
+  if (sp) { for (const id in ps.owned) sp[id] = Math.max(sp[id] || 0, ps.owned[id]); ps.owned = sp; }
+  if (pets) { for (const k in pt.owned) if (!pets[k] || pets[k].lv < pt.owned[k].lv) pets[k] = pt.owned[k]; pt.owned = pets; }
+  if (ps.active && !ps.owned[ps.active]) ps.active = null;
+  if (pt.active && !pt.owned[pt.active]) pt.active = null;
+}
 function load() { try { const s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
 /* ---------- character slots ----------
    The playing character always lives in SAVE_KEY; the others wait in mugwagum-slot-N.
@@ -640,7 +658,7 @@ function slotData(i) {
 function switchSlot(i) {
   const m = slotMeta(); if (i === m.active || i < 0 || i >= SLOT_MAX) return;
   try {
-    if (S) { delete S.away; localStorage.setItem(slotKey(m.active), JSON.stringify(S)); localStorage.setItem(ADENA_KEY, String(Math.floor(S.adena))); }
+    if (S) { delete S.away; localStorage.setItem(slotKey(m.active), JSON.stringify(S)); syncShared(); }
     const t = localStorage.getItem(slotKey(i));
     if (t) localStorage.setItem(SAVE_KEY, t); else localStorage.removeItem(SAVE_KEY);
     localStorage.removeItem(slotKey(i));
@@ -3083,7 +3101,7 @@ function slotsView() {
       <div class="btns">${on ? '<span class="tag">접속 중</span>' : `<button class="btn pri" data-a="slotgo" data-v="${i}">접속</button>`}</div></div>`;
     else h += `<div class="row" style="opacity:.75"><span class="ico" style="background:#2a2217;color:var(--dim)">+</span><div class="info"><div class="n">빈 슬롯 ${i + 1}</div><div class="s">새 캐릭터를 만들 수 있어요</div></div><div class="btns"><button class="btn" data-a="slotgo" data-v="${i}">새 캐릭터</button></div></div>`;
   }
-  return h + `<p class="note">다른 캐릭터로 바꾸면 지금 캐릭터는 그 자리에서 저장되고 쉬어요(자리 비움 사냥은 접속 중인 캐릭터만 돼요). <b>아데나는 모든 캐릭터가 함께 써요.</b> 아이템과 장비는 마을의 <b>창고</b>로 주고받을 수 있어요.</p>`;
+  return h + `<p class="note">다른 캐릭터로 바꾸면 지금 캐릭터는 그 자리에서 저장되고 쉬어요(자리 비움 사냥은 접속 중인 캐릭터만 돼요). <b>아데나, 변신 도감, 펫은 모든 캐릭터가 함께 써요.</b> 아이템과 장비는 마을의 <b>창고</b>로 주고받을 수 있어요.</p>`;
 }
 const VIEWS = {
   pet() {
@@ -3670,6 +3688,7 @@ el('reviveBtn').addEventListener('click', () => { R.dead = false; S.hp = Math.ro
 function begin() {
   S.opts = Object.assign({ pot: 50, tele: true, haste: true, mpPot: true, sound: true, lowfx: false }, S.opts || {});
   { const sa = sharedAdena(); if (sa != null) S.adena = sa; }
+  try { loadShared(); } catch (e) {}
   if (!(S.zone < ZONES.length) || ZONES[S.zone].raid) S.zone = 0;
   if (P.act) killActor(P.act);
   P.act = makeActor({ model: CLS[S.cls].model, flash: true, st: '1h', hd: S.cls }); P.act.kindKey = 'cls'; P.look = '';
