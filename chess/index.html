@@ -118,6 +118,7 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
   .code{font-size:40px}
 }
 .rcol{display:flex;flex-direction:column;align-items:flex-end}
+#terr{font-size:11px;color:#d8f0c8;margin-top:2px}#terr:empty{display:none}#terr span{white-space:nowrap}
 #items{display:flex;gap:4px;overflow-x:auto;min-height:24px;align-items:center;scrollbar-width:none;touch-action:pan-x}
 #items::-webkit-scrollbar{display:none}
 .it{flex:none;border:1px solid var(--line2);background:rgba(20,16,11,.9);border-radius:7px;padding:2px 7px;font-size:11px;white-space:nowrap;color:var(--text)}
@@ -144,7 +145,7 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
   <canvas id="gl"></canvas>
   <canvas id="ov"></canvas>
   <div id="top">
-    <div id="stageBox"><div id="stage">1-1</div><div id="phase">준비</div></div>
+    <div id="stageBox"><div id="stage">1-1</div><div id="phase">준비</div><div id="terr"></div></div>
     <div class="rcol"><div id="players"></div><button id="bFx" class="fxb">효과 켬</button><button id="bDeck" class="fxb" hidden>진영 코드</button></div>
   </div>
   <div id="traits"></div>
@@ -173,6 +174,7 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
         <b>레벨</b>이 높을수록 더 많이 배치하고 비싼 용병이 잘 나와요.<br>
         아끼면 <b>이자</b>(10골드당 1, 최대 5)를 받아요.<br>
         <b>조작</b>: 용병을 끌어서 옮기고, 상점 쪽으로 끌면 팔아요. 플레이어 목록을 누르면 그 사람 진영을 볼 수 있어요.<br>
+        <b>지형</b>: 1-3부터 판에 샘·용암·토템·수풀이 생겨요. 준비 시간에 보이니 배치에 활용하세요.<br>
         <b>장비</b>: 라운드마다 보상(부품·용병·골드)을 받아요. 장비를 누르고 용병을 누르면 장착, 부품 2개는 완성 장비가 돼요.
       </div>
       <div class="tcol">
@@ -329,6 +331,35 @@ function equip(p, ii, uid) {
   if (!u || !k) return '장착할 수 없어요';
   if (!giveItem(u, k)) return '장비는 한 유닛에 3개까지예요';
   p.items.splice(ii, 1); return '';
+}
+/* ---------- terrain: zones on the board that change the fight (always placed in mirrored pairs so both sides get the same) ---------- */
+const TERRAIN = {
+  spring: { n: '치유의 샘', e: '💧', col: 0x50e0b0, desc: '안에 있으면 초당 체력 3.5% 회복' },
+  lava: { n: '용암 웅덩이', e: '🔥', col: 0xff5a20, desc: '안에 있으면 초당 체력 4.5% 피해' },
+  totem: { n: '전쟁 토템', e: '🚩', col: 0xffc840, desc: '안에 있으면 공격 속도 +30%' },
+  bush: { n: '수풀', e: '🌿', col: 0x5ab048, desc: '안에 있으면 원거리 공격을 35% 피함' },
+};
+// battlefield look per stage
+const THEMES = [
+  { n: '숲', bg: 0x16200f, floor: 0x26341c, arena: 0x5c6a3e, mine: 0x63724a, foe: 0x4c5638, bench: 0x3a3a24, deco: 'tree' },
+  { n: '망자의 묘지', bg: 0x14131c, floor: 0x1e1d26, arena: 0x4a4752, mine: 0x55525e, foe: 0x45404c, bench: 0x2e2c34, deco: 'grave' },
+  { n: '서리 설원', bg: 0x323c4a, floor: 0x4c5868, arena: 0x5c6a7e, mine: 0x56667c, foe: 0x445266, bench: 0x36404e, deco: 'snow' },
+  { n: '모래 사막', bg: 0x2e2416, floor: 0x4a3824, arena: 0x5e4a30, mine: 0x6a5236, foe: 0x54402a, bench: 0x3a2c1c, deco: 'rock' },
+  { n: '화산 분화구', bg: 0x1a0a06, floor: 0x24140e, arena: 0x3e2c24, mine: 0x4c362c, foe: 0x3c2822, bench: 0x2a1c16, deco: 'lava' },
+  { n: '심연의 균열', bg: 0x0e0818, floor: 0x160e24, arena: 0x2e2442, mine: 0x3a2e52, foe: 0x2c2240, bench: 0x221a30, deco: 'crystal' },
+];
+function rollTerrain() {
+  if (G.stage === 1 && G.rnum < 3) return [];
+  const kinds = shuffle(Object.keys(TERRAIN)).slice(0, G.stage >= 3 ? 2 : 1), out = [], used = new Set();
+  for (const k of kinds) for (let t = 0; t < 30; t++) {
+    const c = ri(0, COLS - 1), r = ri(4, 6), key = c + ',' + r;
+    if (used.has(key)) continue;
+    for (const [dc, dr] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) used.add((c + dc) + ',' + (r + dr));
+    const [x, z] = hexPos(c, r), [x2, z2] = hexPos(COLS - 1 - c, 7 - r);
+    out.push({ k, x, z, r: HEX * .95 }, { k, x: x2, z: z2, r: HEX * .95 });
+    break;
+  }
+  return out;
 }
 const POOL_N = [0, 29, 22, 18, 12, 10];
 const ODDS = [null, [1, 0, 0, 0, 0], [1, 0, 0, 0, 0], [.75, .25, 0, 0, 0], [.55, .3, .15, 0, 0], [.45, .33, .2, .02, 0], [.3, .4, .25, .05, 0], [.19, .3, .35, .15, .01], [.18, .25, .32, .22, .03], [.1, .2, .25, .35, .1]];
@@ -490,8 +521,9 @@ function initGL() {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(.3, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64); GLOW_TEX = new THREE.CanvasTexture(c);
+  G.terrain = [];
   MGFX.init({ renderer, scene, camera, host: el('game'), glowTex: GLOW_TEX, mobile: MOBILE, low: () => !FXOPT.on, post: () => FXOPT.on, exposure: 1.15, grade: { vig: .12, con: 1, sat: 1.05 } });
-  buildBoard(); resize();
+  buildBoard(); applyTheme(0); renderTerrain(); resize();
 }
 const lin = h => new THREE.Color(h).convertSRGBToLinear();
 const tileMeshes = [];
@@ -517,8 +549,86 @@ function buildBoard() {
   sh.lineTo(-w + rr, h); sh.quadraticCurveTo(-w, h, -w, h - rr); sh.lineTo(-w, -h + rr); sh.quadraticCurveTo(-w, -h, -w + rr, -h);
   arena = new THREE.Mesh(new THREE.ShapeGeometry(sh), new THREE.MeshStandardMaterial({ color: lin(0x5a4c36), roughness: 1 }));
   arena.rotation.x = -Math.PI / 2; arena.position.set(0, -.02, -.1); arena.receiveShadow = true; arena.visible = false; scene.add(arena);
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(16, 48), new THREE.MeshStandardMaterial({ color: lin(0x221b14), roughness: 1 }));
+  const floor = floorMesh = new THREE.Mesh(new THREE.CircleGeometry(16, 48), new THREE.MeshStandardMaterial({ color: lin(0x221b14), roughness: 1 }));
   floor.rotation.x = -Math.PI / 2; floor.position.y = -.13; floor.receiveShadow = true; scene.add(floor);
+}
+let floorMesh = null, decoGroup = null, zoneGroup = null, zoneFxT = 0;
+function applyTheme(i) {
+  i = ((i % THEMES.length) + THEMES.length) % THEMES.length;
+  if (G.themeI === i || !scene) return; G.themeI = i;
+  const T = THEMES[i];
+  scene.background = lin(T.bg); scene.fog.color = lin(T.bg);
+  floorMesh.material.color.copy(lin(T.floor)); arena.material.color.copy(lin(T.arena));
+  for (const m of tileMeshes) { const u = m.userData; m.material.color.copy(lin(u.bench != null ? T.bench : u.mine ? T.mine : T.foe)); }
+  if (decoGroup) { scene.remove(decoGroup); decoGroup.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+  decoGroup = new THREE.Group(); scene.add(decoGroup);
+  const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: lin(c), roughness: .9, ...o });
+  const add = (g, x, z, sc) => { g.position.set(x, -.13, z); g.scale.setScalar(sc); g.rotation.y = rnd(0, 6.28); g.traverse(o => { if (o.isMesh) o.castShadow = true; }); decoGroup.add(g); };
+  const thing = () => {
+    const g = new THREE.Group(), d = T.deco;
+    if (d === 'tree' || d === 'snow') {
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(.1, .14, .7, 6), M(0x4a3424)); trunk.position.y = .35; g.add(trunk);
+      for (let k = 0; k < 3; k++) { const cone = new THREE.Mesh(new THREE.ConeGeometry(.75 - k * .18, .9, 7), M(d === 'snow' ? (k === 2 ? 0xb8c4d0 : 0x2e4a3c) : [0x2e5a2a, 0x3a6a30, 0x4a7a36][k])); cone.position.y = .9 + k * .45; g.add(cone); }
+      if (d === 'snow') { const cap = new THREE.Mesh(new THREE.ConeGeometry(.38, .4, 7), M(0xb8c4d0)); cap.position.y = 2.05; g.add(cap); }
+    } else if (d === 'grave') {
+      if (Math.random() < .6) { const st = new THREE.Mesh(new THREE.BoxGeometry(.42, .62, .12), M(0x6a6a72)); st.position.y = .31; g.add(st); const top = new THREE.Mesh(new THREE.CylinderGeometry(.21, .21, .12, 12, 1, false, 0, Math.PI), M(0x6a6a72)); top.rotation.set(Math.PI / 2, 0, Math.PI / 2); top.position.y = .62; g.add(top); }
+      else { const t = new THREE.Mesh(new THREE.CylinderGeometry(.06, .12, 1.6, 5), M(0x2a2420)); t.position.y = .8; t.rotation.z = .2; g.add(t); for (const a of [-.7, .8]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(.03, .05, .7, 4), M(0x2a2420)); b.position.set(a * .25, 1.2, 0); b.rotation.z = a; g.add(b); } }
+    } else if (d === 'rock' || d === 'lava') {
+      const r = new THREE.Mesh(new THREE.DodecahedronGeometry(rnd(.35, .8), 0), M(d === 'lava' ? 0x2a1e1a : 0x9a7a52)); r.position.y = .25; r.scale.y = rnd(.6, 1.1); g.add(r);
+      if (d === 'lava') { const glow = new THREE.Mesh(new THREE.SphereGeometry(.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff6a20 })); glow.position.set(.2, .5, .2); g.add(glow); }
+      else if (Math.random() < .35) { const cac = new THREE.Mesh(new THREE.CylinderGeometry(.12, .14, 1.1, 8), M(0x4a7a3a)); cac.position.set(.6, .55, 0); g.add(cac); }
+    } else {
+      const c = new THREE.Mesh(new THREE.OctahedronGeometry(rnd(.25, .5), 0), M(pick([0x9a60ff, 0x50d0ff]), { emissive: lin(pick([0x6020c0, 0x2080c0])), emissiveIntensity: 1.2, roughness: .2 }));
+      c.position.y = .5; c.scale.y = 2; g.add(c);
+    }
+    return g;
+  };
+  // around the board, but never between the camera and the board (positive z)
+  for (let k = 0; k < 34; k++) {
+    const a = rnd(0, 6.28), d = rnd(6.2, 13), x = Math.cos(a) * d, z = Math.sin(a) * d;
+    if (z > 3.2 && Math.abs(x) < 7.5) continue;
+    add(thing(), x, z, rnd(.8, 1.3));
+  }
+  // torches at the arena corners (bloom makes the flames glow)
+  for (const [x, z] of [[-5.1, -4.6], [5.1, -4.6], [-5.1, 3.9], [5.1, 3.9]]) {
+    const g = new THREE.Group(), pole = new THREE.Mesh(new THREE.CylinderGeometry(.05, .07, 1.3, 6), M(0x3a2a1c)); pole.position.y = .65; g.add(pole);
+    const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: d2c(T.deco === 'crystal' ? 0x9a70ff : 0xffa040), blending: THREE.AdditiveBlending, depthWrite: false })); fl.position.y = 1.42; fl.scale.setScalar(.7); g.add(fl);
+    g.position.set(x, -.13, z); decoGroup.add(g);
+  }
+}
+const d2c = h => new THREE.Color(h);
+function renderTerrain() {
+  const list = G.terrain || [], key = JSON.stringify(list);
+  if (zoneGroup && zoneGroup.userData.key === key) return;
+  if (zoneGroup) { scene.remove(zoneGroup); zoneGroup.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+  zoneGroup = new THREE.Group(); zoneGroup.userData.key = key; scene.add(zoneGroup);
+  for (const z of list) {
+    const T = TERRAIN[z.k], g = new THREE.Group(); g.position.set(z.x, .025, z.z);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(z.r, 32), new THREE.MeshBasicMaterial({ color: lin(T.col), transparent: true, opacity: z.k === 'lava' ? .85 : .35, depthWrite: false }));
+    disc.rotation.x = -Math.PI / 2; g.add(disc);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(z.r * .93, z.r, 40), new THREE.MeshBasicMaterial({ color: lin(T.col), transparent: true, opacity: .9, blending: THREE.AdditiveBlending, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = .005; g.add(ring);
+    if (z.k === 'totem') {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(.04, .05, 1.5, 6), new THREE.MeshStandardMaterial({ color: 0x5a3a20 })); pole.position.y = .75; g.add(pole);
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(.5, .32), new THREE.MeshStandardMaterial({ color: 0xc02a20, side: THREE.DoubleSide, emissive: 0x401008 })); flag.position.set(.26, 1.32, 0); flag.userData.flag = true; g.add(flag);
+    } else if (z.k === 'bush') {
+      for (let k = 0; k < 6; k++) { const a = k / 6 * 6.28, b = new THREE.Mesh(new THREE.SphereGeometry(rnd(.22, .32), 8, 6), new THREE.MeshStandardMaterial({ color: lin(pick([0x3a7a2e, 0x4a8a36, 0x2e6a26])), roughness: 1 })); b.position.set(Math.cos(a) * z.r * .55, .15, Math.sin(a) * z.r * .55); b.scale.y = .7; b.castShadow = true; g.add(b); }
+    } else if (z.k === 'spring') {
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(z.r * .5, .06, 6, 20), new THREE.MeshStandardMaterial({ color: 0x8a8a90 })); rim.rotation.x = Math.PI / 2; rim.position.y = .04; g.add(rim);
+    }
+    zoneGroup.add(g);
+  }
+  el('terr').innerHTML = list.length ? [...new Set(list.map(z => z.k))].map(k => `<span title="${TERRAIN[k].desc}">${TERRAIN[k].e} ${TERRAIN[k].n}</span>`).join(' ') : '';
+}
+// ambient particles over the zones + waving flags
+function zoneFx(dt) {
+  if (!zoneGroup || !G.terrain || !G.terrain.length) return;
+  for (const g of zoneGroup.children) for (const o of g.children) if (o.userData.flag) o.rotation.y = Math.sin(performance.now() / 300 + g.position.x) * .35;
+  zoneFxT -= dt; if (zoneFxT > 0) return; zoneFxT = .07;
+  const z = pick(G.terrain), a = rnd(0, 6.28), d = Math.sqrt(Math.random()) * z.r * .9, x = z.x + Math.cos(a) * d, zz = z.z + Math.sin(a) * d;
+  if (z.k === 'lava') VX.emit({ x, y: .05, z: zz, vy: rnd(.6, 1.4), life: rnd(.5, .9), size: rnd(.12, .24), color: pick([0xff8a30, 0xffc060, 0xff4010]), grav: -.4, drag: 1 });
+  else if (z.k === 'spring') VX.emit({ x, y: .1, z: zz, vy: rnd(.4, .9), life: .8, size: .14, color: pick([0x80ffd0, 0xd0fff0]), grav: 0, drag: 1 });
+  else if (z.k === 'totem') VX.emit({ x, y: .05, z: zz, vy: .5, life: .6, size: .1, color: 0xffd060, grav: 0 });
 }
 function resize() {
   W = innerWidth; H = innerHeight; dpr = Math.min(devicePixelRatio || 1, 2);
@@ -681,7 +791,7 @@ function startBattle(pa, pb, visual, creep, seed) {
     const spots = []; for (let c = 0; c < COLS; c++) for (const r of [back, f.side === 'A' ? 1 : 6]) if (!all.some(o => o.c === c && o.r === r)) spots.push([c, r]);
     if (foes.length && spots.length) { const [c, r] = spots[Math.floor(BR() * spots.length)]; f.c = c; f.r = r; [f.x, f.z] = hexPos(c, r); f.leaped = true; }
   }
-  return { A, B, all, t: 0, over: false, winner: null, visual, fx: [], rng };
+  return { A, B, all, t: 0, over: false, winner: null, visual, fx: [], rng, terrain: (G.terrain || []).map(z => ({ ...z })) };
 }
 function creepFighters(n) {
   const list = [], keys = n.keys;
@@ -696,6 +806,7 @@ function creepFighters(n) {
 }
 function dealDamage(B, src, tgt, dmg, magic) {
   if (tgt.dead) return;
+  if (!magic && tgt.inBush && src.range > 1 && BR() < .35) { if (B.visual) B.fx.push({ k: 'txt', f: tgt, txt: '빗나감', col: '#b8f0a0', t: 0 }); return; }
   if (!magic && BR() < src.crit) { dmg *= 1.8; if (B.visual) B.fx.push({ k: 'txt', f: tgt, txt: '치명타', col: '#ffd070', t: 0 }); }
   dmg *= src.dmgMul;
   if (!magic) dmg *= 100 / (100 + tgt.armor);
@@ -721,6 +832,17 @@ function cast(B, f, t) {
 function stepBattle(B, dt) {
   if (B.over) return;
   BR = B.rng;
+  for (const f of B.all) {
+    if (f.dead) continue;
+    f.zoneAs = 1; f.inBush = false;
+    for (const z of B.terrain) {
+      if ((f.x - z.x) * (f.x - z.x) + (f.z - z.z) * (f.z - z.z) > z.r * z.r) continue;
+      if (z.k === 'spring') f.hp = Math.min(f.maxHp, f.hp + f.maxHp * .035 * dt);
+      else if (z.k === 'lava') { f.hp -= f.maxHp * .045 * dt; f.hurt = Math.max(f.hurt, .04); if (f.hp <= 0) { f.hp = 0; f.dead = true; } }
+      else if (z.k === 'totem') f.zoneAs = 1.3;
+      else if (z.k === 'bush') f.inBush = true;
+    }
+  }
   B.t += dt;
   const live = B.all.filter(f => !f.dead);
   for (const f of live) {
@@ -735,7 +857,7 @@ function stepBattle(B, dt) {
       f.atkT -= dt;
       if (f.mana >= f.maxMana) { cast(B, f, t); f.atkT = Math.max(f.atkT, .3); continue; }
       if (f.atkT <= 0) {
-        f.atkT = 1 / f.as; f.mana = Math.min(f.maxMana, f.mana + 10 * f.mpMul);
+        f.atkT = 1 / (f.as * f.zoneAs); f.mana = Math.min(f.maxMana, f.mana + 10 * f.mpMul);
         if (B.visual) { f.anim = 'atk'; if (f.range > 1) B.fx.push({ k: f.cls === '마법사' ? 'bolt' : 'arrow', x: f.x, z: f.z, to: t, t: 0, col: ORG_COL[ALLU[f.key].org] }); }
         const tt = t; const delay = f.range > 1 ? .25 : .12;
         (f.pending = f.pending || []).push([delay, () => { dealDamage(B, f, tt, f.ad, false); if (B.visual && f.range <= 1) B.fx.push({ k: 'hit', x: tt.x, z: tt.z, t: 0 }); }]);
@@ -850,6 +972,7 @@ function startGame(keep) {
 }
 function beginPlanning(first) {
   G.scout = null; G.selItem = null;
+  G.terrain = rollTerrain(); applyTheme(G.stage - 1); renderTerrain();
   G.phase = 'plan'; G.timer = first ? 40 : 30; G.sel = null;
   if (!first) for (const p of G.players) if (p.alive) {
     const base = G.stage === 1 ? 2 + G.rnum - 1 : 5, interest = Math.min(5, Math.floor(p.gold / 10)), streak = Math.abs(p.streak) >= 5 ? 3 : Math.abs(p.streak) >= 4 ? 2 : Math.abs(p.streak) >= 2 ? 1 : 0;
@@ -862,6 +985,7 @@ function beginPlanning(first) {
   syncView(G.me, G.opp);
   renderAll();
   toast(isPve() ? `${roundName()} 몬스터 라운드` : `${roundName()} · 상대 ${G.opp.name}`);
+  if (G.terrain.length) setTimeout(() => { if (G.phase === 'plan') toast('지형 · ' + [...new Set(G.terrain.map(z => TERRAIN[z.k].n))].join(', ')); }, 1300);
 }
 function pickOpponent(p) { const others = G.players.filter(o => o.alive && o !== p && boardUnits(o).length); return others.length ? pick(others) : null; }
 function startFight() {
@@ -1141,7 +1265,7 @@ function leaveNet() {
 }
 function toTitle() {
   if (NET.mode) leaveNet();
-  endBattleView(); clearView(); G.battle = null; G.phase = 'title'; G.endMode = null; G.mySide = 'A';
+  endBattleView(); clearView(); G.battle = null; G.phase = 'title'; G.endMode = null; G.mySide = 'A'; G.terrain = []; renderTerrain(); applyTheme(0);
   document.body.classList.remove('duelmode');
   for (const id of ['end', 'lobby', 'duel']) el(id).hidden = true;
   el('title').hidden = false; el('netMsg').hidden = true;
@@ -1246,7 +1370,7 @@ function makePairs() {
 }
 const allReady = () => G.players.every(p => !p.alive || !p.human || p.offline || p.ready);
 function snapshot() {
-  return { stage: G.stage, rnum: G.rnum, phase: G.phase, timer: G.timer, pairs: G.oppOf || [],
+  return { stage: G.stage, rnum: G.rnum, phase: G.phase, timer: G.timer, pairs: G.oppOf || [], terrain: G.terrain || [],
     players: G.players.map(p => ({ name: p.name, hp: p.hp, gold: p.gold, lv: p.lv, xp: p.xp, board: p.board, bench: p.bench, shop: p.shop, items: p.items || [], reward: p.reward || '', streak: p.streak, alive: p.alive, place: p.place, human: !!p.human, offline: !!p.offline, ready: !!p.ready })) };
 }
 const creepNow = () => isPve() ? PVE(G.stage)[G.stage === 1 ? G.rnum - 1 : 0] : null;
@@ -1308,14 +1432,14 @@ function hostSave() {
   if (NET.mode !== 'host') return;
   try {
     sessionStorage.setItem('mug-chess-host', JSON.stringify({ code: NET.code, t: Date.now(), name: myName(),
-      game: G.netStarted && G.phase !== 'over' ? { players: G.players, pool: G.pool, stage: G.stage, rnum: G.rnum, round: G.round } : null }));
+      game: G.netStarted && G.phase !== 'over' ? { players: G.players, pool: G.pool, stage: G.stage, rnum: G.rnum, round: G.round, terrain: G.terrain } : null }));
   } catch (e) {}
 }
 function restoreHost(h) {
   if (h.name) el('nameIn').value = h.name;
   if (h.game) {
     const g = h.game, me = netToken();
-    G.players = g.players; G.pool = g.pool; G.stage = g.stage; G.rnum = g.rnum; G.round = g.round || 0;
+    G.players = g.players; G.pool = g.pool; G.stage = g.stage; G.rnum = g.rnum; G.round = g.round || 0; G.terrain = g.terrain || []; applyTheme(G.stage - 1); renderTerrain();
     for (const p of G.players) if (p.human && p.token !== me) { p.ai = true; p.offline = true; p.fav = p.fav || shuffle(Object.keys(CLASSES)).slice(0, 2); }
     G.me = G.players[0]; G.netStarted = true; G.mySide = 'A'; G.endMode = null;
     for (const id of ['title', 'lobby', 'end']) el(id).hidden = true;
@@ -1373,7 +1497,8 @@ function hostGone() {
 }
 function loadSnap(s) {
   const prev = G.me;
-  G.players = s.players; G.stage = s.stage; G.rnum = s.rnum; G.timer = s.timer; G.oppOf = s.pairs;
+  G.players = s.players; G.stage = s.stage; G.rnum = s.rnum; G.timer = s.timer; G.oppOf = s.pairs; G.terrain = s.terrain || [];
+  applyTheme(G.stage - 1); renderTerrain();
   G.me = G.players[NET.myIdx];
   const oi = s.pairs[NET.myIdx]; G.opp = oi != null && oi >= 0 ? G.players[oi] : null;
   if (G.sel) G.sel = [...G.me.board, ...G.me.bench].find(u => u && u.id === G.sel.id) || null;
@@ -1446,6 +1571,7 @@ function startDuel() {
   if (!foe) { toast('진영 코드를 확인해 주세요'); return; }
   me.name = '나'; el('duel').hidden = true; el('end').hidden = true;
   G.players = [me, foe]; G.me = me; G.opp = foe; G.phase = 'duel'; G.mySide = 'A'; G.endMode = 'duel';
+  G.terrain = []; renderTerrain(); applyTheme(ri(0, THEMES.length - 1));
   document.body.classList.add('duelmode');
   el('stage').textContent = '진영 대결'; el('phase').textContent = `vs ${foe.name}`;
   G.battle = startBattle(me, foe, true, null); G.acc = 0; beginBattleView(G.battle);
@@ -1597,7 +1723,7 @@ function frame(now) {
     if (G.battle) battleFrame(G.battle, dt);
     if (NET.mode !== 'client') { G.timer -= dt; if (G.timer <= 0) nextRound(); }
   }
-  if (renderer) { VX.update(dt); MGFX.render(); drawOverlay(); }
+  if (renderer) { zoneFx(dt); VX.update(dt); MGFX.render(); drawOverlay(); }
   if (NET.mode === 'host' && G.netStarted && (NET.dirty || now - NET.lastSend > 1000)) { NET.dirty = false; NET.lastSend = now; sendAll({ t: 'state', s: snapshot() }); }
   requestAnimationFrame(frame);
 }
