@@ -91,6 +91,29 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
 .loadbar{height:6px;border-radius:3px;background:#2a2217;overflow:hidden;margin-top:16px;border:1px solid var(--line)}
 .loadbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#a67f2c,#f1d58c)}
 @media (max-height:640px){ #traits{display:none} }
+/* ---- landscape phones: board in the middle, shop strip at the bottom centre, lists on the sides ---- */
+@media (orientation:landscape) and (max-height:560px){
+  #top{padding-top:calc(env(safe-area-inset-top,0px) + 6px);padding-left:calc(env(safe-area-inset-left,0px) + 8px);padding-right:calc(env(safe-area-inset-right,0px) + 8px)}
+  #stageBox{padding:5px 9px} #stage{font-size:14px} #phase{font-size:11px}
+  #traits{display:flex;top:calc(env(safe-area-inset-top,0px) + 58px);left:calc(env(safe-area-inset-left,0px) + 8px);max-width:22vw;gap:3px}
+  .tr{padding:2px 6px;font-size:10.5px}
+  #players{padding:4px 7px;gap:1px;min-width:112px} .pl{font-size:10.5px} .pl .hb{height:3px}
+  .fxb{margin-top:4px}
+  #bottom{left:50%;right:auto;transform:translateX(-50%);width:min(640px,58vw);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 6px);gap:4px}
+  #gold{font-size:16px;min-width:50px} .btn{padding:6px 9px;font-size:12px}
+  .card{min-height:50px;padding:3px 3px 2px} .card .cn{font-size:11px} .card .ct{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .card .ct br{display:none} .card .cp{font-size:11px}
+  #info{left:50%;right:auto;transform:translateX(-50%);width:min(520px,56vw)}
+  .ov{padding:12px 16px}
+  .logo{font-size:30px}
+  .sub{margin:4px 0 10px;font-size:12px;line-height:1.5}
+  #title .box,#lobby .box,#duel .box{width:min(860px,100%);display:grid;grid-template-columns:1.1fr 1fr;column-gap:16px;align-items:start}
+  #title .box>.logo,#title .box>.sub{grid-column:1 / -1}
+  #title .rules{margin:0;font-size:11.5px;line-height:1.6}
+  .tcol .mp{margin-top:8px}
+  #lobby .box>*:not(.lcol){grid-column:1} #lobby .lcol{grid-column:2;grid-row:1 / span 4}
+  #duel .box>*:not(.dcol){grid-column:1} #duel .dcol{grid-column:2;grid-row:1 / span 3}
+  .code{font-size:40px}
+}
 .rcol{display:flex;flex-direction:column;align-items:flex-end}
 .mp{margin-top:12px;display:flex;flex-direction:column;gap:8px}
 .mp input,#duel textarea{background:#120f0a;border:1px solid var(--line2);border-radius:8px;color:var(--text);padding:10px;font:inherit;font-size:14px;user-select:text;-webkit-user-select:text;touch-action:auto}
@@ -138,6 +161,7 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
         아끼면 <b>이자</b>(10골드당 1, 최대 5)를 받아요.<br>
         <b>조작</b>: 용병을 눌러 고른 뒤 칸을 누르면 이동, 고른 상태에서 판매 버튼으로 팔아요.
       </div>
+      <div class="tcol">
       <button class="btn pri wide" id="startBtn">혼자 하기 (AI 7명)</button>
       <div class="mp">
         <input id="nameIn" maxlength="8" placeholder="내 이름 (친구에게 보여요)" autocomplete="off">
@@ -147,6 +171,7 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
         <p class="sub" id="netMsg" style="margin:0;color:#ffb0a4" hidden></p>
       </div>
       <p class="sub" id="record" style="margin-top:10px"></p>
+      </div>
     </div>
   </div>
   <div class="ov" id="end" hidden>
@@ -164,9 +189,9 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
       <p class="sub" id="lobbyMsg"></p>
       <div class="code" id="lobbyCode"></div>
       <button class="btn" id="shareBtn" style="margin-bottom:12px">초대 링크 보내기</button>
-      <div class="rules" id="lobbyList"></div>
+      <div class="lcol"><div class="rules" id="lobbyList"></div>
       <button class="btn pri wide" id="lobbyStart" hidden>시작 (빈자리는 AI)</button>
-      <button class="btn wide" id="lobbyLeave" style="margin-top:8px">나가기</button>
+      <button class="btn wide" id="lobbyLeave" style="margin-top:8px">나가기</button></div>
     </div>
   </div>
   <div class="ov" id="duel" hidden>
@@ -174,9 +199,9 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
       <div class="logo" style="font-size:28px">진영 코드 대결</div>
       <p class="sub">친구가 보낸 진영 코드를 붙여넣으면 내 마지막 진영과 자동 전투를 해요.<br>내 진영 코드는 게임 중 오른쪽 위 <b>진영 코드</b> 버튼으로 복사해요.</p>
       <div class="rules" id="duelMine"></div>
-      <textarea id="duelIn" rows="3" placeholder="친구 진영 코드 (MGC1.…)"></textarea>
+      <div class="dcol"><textarea id="duelIn" rows="3" placeholder="친구 진영 코드 (MGC1.…)"></textarea>
       <button class="btn pri wide" id="duelGo">대결 시작</button>
-      <button class="btn wide" id="duelBack" style="margin-top:8px">돌아가기</button>
+      <button class="btn wide" id="duelBack" style="margin-top:8px">돌아가기</button></div>
     </div>
   </div>
 </div>
@@ -440,7 +465,10 @@ function resize() {
   if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); MGFX.resize(W, H, dpr); }
   ovc.width = W * dpr; ovc.height = H * dpr;
   // fit the whole board + bench (about 9 wide, 11 deep) whatever the aspect
-  const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(5 / (half * camera.aspect), 6.6 / half);
+  const half = Math.tan(camera.fov * Math.PI / 360), land = W > H, bh = land && el('bottom') ? el('bottom').offsetHeight + 4 : 0;
+  const need = Math.max(5 / (half * camera.aspect), (bh ? 7.6 : 6.6) / (half * (H - bh) / H));
+  // landscape: shift the picture up so the board sits centred in the area above the shop strip
+  if (bh) camera.setViewOffset(W, H, 0, bh * .62, W, H); else camera.clearViewOffset();
   const tilt = .78; // radians from vertical
   const fl = G.flip ? -1 : 1; // side B watches from the other end
   if (G.sun) G.sun.position.set(4 * fl, 12, 6 * fl);
@@ -813,7 +841,7 @@ function finishFight() {
 function nextRound() {
   endBattleView(); G.battle = null;
   if (NET.mode === 'host') {
-    if (G.players.filter(p => p.alive).length <= 1) { G.phase = 'over'; NET.dirty = true; netGameOver(); return; }
+    if (G.players.filter(p => p.alive).length <= 1) { G.phase = 'over'; NET.dirty = true; netGameOver(); try { sessionStorage.removeItem('mug-chess-host'); } catch (e) {} return; }
     G.rnum++; if ((G.stage === 1 && G.rnum > 3) || G.rnum > 7) { G.stage++; G.rnum = 1; }
     return beginPlanning(false);
   }
@@ -920,10 +948,12 @@ function netError(e) {
   netFail(t === 'peer-unavailable' ? '방을 찾을 수 없어요. 방 코드를 확인해 주세요.' : t === 'full' ? '이미 시작했거나 가득 찬 방이에요.'
     : t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed' ? '연결 서버에 접속하지 못했어요. 잠시 뒤 다시 해 주세요.' : `연결하지 못했어요 (${t || '알 수 없음'}).`);
 }
+const NET_FATAL = ['browser-incompatible', 'invalid-id', 'invalid-key', 'ssl-unavailable'];
 function leaveNet() {
-  NET.leaving = true;
+  NET.leaving = true; clearTimeout(NET.retryTimer);
+  try { sessionStorage.removeItem('mug-chess-host'); sessionStorage.removeItem('mug-chess-join'); } catch (e) {}
   try { if (NET.peer) NET.peer.destroy(); } catch (e) {}
-  Object.assign(NET, { mode: null, peer: null, conn: null, conns: [], lobby: [], leaving: false });
+  Object.assign(NET, { mode: null, peer: null, conn: null, conns: [], lobby: [], leaving: false, retryUntil: 0, everConnected: false, idTries: 0 });
   G.netStarted = false;
 }
 function toTitle() {
@@ -934,17 +964,30 @@ function toTitle() {
   el('title').hidden = false; el('netMsg').hidden = true;
 }
 // ---- host ----
-function hostRoom() {
+function hostRoom(code, restoring) {
   saveName(); el('netMsg').hidden = true;
-  const code = Array.from({ length: 4 }, () => pick([...ROOM_CH])).join('');
+  code = code || Array.from({ length: 4 }, () => pick([...ROOM_CH])).join('');
   const peer = newPeer('mgwchess-' + code); if (!peer) return;
   Object.assign(NET, { mode: 'host', peer, code, conns: [], token: netToken() });
   NET.lobby = [{ name: myName(), token: NET.token, host: true }];
-  el('lobbyMsg').textContent = '방을 만드는 중…'; el('lobbyCode').textContent = ''; el('lobbyList').innerHTML = '';
-  el('lobby').hidden = false; el('title').hidden = true; el('lobbyStart').hidden = true; el('shareBtn').hidden = true;
-  peer.on('open', () => showLobby());
-  peer.on('error', e => { if (e.type === 'unavailable-id') { leaveNet(); hostRoom(); } else if (e.type !== 'peer-unavailable') netError(e); });
-  peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
+  if (!G.netStarted) {
+    el('lobbyMsg').textContent = restoring ? '방을 다시 여는 중…' : '방을 만드는 중…'; el('lobbyCode').textContent = restoring ? code : ''; el('lobbyList').innerHTML = '';
+    el('lobby').hidden = false; el('title').hidden = true; el('lobbyStart').hidden = true; el('shareBtn').hidden = true;
+  }
+  peer.on('open', () => { NET.idTries = 0; hostSave(); if (!G.netStarted) showLobby(); });
+  peer.on('error', e => {
+    if (e.type === 'unavailable-id') {
+      try { peer.destroy(); } catch (er) {}
+      // after a reload our old id can stay registered for a few seconds: keep trying the same code
+      if (restoring && (NET.idTries = (NET.idTries || 0) + 1) < 10) { NET.retryTimer = setTimeout(() => hostRoom(code, true), 2500); return; }
+      if (!restoring) { NET.mode = null; return hostRoom(); }
+      return netFail('같은 방 코드를 다시 열지 못했어요. 새 방을 만들어 주세요.');
+    }
+    if (NET_FATAL.includes(e.type)) return netError(e);
+    // app switched / signal lost: keep the room, reconnect to the broker in a moment
+    reconnectPeer(peer);
+  });
+  peer.on('disconnected', () => reconnectPeer(peer));
   peer.on('connection', c => { c.on('data', m => hostRecv(c, m)); c.on('close', () => hostDrop(c)); });
 }
 function hostRecv(c, m) {
@@ -1071,22 +1114,70 @@ function netGameOver() {
   el('againBtn').textContent = '처음 화면'; el('end').hidden = false;
   if (G.phase === 'over' || NET.mode === 'client') try { const rec = JSON.parse(localStorage.getItem('mug-chess') || '{}'); rec.games = (rec.games || 0) + 1; rec.best = Math.min(rec.best || 8, place); if (place === 1) rec.wins = (rec.wins || 0) + 1; localStorage.setItem('mug-chess', JSON.stringify(rec)); } catch (e) {}
 }
+function reconnectPeer(peer) {
+  setTimeout(() => { try { if (peer === NET.peer && peer.disconnected && !peer.destroyed) peer.reconnect(); } catch (e) {} }, 1500);
+}
+// the host keeps the room in this tab's sessionStorage, so a reload (or the phone killing the page) can reopen it
+function hostSave() {
+  if (NET.mode !== 'host') return;
+  try {
+    sessionStorage.setItem('mug-chess-host', JSON.stringify({ code: NET.code, t: Date.now(), name: myName(),
+      game: G.netStarted && G.phase !== 'over' ? { players: G.players, pool: G.pool, stage: G.stage, rnum: G.rnum, round: G.round } : null }));
+  } catch (e) {}
+}
+function restoreHost(h) {
+  if (h.name) el('nameIn').value = h.name;
+  if (h.game) {
+    const g = h.game, me = netToken();
+    G.players = g.players; G.pool = g.pool; G.stage = g.stage; G.rnum = g.rnum; G.round = g.round || 0;
+    for (const p of G.players) if (p.human && p.token !== me) { p.ai = true; p.offline = true; p.fav = p.fav || shuffle(Object.keys(CLASSES)).slice(0, 2); }
+    G.me = G.players[0]; G.netStarted = true; G.mySide = 'A'; G.endMode = null;
+    for (const id of ['title', 'lobby', 'end']) el(id).hidden = true;
+    // pick the game up at the planning phase of the same round
+    NET.mode = 'host'; G.phase = 'plan'; G.timer = 30; G.sel = null; G.battle = null; makePairs();
+    for (const p of G.players) p.ready = false;
+    G.opp = G.oppOf[0] >= 0 ? G.players[G.oppOf[0]] : null;
+    syncView(G.me, G.opp); renderAll(); toast('방을 다시 열었어요');
+  }
+  hostRoom(h.code, true);
+}
 // ---- friend (client) ----
 function joinRoom(code) {
   code = code.trim().toUpperCase(); el('netMsg').hidden = true;
   if (!/^[A-Z0-9]{4}$/.test(code)) { el('netMsg').textContent = '방 코드 4자리를 넣어 주세요.'; el('netMsg').hidden = false; return; }
   saveName();
-  const peer = newPeer(); if (!peer) return;
-  Object.assign(NET, { mode: 'client', peer, code, token: netToken() });
+  Object.assign(NET, { mode: 'client', code, token: netToken(), retryUntil: 0, everConnected: false });
+  try { sessionStorage.setItem('mug-chess-join', JSON.stringify({ code, t: Date.now() })); } catch (e) {}
   el('lobbyMsg').textContent = '방에 연결하는 중…'; el('lobbyCode').textContent = code; el('lobbyList').innerHTML = '';
   el('lobbyStart').hidden = true; el('shareBtn').hidden = true; el('lobby').hidden = false; el('title').hidden = true;
+  clientConnect();
+}
+function clientConnect() {
+  const peer = newPeer(); if (!peer) return;
+  NET.peer = peer;
   peer.on('open', () => {
-    const c = peer.connect('mgwchess-' + code, { reliable: true }); NET.conn = c;
-    c.on('open', () => { NET.hostSeen = Date.now(); c.send({ t: 'hello', name: myName(), token: NET.token }); });
+    const c = peer.connect('mgwchess-' + NET.code, { reliable: true }); NET.conn = c;
+    c.on('open', () => { NET.hostSeen = Date.now(); NET.retryUntil = 0; c.send({ t: 'hello', name: myName(), token: NET.token }); });
     c.on('data', clientRecv);
-    c.on('close', () => { if (NET.mode === 'client' && !NET.leaving) hostGone(); });
+    c.on('close', () => { if (NET.mode === 'client' && !NET.leaving && NET.conn === c) lostHost(); });
   });
-  peer.on('error', e => netError(e));
+  peer.on('error', e => {
+    if (NET.mode !== 'client' || peer !== NET.peer) return;
+    if (!NET.everConnected && !NET.retryUntil) return netError(e);
+    if (NET_FATAL.includes(e.type)) return netError(e);
+    if (e.type === 'peer-unavailable' || !NET.conn || !NET.conn.open) lostHost(); else reconnectPeer(peer);
+  });
+  peer.on('disconnected', () => reconnectPeer(peer));
+}
+// lost the host (they switched apps, reloaded or the signal dropped): keep trying for a minute
+function lostHost() {
+  if (NET.mode !== 'client' || NET.retryTimer) return;
+  if (!NET.retryUntil) { NET.retryUntil = Date.now() + 60000; toast('방장과 다시 연결 중…'); }
+  if (Date.now() > NET.retryUntil) return hostGone();
+  try { if (NET.conn) NET.conn.close(); } catch (e) {}
+  try { if (NET.peer) NET.peer.destroy(); } catch (e) {}
+  NET.conn = null; NET.peer = null;
+  NET.retryTimer = setTimeout(() => { NET.retryTimer = 0; if (NET.mode === 'client') clientConnect(); }, 3000);
 }
 function hostGone() {
   leaveNet(); G.endMode = 'net';
@@ -1105,7 +1196,8 @@ function loadSnap(s) {
 function clientRecv(m) {
   NET.hostSeen = Date.now();
   if (!m || typeof m !== 'object') return;
-  if (m.t === 'lobby') showLobby(m.names);
+  NET.everConnected = true;
+  if (m.t === 'lobby') { showLobby(m.names); el('lobbyMsg').textContent = '방장이 시작하기를 기다리는 중…'; }
   else if (m.t === 'full') netError({ type: 'full' });
   else if (m.t === 'welcome') { NET.myIdx = m.idx; G.netStarted = true; G.endMode = null; for (const id of ['lobby', 'title', 'end']) el(id).hidden = true; }
   else if (m.t === 'state') {
@@ -1180,14 +1272,27 @@ function duelOver() {
   el('againBtn').textContent = '다시 대결'; el('end').hidden = false; sfx(w === 'A' ? 'win' : 'lose');
 }
 // heartbeat: WebRTC often keeps a dead link 'open' for a long time, so both sides check for silence
+let beatT = Date.now();
 setInterval(() => {
-  const now = Date.now();
+  const now = Date.now(), gap = now - beatT; beatT = now;
+  // this page was asleep (app switched / screen off): don't blame the others for our silence
+  if (gap > 5000) { NET.hostSeen = now; for (const c of NET.conns) c.seen = now; }
   if (NET.mode === 'client' && NET.conn && NET.conn.open) {
     try { NET.conn.send({ t: 'ping' }); } catch (e) {}
-    if (G.netStarted && now - (NET.hostSeen || now) > 20000) hostGone();
+    if (NET.everConnected && now - (NET.hostSeen || now) > 15000) lostHost();
   }
-  if (NET.mode === 'host') for (const c of NET.conns.slice()) if (now - (c.seen || now) > 9000) { try { c.close(); } catch (e) {} hostDrop(c); }
+  if (NET.mode === 'host') {
+    for (const c of NET.conns.slice()) if (now - (c.seen || now) > 12000) { try { c.close(); } catch (e) {} hostDrop(c); }
+    hostSave();
+  }
 }, 2000);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hostSave(); return; }
+  const now = Date.now(); beatT = now; NET.hostSeen = now; for (const c of NET.conns) c.seen = now;
+  if (NET.peer && NET.peer.disconnected && !NET.peer.destroyed) try { NET.peer.reconnect(); } catch (e) {}
+  if (NET.mode === 'client' && (!NET.conn || !NET.conn.open)) lostHost();
+});
+addEventListener('pagehide', hostSave);
 el('hostBtn').onclick = () => { audio(); hostRoom(); };
 el('joinBtn').onclick = () => { audio(); joinRoom(el('codeIn').value); };
 el('lobbyStart').onclick = () => { audio(); hostStart(); };
@@ -1309,6 +1414,13 @@ async function start() {
   try { await loadAssets(); } catch (e) { el('loadMsg').textContent = '그래픽 파일을 불러오지 못했어요. 새로고침해 주세요.'; return; }
   el('loading').hidden = true; el('title').hidden = false;
   try { const rec = JSON.parse(localStorage.getItem('mug-chess') || '{}'); if (rec.games) el('record').textContent = `기록: ${rec.games}판 · 우승 ${rec.wins || 0}회 · 최고 ${rec.best}등`; } catch (e) {}
+  // the page was reloaded during an online game: reopen the room / rejoin it
+  try {
+    const h = JSON.parse(sessionStorage.getItem('mug-chess-host') || 'null');
+    if (h && Date.now() - h.t < 15 * 60e3) return restoreHost(h);
+    const j = JSON.parse(sessionStorage.getItem('mug-chess-join') || 'null');
+    if (j && Date.now() - j.t < 15 * 60e3) { el('codeIn').value = j.code; joinRoom(j.code); NET.everConnected = true; NET.retryUntil = Date.now() + 60000; }
+  } catch (e) {}
 }
 const fxBtn = () => { el('bFx').textContent = FXOPT.on ? '효과 켬' : '효과 끔'; el('bFx').classList.toggle('off', !FXOPT.on); };
 el('bFx').onclick = () => { FXOPT.on = !FXOPT.on; try { localStorage.setItem('mug-fx', FXOPT.on ? 'on' : 'off'); } catch (e) {} fxBtn(); };
