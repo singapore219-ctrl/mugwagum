@@ -368,7 +368,7 @@ function makeActor(d, sc = 1) {
   const hd = MGFX.hd(d.hd), root = new THREE.Group(), m = THREE.SkeletonUtils.clone(hd ? hd.root : MODELS[d.m]);
   m.scale.setScalar((hd ? 1 : CHAR_SCALE) * (d.s || 1) * sc);
   const mats = [];
-  m.traverse(n => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; n.material = n.material.clone(); MGFX.addRim(n.material); mats.push(n.material); if (d.tint && !hd) n.material.color.multiply(new THREE.Color(d.tint)); if (d.glow) { n.material.emissive = new THREE.Color(d.glow); n.material.emissiveIntensity = hd ? .05 : .2; } n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity; } });
+  m.traverse(n => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; n.material = n.material.clone(); MGFX.addRim(n.material); mats.push(n.material); if (d.tint && !hd) n.material.color.multiply(new THREE.Color(d.tint)); if (d.glow) { n.material.emissive = new THREE.Color(d.glow); n.material.emissiveIntensity = hd ? .2 : .2; } n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity; } });
   root.add(m);
   const a = { root, m, mats, hd, mixer: new THREE.AnimationMixer(m), acts: {}, cur: null, curName: '', lock: 0, A: styleAnims(d.st, d.sk), h: (hd ? hd.H : 1.05) * (d.s || 1) * sc, atkI: 0 };
   const hr = m.getObjectByName('handslotr'), hl = m.getObjectByName('handslotl');

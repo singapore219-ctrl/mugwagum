@@ -1132,6 +1132,8 @@ function hdWant(k) {
     geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wt, 4));
 
     const mesh = new THREE.SkinnedMesh(geo, src.material);
+    // AI-made textures are dark: let the body glow faintly with its own colours so it never turns into a black shape in dark zones
+    const mt = mesh.material; if (mt && mt.map && mt.emissive) { mt.emissiveMap = mt.map; mt.emissive.set(0xffffff); mt.emissiveIntensity = .2; }
     const root = new THREE.Group();
     root.add(bones.root); root.add(mesh);
     root.updateMatrixWorld(true);
@@ -1195,7 +1197,7 @@ function makeActor(o) {
     if (o.tint || o.flash || o.glow) {
       n.material = n.material.clone(); addRim(n.material); mats.push(n.material);
       if (o.tint && !hd) n.material.color.multiply(new THREE.Color(o.tint));
-      if (o.glow) { n.material.emissive = new THREE.Color(o.glow); n.material.emissiveIntensity = hd ? .05 : .35; }
+      if (o.glow) { n.material.emissive = new THREE.Color(o.glow); n.material.emissiveIntensity = hd ? .2 : .35; }
       n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity;
     }
   });
