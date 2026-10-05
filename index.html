@@ -1175,13 +1175,66 @@ function propClone(name, glow) {
 }
 // rim light: brightens edges facing away from the camera, cheap (no extra draw calls)
 function addRim(mat) {
-  if (!mat || mat.userData.rim || !mat.isMeshStandardMaterial) return;
+  if (!mat || mat.userData.rim || !(mat.isMeshStandardMaterial || mat.isMeshToonMaterial)) return;
   mat.userData.rim = true;
   mat.onBeforeCompile = sh => {
     sh.fragmentShader = sh.fragmentShader.replace('#include <output_fragment>',
       'float rimF = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 2.6);\n  outgoingLight += vec3(1.0, 0.86, 0.66) * rimF * 0.45;\n#include <output_fragment>');
   };
   mat.customProgramCacheKey = () => 'rim';
+}
+/* ---------- cartoon look (설정 > 만화풍 캐릭터): 3-step toon shading + dark outline ----------
+   Outline = the same mesh drawn again, back faces only, pushed out along the normals.
+   The push is divided by the mesh's world scale so every model gets the same line width. */
+const TOON_GRAD = {};
+const OUTLINE_W = .018;
+function outlineMat() {
+  const m = new THREE.MeshBasicMaterial({ color: 0x0c0907, side: THREE.BackSide });
+  m.onBeforeCompile = sh => {
+    sh.vertexShader = sh.vertexShader.replace('#include <skinning_vertex>', `#include <skinning_vertex>
+      float olS = length(modelMatrix[0].xyz);
+      #ifdef USE_SKINNING
+        transformed += normalize(objectNormal) * (${OUTLINE_W.toFixed(4)} / olS);
+      #else
+        transformed += normalize(normal) * (${OUTLINE_W.toFixed(4)} / olS);
+      #endif`);
+  };
+  m.customProgramCacheKey = () => 'outline';
+  return m;
+}
+// hard steps for clean low-poly bodies; AI-made bodies have bumpy normals, so hard steps turn into speckles - they get soft steps
+function toonGrad(soft) {
+  const k = soft ? 'soft' : 'hard';
+  if (!TOON_GRAD[k]) {
+    const v = soft ? [80, 120, 175, 225, 255] : [95, 175, 255], d = new Uint8Array(v.length * 4);
+    v.forEach((x, i) => d.set([x, x, x, 255], i * 4));
+    const t = TOON_GRAD[k] = new THREE.DataTexture(d, v.length, 1, THREE.RGBAFormat);
+    t.minFilter = t.magFilter = soft ? THREE.LinearFilter : THREE.NearestFilter; t.needsUpdate = true;
+  }
+  return TOON_GRAD[k];
+}
+function toToon(m, soft) {
+  if (!m || m.isMeshToonMaterial || !(m.isMeshStandardMaterial || m.isMeshPhongMaterial || m.isMeshLambertMaterial)) return m;
+  const t = new THREE.MeshToonMaterial({ color: m.color.clone(), map: m.map, gradientMap: toonGrad(soft), emissive: m.emissive.clone(), emissiveMap: m.emissiveMap,
+    emissiveIntensity: m.emissiveIntensity, transparent: m.transparent, opacity: m.opacity, alphaTest: m.alphaTest, side: m.side });
+  t.userData = { ...m.userData }; delete t.userData.rim; addRim(t);
+  return t;
+}
+function toonObj(a, obj) {
+  if (!obj || !(S && S.opts.toon)) return;
+  const list = []; obj.traverse(n => { if ((n.isMesh || n.isSkinnedMesh) && !n.userData.toon && !n.userData.outline) list.push(n); });
+  for (const n of list) {
+    n.userData.toon = true;
+    const old = n.material, nm = toToon(old, !!(a.hd && n.isSkinnedMesh));
+    if (nm !== old) { n.material = nm; const i = a.mats.indexOf(old); if (i >= 0) a.mats[i] = nm; }
+    const om = outlineMat(); (a.omats = a.omats || []).push(om);
+    const o = n.isSkinnedMesh ? new THREE.SkinnedMesh(n.geometry, om) : new THREE.Mesh(n.geometry, om);
+    if (n.isSkinnedMesh) o.bind(n.skeleton, n.bindMatrix);
+    o.userData.outline = true; o.frustumCulled = false; o.castShadow = false; o.renderOrder = -1;
+    // a weapon prop can itself be the mesh: hang its outline on it so both leave the hand together
+    if (n === obj && !n.isSkinnedMesh) n.add(o);
+    else { o.position.copy(n.position); o.quaternion.copy(n.quaternion); o.scale.copy(n.scale); n.parent.add(o); }
+  }
 }
 function makeActor(o) {
   const useHd = o.hd && S && S.opts.hdModels !== false, hd = useHd ? HD[o.hd] : null;
@@ -1206,6 +1259,7 @@ function makeActor(o) {
     h: (hd ? hd.H : CHAR_H) * (o.s || 1), hr: m.getObjectByName('handslotr'), hl: m.getObjectByName('handslotl'), wr: null, wl: null, atkI: 0, hd };
   setWeapons(a, o.r, o.l, o.wglow);
   play(a, a.A.idle); a.mixer.update(Math.random() * 2);
+  toonObj(a, m);
   scene.add(root);
   return a;
 }
@@ -1218,6 +1272,7 @@ function setWeapons(a, r, l, glow) {
   if (a.hd) for (const w of [a.wr, a.wl]) if (w && /bow/i.test(w.name || '')) w.rotateY(Math.PI);
   // the open spellbook hangs edge-on from a realistic hand; lay it open, pages up, on the palm
   if (a.hd) for (const w of [a.wr, a.wl]) if (w && /spellbook/i.test(w.name || '')) w.rotation.set(0, Math.PI / 2, 0);
+  if (a.mats) { toonObj(a, a.wr); toonObj(a, a.wl); }
 }
 function play(a, name, opt = {}) {
   if (!a) return;
@@ -1237,7 +1292,7 @@ function attackAnim(e, name, within) {
   const clip = CLIPS[nm]; if (!clip) return;
   play(a, nm, { once: true, speed: clamp(clip.duration / Math.max(.3, within * .95), .9, 2.6), fade: .08 });
 }
-function killActor(a) { if (!a) return; scene.remove(a.root); a.mixer.stopAllAction(); for (const m of a.mats) m.dispose(); }
+function killActor(a) { if (!a) return; scene.remove(a.root); a.mixer.stopAllAction(); for (const m of a.mats) m.dispose(); for (const m of a.omats || []) m.dispose(); }
 function lerpAng(a, b, t) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
 function stepActor(e, dt, near) {
   const a = e.act; if (!a) return;
@@ -3648,7 +3703,7 @@ const VIEWS = {
       <div class="sec">자동 사냥 때 쓸 스킬 <span style="font-weight:500">스킬 버튼을 길게 눌러도 바뀌어요</span></div>
       ${mySkills().map(k => `<div class="set"><span style="display:flex;align-items:center;gap:8px">${skIco(k)}${k.n}${S.lv < k.lv ? ` <span class="tag">Lv.${k.lv}</span>` : ''}</span><button class="tog ${autoOn(k) ? 'on' : ''}" data-a="skauto" data-v="${k.id}" aria-pressed="${autoOn(k)}"></button></div>`).join('')}
       <div class="sec">자동 기능</div>
-      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자·화면 효과 끄기)')}<div class="set"><span>사실적인 캐릭터 모델 (다시 접속하면 적용)</span><button class="tog ${S.opts.hdModels !== false ? 'on' : ''}" data-a="hdtog" aria-pressed="${S.opts.hdModels !== false}"></button></div><div class="set"><span>화면 효과 (빛 번짐·색감 보정)</span><button class="tog ${S.opts.post !== false ? 'on' : ''}" data-a="posttog" aria-pressed="${S.opts.post !== false}"></button></div><div class="set"><span>각성 몬스터 (환생 후)</span><button class="tog ${S.opts.awaken !== false ? 'on' : ''}" data-a="awktog" aria-pressed="${S.opts.awaken !== false}"></button></div><div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
+      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자·화면 효과 끄기)')}<div class="set"><span>사실적인 캐릭터 모델</span><button class="tog ${S.opts.hdModels !== false ? 'on' : ''}" data-a="hdtog" aria-pressed="${S.opts.hdModels !== false}"></button></div><div class="set"><span>만화풍 캐릭터 (명암 단계·외곽선)</span><button class="tog ${S.opts.toon ? 'on' : ''}" data-a="toontog" aria-pressed="${!!S.opts.toon}"></button></div><div class="set"><span>화면 효과 (빛 번짐·색감 보정)</span><button class="tog ${S.opts.post !== false ? 'on' : ''}" data-a="posttog" aria-pressed="${S.opts.post !== false}"></button></div><div class="set"><span>각성 몬스터 (환생 후)</span><button class="tog ${S.opts.awaken !== false ? 'on' : ''}" data-a="awktog" aria-pressed="${S.opts.awaken !== false}"></button></div><div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
       <div class="set"><span>카메라 거리 <b id="camzv" style="color:var(--gold2)">${Math.round(camOpt().z * 100)}%</b></span><input type="range" id="camz" min="50" max="180" step="5" value="${Math.round(camOpt().z * 100)}"></div>
       <div class="set"><span>카메라 각도 <b id="campv" style="color:var(--gold2)">${Math.round(camOpt().pitch)}°</b></span><input type="range" id="camp" min="30" max="82" step="1" value="${Math.round(camOpt().pitch)}"></div>
       <div class="set"><span>시점 회전·거리·각도</span><button class="btn" data-a="camreset">기본값으로</button></div>
@@ -3879,7 +3934,8 @@ el('sheetBody').addEventListener('click', e => {
   else if (['bid', 'bit', 'bgd', 'bgt'].includes(a) && town) { bankAct(a, v); }
   else if (a === 'pktog') { S.opts.pkOn = S.opts.pkOn === false; }
   else if (a === 'posttog') { S.opts.post = S.opts.post === false; }
-  else if (a === 'hdtog') { S.opts.hdModels = S.opts.hdModels === false; toast('캐릭터를 다시 불러올 때 적용돼요'); }
+  else if (a === 'hdtog') { S.opts.hdModels = S.opts.hdModels === false; save(); toast('캐릭터를 다시 불러와요'); setTimeout(() => location.reload(), 400); }
+  else if (a === 'toontog') { S.opts.toon = !S.opts.toon; save(); toast('캐릭터를 다시 불러와요'); setTimeout(() => location.reload(), 400); }
   else if (a === 'pkattack') { pkAttackBot(v); return; }
   else if (a === 'invite') { inviteBot(R.bots.find(b => b.name === v && !b.party)); }
   else if (a === 'kick') { kickBot(v); }
