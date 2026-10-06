@@ -146,7 +146,7 @@ button:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
   <canvas id="ov"></canvas>
   <div id="top">
     <div id="stageBox"><div id="stage">1-1</div><div id="phase">준비</div><div id="terr"></div></div>
-    <div class="rcol"><div id="players"></div><button id="bFx" class="fxb">효과 켬</button><button id="bDeck" class="fxb" hidden>진영 코드</button></div>
+    <div class="rcol"><div id="players"></div><button id="bFx" class="fxb">효과 켬</button><button id="bToon" class="fxb">만화풍 켬</button><button id="bHd" class="fxb">기본 모델</button><button id="bDeck" class="fxb" hidden>진영 코드</button></div>
   </div>
   <div id="traits"></div>
   <div id="info" hidden></div>
@@ -235,6 +235,9 @@ const MOBILE = matchMedia('(pointer:coarse)').matches;
 // 화면 효과 (bloom, colour grade, full particles): one switch, remembered on this device; shared with 영토전쟁
 const FXOPT = { on: (() => { try { return localStorage.getItem('mug-fx') !== 'off'; } catch (e) { return true; } })() };
 const VX = window.MGFX.VX;
+// 만화풍(툰 명암·외곽선) on by default; realistic AI bodies off by default (they look blotchy with toon shading)
+const optOn = (k, def) => { try { const v = localStorage.getItem(k); return v ? v === 'on' : def; } catch (e) { return def; } };
+const TOONOPT = { on: optOn('mug-toon', true) }, HDOPT = { on: optOn('mug-hd', false) };
 
 /* ================= DATA ================= */
 const COST_COL = ['', '#9aa0a8', '#4fb06a', '#4a8fe0', '#b06ae0', '#e8b030'];
@@ -522,7 +525,7 @@ function initGL() {
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(.3, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64); GLOW_TEX = new THREE.CanvasTexture(c);
   G.terrain = [];
-  MGFX.init({ renderer, scene, camera, host: el('game'), glowTex: GLOW_TEX, mobile: MOBILE, low: () => !FXOPT.on, post: () => FXOPT.on, exposure: 1.15, grade: { vig: .12, con: 1, sat: 1.05 } });
+  MGFX.init({ renderer, scene, camera, host: el('game'), glowTex: GLOW_TEX, mobile: MOBILE, low: () => !FXOPT.on, post: () => FXOPT.on, toon: () => TOONOPT.on, exposure: 1.15, grade: { vig: .12, con: 1, sat: 1.05 } });
   buildBoard(); applyTheme(0); renderTerrain(); resize();
 }
 const lin = h => new THREE.Color(h).convertSRGBToLinear();
@@ -670,7 +673,7 @@ async function loadAssets() {
   for (const p of props.scene.children) PROPS[p.name] = p;
   const kb = new THREE.Box3().setFromObject(MODELS.Knight); CHAR_SCALE = 1.25 / (kb.max.y - kb.min.y);
   MGFX.assets({ clips: CLIPS, props: PROPS, charScale: CHAR_SCALE });
-  try { await MGFX.hdSetup({ base: '../assets/models/', knight: MODELS.Knight, charH: 1.25, preload: ['knight', 'elf', 'mage'], onReady: hdReady }); } catch (e) { console.warn(e); }
+  try { await MGFX.hdSetup({ base: '../assets/models/', knight: MODELS.Knight, charH: 1.25, preload: HDOPT.on ? ['knight', 'elf', 'mage'] : [], onReady: hdReady }); } catch (e) { console.warn(e); }
 }
 // a realistic body finished loading: redraw the planning board with it (fights pick it up next round)
 function hdReady() { if (G.phase === 'plan' && G.me) { clearView(); syncView(G.me, G.opp); } }
@@ -690,7 +693,7 @@ function propClone(name, glow) {
   return c;
 }
 function makeActor(key, star) {
-  const d = ALLU[key], root = new THREE.Group(), hd = MGFX.hd(HDK[key] || key), sm = (d.s || 1) * (1 + (star - 1) * .12);
+  const d = ALLU[key], root = new THREE.Group(), hd = HDOPT.on ? MGFX.hd(HDK[key] || key) : null, sm = (d.s || 1) * (1 + (star - 1) * .12);
   const m = THREE.SkeletonUtils.clone(hd ? hd.root : MODELS[d.m]);
   m.scale.setScalar(hd ? sm : CHAR_SCALE * sm);
   const mats = [];
@@ -701,6 +704,7 @@ function makeActor(key, star) {
   if (d.r && hr) { const w = MGFX.fitProp(propClone(d.r, star === 3 ? '#ffd070' : null), hd); if (w) hr.add(w); }
   if (d.l && hl) { const w = MGFX.fitProp(propClone(d.l), hd); if (w) hl.add(w); }
   play(a, a.A.idle); a.mixer.update(Math.random() * 2);
+  MGFX.toonObj(a, m);
   scene.add(root);
   return a;
 }
@@ -714,7 +718,7 @@ function play(a, name, opt = {}) {
   if (a.cur && a.cur !== act) act.crossFadeFrom(a.cur, .12, false);
   act.play(); a.cur = act; a.curName = name; a.lock = opt.once ? clip.duration / (opt.speed || 1) * .85 : 0;
 }
-function killActor(a) { if (!a) return; scene.remove(a.root); a.mixer.stopAllAction(); for (const m of a.mats) m.dispose(); }
+function killActor(a) { if (!a) return; scene.remove(a.root); a.mixer.stopAllAction(); for (const m of a.mats) m.dispose(); for (const m of a.omats || []) m.dispose(); }
 const lerpAng = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; };
 
 /* ---------- planning view: actors for my board and bench ---------- */
@@ -1743,6 +1747,19 @@ async function start() {
 const fxBtn = () => { el('bFx').textContent = FXOPT.on ? '효과 켬' : '효과 끔'; el('bFx').classList.toggle('off', !FXOPT.on); };
 el('bFx').onclick = () => { FXOPT.on = !FXOPT.on; try { localStorage.setItem('mug-fx', FXOPT.on ? 'on' : 'off'); } catch (e) {} fxBtn(); };
 fxBtn();
+// look switches: rebuild the units on the board right away (a fight in progress keeps its look until the next round)
+const lookBtns = () => {
+  el('bToon').textContent = TOONOPT.on ? '만화풍 켬' : '만화풍 끔'; el('bToon').classList.toggle('off', !TOONOPT.on);
+  el('bHd').textContent = HDOPT.on ? '사실적 모델' : '기본 모델';
+};
+function relook() {
+  lookBtns();
+  if (G.phase === 'plan' && G.me) { clearView(); syncView(G.me, G.opp); }
+  else if (G.phase === 'combat' || G.phase === 'duel') toast('다음 라운드부터 적용돼요');
+}
+el('bToon').onclick = () => { TOONOPT.on = !TOONOPT.on; try { localStorage.setItem('mug-toon', TOONOPT.on ? 'on' : 'off'); } catch (e) {} relook(); };
+el('bHd').onclick = () => { HDOPT.on = !HDOPT.on; try { localStorage.setItem('mug-hd', HDOPT.on ? 'on' : 'off'); } catch (e) {} relook(); };
+lookBtns();
 start();
 requestAnimationFrame(frame);
 window.__C = G; G.net = NET; G.dbg = { snapshot, readDeck, deckCode, startDuel, makePairs, get va() { return viewActors; }, syncView, renderAll, startFight, aiPlan, stepBattle, teamPower };
