@@ -868,7 +868,7 @@ function initGL() {
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(36, 1, .5, 120);
   hemi = new THREE.HemisphereLight(0xe8f2ff, 0x4a3a28, .95); scene.add(hemi);
-  sun = new THREE.DirectionalLight(0xfff0d8, 1.7); sun.castShadow = true;
+  sun = new THREE.DirectionalLight(0xfff0d8, 1.7); sun.castShadow = true; sun.shadow.camera.layers.enableAll();
   sun.shadow.mapSize.set(MOBILE ? 1024 : 2048, MOBILE ? 1024 : 2048);
   Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 60 });
   sun.shadow.bias = -.0006; sun.shadow.normalBias = .02;
@@ -918,6 +918,57 @@ function postEnabled() { return !!post && !(S && S.opts.lowfx) && !(S && S.opts.
 function render3d() {
   if (postEnabled()) { post.grade.uniforms.exposure.value = renderer.toneMappingExposure; post.composer.render(); }
   else renderer.render(scene, camera);
+  if (dotOn()) dotPass();
+}
+/* ---------- dot characters (설정 > 도트 캐릭터) ----------
+   Characters sit on layer 1. The world renders first at full resolution (with the post effects),
+   then the characters alone render into a small target that is stretched back over the screen with
+   nearest-pixel sampling and a 1-pixel dark rim, so they read as pixel sprites on a 3D world. */
+const DOT = { rt: null, scene: null, cam: null, mat: null, cc: new THREE.Color() };
+const dotOn = () => !!(S && S.opts.dot);
+function dotLayer(obj) { if (obj && dotOn()) obj.traverse(o => o.layers.set(1)); }
+function dotPass() {
+  const k = Math.max(1, S.opts.dotSize || 2), w = Math.max(1, Math.round(W / k)), h = Math.max(1, Math.round(H / k));
+  if (!DOT.scene) {
+    DOT.mat = new THREE.ShaderMaterial({
+      uniforms: { tex: { value: null }, px: { value: new THREE.Vector2() }, exposure: { value: 1 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: `uniform sampler2D tex; uniform vec2 px; uniform float exposure; varying vec2 vUv;
+        vec3 rrt(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
+        vec3 aces(vec3 c){ const mat3 i = mat3(vec3(0.59719,0.07600,0.02840), vec3(0.35458,0.90834,0.13383), vec3(0.04823,0.01566,0.83777));
+          const mat3 o = mat3(vec3(1.60475,-0.10208,-0.00327), vec3(-0.53108,1.10813,-0.07276), vec3(-0.07367,-0.00605,1.07602));
+          c *= exposure / 0.6; c = i * c; c = rrt(c); c = o * c; return clamp(c, 0.0, 1.0); }
+        vec3 srgb(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(0.0031308, c)); }
+        void main(){
+          vec2 uv = (floor(vUv / px) + 0.5) * px;
+          vec4 c = texture2D(tex, uv);
+          if (c.a < 0.5) {
+            float n = max(max(texture2D(tex, uv + vec2(px.x, 0.0)).a, texture2D(tex, uv - vec2(px.x, 0.0)).a), max(texture2D(tex, uv + vec2(0.0, px.y)).a, texture2D(tex, uv - vec2(0.0, px.y)).a));
+            if (n < 0.5) discard;
+            gl_FragColor = vec4(0.06, 0.045, 0.035, 1.0); return;
+          }
+          vec3 col = aces(c.rgb);
+          float l = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(vec3(l), col, 1.18);   // a bit more colour, like painted sprites
+          gl_FragColor = vec4(srgb(clamp(col, 0.0, 1.0)), 1.0);
+        }`,
+      depthTest: false, depthWrite: false, transparent: true,
+    });
+    DOT.scene = new THREE.Scene(); DOT.cam = new THREE.Camera();
+    const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), DOT.mat); q.frustumCulled = false; DOT.scene.add(q);
+  }
+  if (!DOT.rt || DOT.rt.width !== w || DOT.rt.height !== h) {
+    if (DOT.rt) DOT.rt.dispose();
+    const hf = renderer.capabilities.isWebGL2 && renderer.extensions.has('EXT_color_buffer_float');
+    DOT.rt = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, type: hf ? THREE.HalfFloatType : THREE.UnsignedByteType });
+    DOT.mat.uniforms.tex.value = DOT.rt.texture; DOT.mat.uniforms.px.value.set(1 / w, 1 / h);
+  }
+  DOT.mat.uniforms.exposure.value = renderer.toneMappingExposure;
+  const bg = scene.background, ca = renderer.getClearAlpha(); renderer.getClearColor(DOT.cc);
+  for (const o of scene.children) if (o.isLight) o.layers.enable(1);   // lights are layer-filtered too
+  scene.background = null; camera.layers.set(1);
+  renderer.setRenderTarget(DOT.rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, camera);
+  renderer.setRenderTarget(null); camera.layers.set(0); scene.background = bg; renderer.setClearColor(DOT.cc, ca);
+  const ac = renderer.autoClear; renderer.autoClear = false; renderer.render(DOT.scene, DOT.cam); renderer.autoClear = ac;
 }
 // soft additive textures for rings and light columns
 function softTex(kind) {
@@ -1260,6 +1311,7 @@ function makeActor(o) {
   setWeapons(a, o.r, o.l, o.wglow);
   play(a, a.A.idle); a.mixer.update(Math.random() * 2);
   toonObj(a, m);
+  dotLayer(root);
   scene.add(root);
   return a;
 }
@@ -1272,7 +1324,7 @@ function setWeapons(a, r, l, glow) {
   if (a.hd) for (const w of [a.wr, a.wl]) if (w && /bow/i.test(w.name || '')) w.rotateY(Math.PI);
   // the open spellbook hangs edge-on from a realistic hand; lay it open, pages up, on the palm
   if (a.hd) for (const w of [a.wr, a.wl]) if (w && /spellbook/i.test(w.name || '')) w.rotation.set(0, Math.PI / 2, 0);
-  if (a.mats) { toonObj(a, a.wr); toonObj(a, a.wl); }
+  if (a.mats) { toonObj(a, a.wr); toonObj(a, a.wl); dotLayer(a.wr); dotLayer(a.wl); }
 }
 function play(a, name, opt = {}) {
   if (!a) return;
@@ -3703,7 +3755,7 @@ const VIEWS = {
       <div class="sec">자동 사냥 때 쓸 스킬 <span style="font-weight:500">스킬 버튼을 길게 눌러도 바뀌어요</span></div>
       ${mySkills().map(k => `<div class="set"><span style="display:flex;align-items:center;gap:8px">${skIco(k)}${k.n}${S.lv < k.lv ? ` <span class="tag">Lv.${k.lv}</span>` : ''}</span><button class="tog ${autoOn(k) ? 'on' : ''}" data-a="skauto" data-v="${k.id}" aria-pressed="${autoOn(k)}"></button></div>`).join('')}
       <div class="sec">자동 기능</div>
-      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자·화면 효과 끄기)')}<div class="set"><span>사실적인 캐릭터 모델</span><button class="tog ${S.opts.hdModels !== false ? 'on' : ''}" data-a="hdtog" aria-pressed="${S.opts.hdModels !== false}"></button></div><div class="set"><span>만화풍 캐릭터 (명암 단계·외곽선)</span><button class="tog ${S.opts.toon ? 'on' : ''}" data-a="toontog" aria-pressed="${!!S.opts.toon}"></button></div><div class="set"><span>화면 효과 (빛 번짐·색감 보정)</span><button class="tog ${S.opts.post !== false ? 'on' : ''}" data-a="posttog" aria-pressed="${S.opts.post !== false}"></button></div><div class="set"><span>각성 몬스터 (환생 후)</span><button class="tog ${S.opts.awaken !== false ? 'on' : ''}" data-a="awktog" aria-pressed="${S.opts.awaken !== false}"></button></div><div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
+      ${tog('tele', '몬스터가 없으면 자동 순간이동')}${tog('haste', '초록 물약 자동 사용')}${tog('mpPot', '파란 물약 자동 사용 (MP 25% 이하)')}${tog('sound', '효과음')}${tog('lowfx', '저사양 모드 (그림자·화면 효과 끄기)')}<div class="set"><span>사실적인 캐릭터 모델</span><button class="tog ${S.opts.hdModels !== false ? 'on' : ''}" data-a="hdtog" aria-pressed="${S.opts.hdModels !== false}"></button></div><div class="set"><span>만화풍 캐릭터 (명암 단계·외곽선)</span><button class="tog ${S.opts.toon ? 'on' : ''}" data-a="toontog" aria-pressed="${!!S.opts.toon}"></button></div><div class="set"><span>도트 캐릭터 (2D 도트 + 3D 배경)</span><button class="tog ${S.opts.dot ? 'on' : ''}" data-a="dottog" aria-pressed="${!!S.opts.dot}"></button></div>${S.opts.dot ? `<div class="set"><span>도트 크기</span><span class="seg" style="display:inline-flex;gap:4px">${[2, 3, 4].map(n => `<button data-a="dotsize" data-v="${n}" class="${(S.opts.dotSize || 2) === n ? 'on' : ''}" style="min-width:44px">${['', '', '작게', '중간', '크게'][n]}</button>`).join('')}</span></div>` : ''}<div class="set"><span>화면 효과 (빛 번짐·색감 보정)</span><button class="tog ${S.opts.post !== false ? 'on' : ''}" data-a="posttog" aria-pressed="${S.opts.post !== false}"></button></div><div class="set"><span>각성 몬스터 (환생 후)</span><button class="tog ${S.opts.awaken !== false ? 'on' : ''}" data-a="awktog" aria-pressed="${S.opts.awaken !== false}"></button></div><div class="set"><span>PK 유저 등장</span><button class="tog ${S.opts.pkOn !== false ? 'on' : ''}" data-a="pktog" aria-pressed="${S.opts.pkOn !== false}"></button></div>
       <div class="set"><span>카메라 거리 <b id="camzv" style="color:var(--gold2)">${Math.round(camOpt().z * 100)}%</b></span><input type="range" id="camz" min="50" max="180" step="5" value="${Math.round(camOpt().z * 100)}"></div>
       <div class="set"><span>카메라 각도 <b id="campv" style="color:var(--gold2)">${Math.round(camOpt().pitch)}°</b></span><input type="range" id="camp" min="30" max="82" step="1" value="${Math.round(camOpt().pitch)}"></div>
       <div class="set"><span>시점 회전·거리·각도</span><button class="btn" data-a="camreset">기본값으로</button></div>
@@ -3935,6 +3987,8 @@ el('sheetBody').addEventListener('click', e => {
   else if (a === 'pktog') { S.opts.pkOn = S.opts.pkOn === false; }
   else if (a === 'posttog') { S.opts.post = S.opts.post === false; }
   else if (a === 'hdtog') { S.opts.hdModels = S.opts.hdModels === false; save(); toast('캐릭터를 다시 불러와요'); setTimeout(() => location.reload(), 400); }
+  else if (a === 'dottog') { S.opts.dot = !S.opts.dot; save(); toast('캐릭터를 다시 불러와요'); setTimeout(() => location.reload(), 400); }
+  else if (a === 'dotsize') { S.opts.dotSize = +v; save(); renderSheet(); }
   else if (a === 'toontog') { S.opts.toon = !S.opts.toon; save(); toast('캐릭터를 다시 불러와요'); setTimeout(() => location.reload(), 400); }
   else if (a === 'pkattack') { pkAttackBot(v); return; }
   else if (a === 'invite') { inviteBot(R.bots.find(b => b.name === v && !b.party)); }
@@ -4158,6 +4212,8 @@ el('startBtn').addEventListener('click', () => {
 el('reviveBtn').addEventListener('click', () => { R.dead = false; S.hp = Math.round(D.maxHp * .6); S.mp = Math.round(D.maxMp * .6); el('death').hidden = true; P.act.curName = ''; enterZone(0); });
 function begin() {
   S.opts = Object.assign({ pot: 50, tele: true, haste: true, mpPot: true, sound: true, lowfx: false }, S.opts || {});
+  // new look (2D dot characters on the 3D world): switched on once for every save; 설정 can turn each part back off
+  if (!S.opts.look2) { S.opts.look2 = 1; S.opts.dot = true; S.opts.toon = true; S.opts.hdModels = false; }
   { const sa = sharedAdena(); if (sa != null) S.adena = sa; }
   try { loadShared(); } catch (e) {}
   if (!(S.zone < ZONES.length) || ZONES[S.zone].raid) S.zone = 0;
