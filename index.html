@@ -396,6 +396,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold2);outline-
       <button class="btn pri wide" id="startBtn">사냥 시작</button>
       <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="https://singapore219-ctrl.github.io/mugwagum/chess/">무과금 오토체스 (8인 자동 전투)</a>
       <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="https://singapore219-ctrl.github.io/mugwagum/war/">무과금 영토전쟁 (방치형 디펜스)</a>
+      <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="https://singapore219-ctrl.github.io/mugwagum/shadow/">흑영 군단 (그림자 군단 방치형)</a>
       <div class="guide" id="guide">
         <h3>휴대폰에서 앱처럼 쓰기</h3>
         <ol>
@@ -3832,6 +3833,7 @@ const VIEWS = {
       <div class="sec">다른 게임</div>
       <a class="btn wide" style="display:block;text-align:center;text-decoration:none" href="${CHESS_URL}">무과금 오토체스 하러 가기</a>
       <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="${CHESS_URL.replace('chess/', 'war/')}">무과금 영토전쟁 하러 가기</a>
+      <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="${CHESS_URL.replace('chess/', 'shadow/')}">흑영 군단 하러 가기</a>
       <div class="sec">쿠폰</div>
       <div class="set" style="gap:8px"><input id="couponIn" maxlength="24" placeholder="쿠폰 번호 입력" autocomplete="off" value="${(R.couponText || '').replace(/"/g, '')}" style="flex:1;min-width:0;background:#120f0a;border:1px solid var(--line2);border-radius:8px;color:var(--text);padding:9px 10px;font:inherit;font-size:14px;user-select:text;-webkit-user-select:text;text-transform:uppercase"><button class="btn pri" data-a="coupon">사용</button></div>
       ${R.couponMsg ? `<p class="note" style="margin-top:4px;color:${R.couponOk ? 'var(--good)' : 'var(--bad)'}">${R.couponMsg}</p>` : ''}
