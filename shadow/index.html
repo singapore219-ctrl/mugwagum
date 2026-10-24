@@ -139,7 +139,7 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
     <div class="glass" id="bossBox" hidden><div id="bossName">보스</div><div class="bar"><i id="bossHp"></i></div></div>
     <div id="ctl">
       <button class="chip" id="bSpeed">속도 ×1</button>
-      <button class="chip on" id="bAuto">자동 진격</button>
+      <button class="chip on" id="bAuto">자동 진행</button>
       <button class="chip on" id="bCast">스킬 자동</button>
       <button class="chip" id="bFx">효과 켬</button>
     </div>
@@ -157,11 +157,12 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
       <div class="logo">흑영 군단</div>
       <p class="sub">쓰러진 적의 혼을 거둬 나의 군대로.<br>끝없이 불어나는 그림자로 대륙을 정복하세요.</p>
       <div class="rules">
-        전투는 <b>자동</b>이에요. 군단이 진격하고, 뒤에서 <b>군주</b>가 어둠의 화살과 스킬로 싸워요.<br>
+        전투는 <b>자동</b>이에요. <b>군주</b>가 사냥터를 누비고, 그림자 군단이 군주 곁을 돌며 몰려오는 적을 덮쳐요. 화면을 누르면 군주가 그쪽으로 움직여요.<br>
+        적은 사방의 균열에서 <b>끝없는 웨이브</b>로 몰려와요. 10웨이브마다 지역이 바뀌고 보스가 나와요.<br>
         적이 쓰러지면 <b>혼</b>이 남아요. 확률로 그 자리에서 <b>그림자 병사</b>로 일어나 바로 합류해요. 지역 보스는 <b>그림자 장군</b>이 돼요.<br>
         쓰러진 그림자는 잠시 뒤 다시 일어나요. 군단은 <b>지배력</b>만큼 거느리고, 화면에 다 못 나온 병사는 예비대로 계속 투입돼요.<br>
-        군주가 쓰러지면 후퇴해요. 금화로 <b>군주</b>와 <b>병종</b>을 키우세요. 정복한 영토는 꺼 둬도 금화를 만들어요(최대 12시간).<br>
-        영토 15곳을 정복하면 <b>그림자 윤회</b>로 처음부터 다시 시작하며 영구 강화(흑정)를 얻을 수 있어요.
+        적이 너무 쌓이거나 군주가 쓰러지면 <b>5웨이브 후퇴</b>해서 다시 버텨요. 그래서 꺼 두거나 방치해도 끝나지 않아요(꺼 둔 동안 최대 12시간 정산).<br>
+        금화로 <b>군주</b>와 <b>병종</b>을 키우고, 웨이브 31부터는 <b>그림자 윤회</b>로 영구 강화(흑정)를 얻을 수 있어요.
       </div>
       <button class="btn pri wide" id="startBtn">그림자를 깨운다</button>
     </div>
@@ -294,10 +295,10 @@ const KEY = 'mug-shadow-v1';
 let S = null;
 function fresh() {
   return { gold: 40, g: 0, won: 0, auto: true, cast: true, speed: 1, kills: 0, binds: 0, lastT: Date.now(), started: false, farm: 0,
-    lord: { lv: 1 }, capLv: 0, bind: 0, army: { skmin: { n: 4, lv: 1 } }, gens: [], ess: 0, rebirths: 0, bestWon: 0, bulk: 1, loseG: -1, loseN: 0 };
+    lord: { lv: 1 }, capLv: 0, bind: 0, army: { skmin: { n: 4, lv: 1 } }, gens: [], ess: 0, rebirths: 0, bestWon: 0, bulk: 1, loseG: -1, loseN: 0, wave: 1, best: 1, bestWave: 0 };
 }
 function save() { if (!S) return; S.lastT = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
-function load() { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.army) return Object.assign(fresh(), s); } catch (e) {} return null; }
+function load() { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.army) { if (s.wave == null) { s.wave = 1 + (s.g || 0) * 2; s.best = 1 + (s.won || 0) * 2; } return Object.assign(fresh(), s); } } catch (e) {} return null; }
 const armyCount = () => Object.values(S.army).reduce((a, u) => a + u.n, 0);
 const cap = () => capOf(S.capLv);
 
@@ -305,7 +306,8 @@ const cap = () => capOf(S.capLv);
 const view = el('view'), glc = el('gl'), ovc = el('ov'), octx = ovc.getContext('2d');
 let camDist = 30, W = 0, H = 0, dpr = 1, renderer, scene, camera, ground, MODELS = {}, CLIPS = {}, PROPS = {}, CHAR_SCALE = .5, GLOW_TEX, sun, hemi;
 const lin = h => new THREE.Color(h).convertSRGBToLinear();
-const FRONT_Z = 3, LORD_Z = 6, FOE_Z = -11;
+const ARENA = 15;   // the hunting field is a square, -ARENA..ARENA on x and z
+const CAM = { h: 20, back: 14, x: 0, z: 0 };
 function initGL() {
   renderer = new THREE.WebGLRenderer({ canvas: glc, antialias: true });
   renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
@@ -319,8 +321,8 @@ function initGL() {
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(.3, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64); GLOW_TEX = new THREE.CanvasTexture(c);
   MGFX.init({ renderer, scene, camera, host: view, glowTex: GLOW_TEX, mobile: MOBILE, low: () => !FXOPT.on, post: () => FXOPT.on, toon: () => LOOK.toon, exposure: 1, grade: { vig: .38, con: 1.05, sat: .95 }, bloom: { threshold: 1, strength: .6 } });
-  ground = new THREE.Mesh(new THREE.PlaneGeometry(70, 70), new THREE.MeshStandardMaterial({ color: 0x334422, roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2; ground.position.z = -4; ground.receiveShadow = true; scene.add(ground);
+  ground = new THREE.Mesh(new THREE.PlaneGeometry(110, 110), new THREE.MeshStandardMaterial({ color: 0x334422, roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.z = 0; ground.receiveShadow = true; scene.add(ground);
   resize();
 }
 // painted-looking ground: soft blotches over the region colour, so the field never reads as one flat plane
@@ -338,7 +340,7 @@ function groundTex(base) {
     });
   }
   g.lineWidth = 1; for (let k = 0; k < 2600; k++) { const x = Math.random() * N, y = Math.random() * N; g.strokeStyle = `rgba(${Math.random() < .5 ? '0,0,0,.18' : '255,255,240,.08'})`; g.beginPath(); g.moveTo(x, y); g.lineTo(x + rnd(-1, 1.5), y - rnd(2, 5)); g.stroke(); }
-  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(5, 5); t.anisotropy = 4;
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(9, 9); t.anisotropy = 4;
   return t;
 }
 // KayKit's nature atlas is lime green with red trunks; recolour a copy toward sage leaves and brown bark
@@ -372,33 +374,44 @@ function setTheme(r) {
   MGFX.hd(BOSS_HD[ri]);
   if (ground.material.map) ground.material.map.dispose();
   ground.material.map = groundTex(R0.g); ground.material.color.set(0xffffff); ground.material.needsUpdate = true;
-  scene.background = lin(R0.f); scene.fog = new THREE.Fog(lin(R0.f), camDist * .95, camDist * 1.9);
+  scene.background = lin(R0.f); scene.fog = new THREE.Fog(lin(R0.f), camDist * 1.05, camDist * 2.2);
   for (const d of decor) scene.remove(d); decor = [];
   const snow = ri === 4, dead = [2, 3, 5, 7, 8, 9].includes(ri);
   const trees = dead ? ['Tree_Bare_1_A', 'Tree_Bare_2_A'] : ['Tree_1_A', 'Tree_2_A', 'Tree_3_A', 'Tree_4_A'], rocks = ['Rock_1_A', 'Rock_2_A', 'Rock_3_A'];
   const tint = new THREE.Color(snow ? 0xdde6f0 : dead ? 0x8a7a7a : 0xb0b8a8);
-  for (let i = 0; i < 46; i++) {
-    const side = i % 2 ? 1 : -1, x = side * rnd(8.5, 17), z = rnd(-26, 10), isRock = Math.random() < (dead ? .45 : .25);
+  // trees and rocks all around the field's edge, a few stones scattered inside
+  for (let i = 0; i < 110; i++) {
+    const inside = i < 14, x = inside ? rnd(-ARENA + 2, ARENA - 2) : rnd(-34, 34), z = inside ? rnd(-ARENA + 2, ARENA - 2) : rnd(-34, 34);
+    if (!inside && Math.abs(x) < ARENA + 1.5 && Math.abs(z) < ARENA + 1.5) continue;
+    if (inside && Math.hypot(x, z) < 4) continue;
+    const isRock = inside || Math.random() < (dead ? .45 : .25);
     const p = PROPS[pick(isRock ? rocks : trees)]; if (!p) continue;
     const o = p.clone(true), sz = new THREE.Box3().setFromObject(p).getSize(new THREE.Vector3()).y || 1;
-    o.scale.setScalar((isRock ? rnd(.6, 1.6) : rnd(2.4, 3.6)) / sz);
+    o.scale.setScalar((isRock ? rnd(inside ? .4 : .6, inside ? .9 : 1.6) : rnd(2.4, 3.6)) / sz);
     o.traverse(n => { if (n.isMesh) { n.material = n.material.clone(); if (n.material.map) n.material.map = muted(n.material.map); n.material.color.multiply(tint); n.castShadow = true; } });
     o.position.set(x, 0, z); o.rotation.y = rnd(0, 6.28); scene.add(o); decor.push(o);
   }
-  // purple ground mist where the army stands
-  const mist = new THREE.Mesh(new THREE.CircleGeometry(9, 32), new THREE.MeshBasicMaterial({ color: 0x5a2ab0, map: GLOW_TEX, transparent: true, opacity: .13, depthWrite: false, blending: THREE.AdditiveBlending }));
-  mist.rotation.x = -Math.PI / 2; mist.position.set(0, .03, 4); scene.add(mist); decor.push(mist);
+  // a faint violet line marks the edge of the hunting field
+  const edge = new THREE.Mesh(new THREE.RingGeometry(ARENA * 1.41 - .15, ARENA * 1.41, 4, 1), new THREE.MeshBasicMaterial({ color: 0x7a4ad0, transparent: true, opacity: .35, depthWrite: false }));
+  edge.rotation.set(-Math.PI / 2, 0, Math.PI / 4); edge.position.y = .03; scene.add(edge); decor.push(edge);
 }
 function resize() {
   W = view.clientWidth; H = view.clientHeight; dpr = Math.min(devicePixelRatio || 1, 2);
   if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); MGFX.resize(W, H, dpr); }
   ovc.width = W * dpr; ovc.height = H * dpr;
-  // frame the whole field (x -7..7, z -14..7) from behind the army
-  const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(6.6 / (half * camera.aspect), 10.5 / half);
-  const tilt = .8;
-  camera.position.set(0, Math.cos(tilt) * need, -3 + Math.sin(tilt) * need + 1); camera.lookAt(0, 0, -3);
-  camera.far = need + 50; camera.updateProjectionMatrix(); camDist = need;
-  if (scene && scene.fog) { scene.fog.near = need * .95; scene.fog.far = need * 1.9; }
+  // show about 17 x 15 units around the sovereign
+  const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(8.5 / (half * camera.aspect), 7.5 / half), tilt = .78;
+  CAM.h = Math.cos(tilt) * need; CAM.back = Math.sin(tilt) * need; camDist = need;
+  camera.far = need + 60; camera.updateProjectionMatrix();
+  if (scene && scene.fog) { scene.fog.near = need * 1.05; scene.fog.far = need * 2.2; }
+  camFollow(true);
+}
+function camFollow(snap, dt = 1) {
+  if (!camera) return;
+  const tx = lord ? lord.x : 0, tz = lord ? lord.z : 0, k = snap ? 1 : Math.min(1, dt * 3);
+  CAM.x += (tx - CAM.x) * k; CAM.z += (tz - CAM.z) * k;
+  camera.position.set(CAM.x, CAM.h, CAM.z + CAM.back); camera.lookAt(CAM.x, 0, CAM.z);
+  if (sun) { sun.position.set(CAM.x + 6, 14, CAM.z + 8); sun.target.position.set(CAM.x, 0, CAM.z); }
 }
 addEventListener('resize', resize);
 const DOT = { rt: null, scene: null, cam: null, mat: null, cc: new THREE.Color() };
@@ -533,10 +546,15 @@ function play(a, name, opt = {}) {
 function killActor(a) { if (!a) return; scene.remove(a.root); a.mixer.stopAllAction(); for (const m of a.mats) m.dispose(); for (const m of a.omats || []) m.dispose(); }
 const lerpAng = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; };
 
-/* ================= BATTLE ================= */
+/* ================= BATTLE: endless hunt =================
+   An open field like 무과금 사냥터. The sovereign roams it (auto, or tap the ground to steer); the legion circles
+   the sovereign and charges whatever comes close. Enemies pour out of rifts on the edges in waves that never end;
+   every 10 waves the region changes and its boss appears. Too many enemies on the field (과부하) or a fallen
+   sovereign means a retreat of 5 waves instead of a game over, so it can be left running forever. */
 // entity: {side, k, x, z, hp, maxHp, dmg, as, range, aoe, sp, atkT, act, dead, ...}
 let allies = [], foes = [], shots = [], souls = [], texts = [], lord = null;
-const B = { state: 'idle', t: 0, nextT: 0, total: 0, killed: 0, boss: null, reserve: [], resT: 0, empowerT: 0, domT: 0, cds: {}, limit: 150 };
+const B = { state: 'idle', t: 0, nextT: 0, total: 0, killed: 0, boss: null, reserve: [], resT: 0, empowerT: 0, domT: 0, cds: {},
+  queue: [], waveT: 0, lastSpawn: 0, goX: 0, goZ: 0, goT: 0, ring: 0 };
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 let timers = [];
 const later = (d, fn) => timers.push([d, fn]);
@@ -544,58 +562,119 @@ const follow = e => ({ get x() { return e.x; }, get y() { return e.z; }, get dea
 function floatText(e, txt, col, big) { if (texts.length > 40) texts.shift(); texts.push({ x: e.x, z: e.z, y: (e.act ? e.act.h : 1) + .2, txt, col, t: 0, big }); }
 function toast(t) { const e = el('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toast.tm); toast.tm = setTimeout(() => e.classList.remove('show'), 1700); }
 
+// waves: territory-equivalent index gw = (wave-1)/2 keeps the old enemy/gold curves and costs balanced
+const regOfWave = w => Math.floor((w - 1) / 10);
+const gwOf = w => (w - 1) / 2;
+const OVERLOAD = MOBILE ? 48 : 60;
+const waveCount = w => Math.min(42, 8 + Math.floor(w * 1.1));
+const nPortals = w => Math.min(8, 2 + Math.floor(w / 8));
+const PORTALS = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]].map(([x, z]) => ({ x: x * (ARENA - .6), z: z * (ARENA - .6) }));
+let portalFx = [];
+const waveName = w => `${regionOf(regOfWave(w)).n}${star(regOfWave(w))} · 웨이브 ${w}`;
+
 function makeShadow(k, x, z, gen) {
   const st = gen ? generalStats(gen.r, gen.lv) : shadowStats(k, S.army[k] ? S.army[k].lv : 1);
   const d = gen ? { ...ET[k], s: (ET[k].s || 1) * 1.45, shadow: 1, hd: BOSS_HD[gen.r % REGIONS.length] } : { ...ET[k], shadow: 1 };
-  const e = { side: 'ally', k, gen, x, z, hp: st.hp, maxHp: st.hp, dmg: st.dmg, as: st.as, range: st.range, aoe: st.aoe, sp: st.sp, atkT: rnd(0, .6), dead: false, hurt: 0, rise: 0 };
+  const e = { side: 'ally', k, gen, x, z, hp: st.hp, maxHp: st.hp, dmg: st.dmg, as: st.as, range: st.range, aoe: st.aoe, sp: st.sp, atkT: rnd(0, .6), dead: false, hurt: 0, rise: 0, slot: B.ring++ };
   e.act = makeActor(d); e.act.root.position.set(x, 0, z); e.act.root.rotation.y = Math.PI;
   allies.push(e); return e;
 }
-function makeLord() {
-  const e = { side: 'ally', k: 'lord', lord: true, x: 0, z: LORD_Z, hp: lordHp(), maxHp: lordHp(), dmg: lordDmg(), as: 1.1, range: 8, atkT: 0, dead: false, hurt: 0 };
-  e.act = makeActor(LORD); e.act.root.position.set(0, 0, LORD_Z); e.act.root.rotation.y = Math.PI;
+function makeLord(x = 0, z = 0) {
+  const e = { side: 'ally', k: 'lord', lord: true, x, z, hp: lordHp(), maxHp: lordHp(), dmg: lordDmg(), as: 1.1, range: 8, atkT: 0, dead: false, hurt: 0 };
+  e.act = makeActor(LORD); e.act.root.position.set(x, 0, z); e.act.root.rotation.y = Math.PI;
   return e;
 }
 function makeFoe(key, boss, x, z) {
-  const d = ET[key], g = S.g, R0 = regionOf(Math.floor(g / TPR)), ri = Math.floor(g / TPR) % REGIONS.length;
+  const d = ET[key], w = S.wave, gw = gwOf(w), r = regOfWave(w), R0 = regionOf(r), ri = r % REGIONS.length;
   const def = boss ? { ...d, s: R0.boss[2], glow: d.glow || '#ff4060', hd: BOSS_HD[ri] } : d;
-  const hp = eHp(g) * d.hp * (boss ? 30 : 1);
-  const e = { side: 'foe', key, boss: !!boss, name: boss ? R0.boss[1] : d.n, x, z, hp, maxHp: hp, dmg: eDmg(g) * (boss ? 6 : d.rg ? .8 : 1), as: boss ? 1.6 : 1.2,
-    range: d.rg || (boss ? 1.7 : 1.05), aoe: boss ? 1.8 : d.aoe || 0, sp: d.sp * (boss ? .7 : 1) * .9, atkT: rnd(.2, .8), dead: false, hurt: 0, gold: eGold(g) * (boss ? 25 : 1) * (d.hp > 1.6 ? 1.4 : 1) };
+  const hp = eHp(gw) * d.hp * (boss ? 30 : 1);
+  const e = { side: 'foe', key, boss: !!boss, name: boss ? R0.boss[1] : d.n, x, z, hp, maxHp: hp, dmg: eDmg(gw) * (boss ? 6 : d.rg ? .8 : 1), as: boss ? 1.6 : 1.2,
+    range: d.rg || (boss ? 1.7 : 1.05), aoe: boss ? 1.8 : d.aoe || 0, sp: d.sp * (boss ? .7 : 1) * .95, atkT: rnd(.2, .8), dead: false, hurt: 0, gold: eGold(gw) * (boss ? 25 : 1) * (d.hp > 1.6 ? 1.4 : 1), r };
   e.act = makeActor(def); e.act.root.position.set(x, 0, z); e.act.root.rotation.y = 0;
   foes.push(e); return e;
 }
-// everything the army owns, as a deploy queue: generals first, then soldiers interleaved by kind
+// everything the legion owns, as a deploy queue: generals first, then soldiers interleaved by kind
 function deployList() {
   const list = S.gens.map(gn => ({ gen: gn, k: regionOf(gn.r).boss[0] }));
   const ks = Object.keys(S.army).filter(k => S.army[k].n > 0), left = ks.map(k => S.army[k].n);
   let more = true; while (more) { more = false; ks.forEach((k, i) => { if (left[i] > 0) { left[i]--; list.push({ k }); more = true; } }); }
   return list;
 }
-function formSlot(i) { const row = Math.floor(i / 8), col = i % 8; return { x: (col - 3.5) * 1.05 + (row % 2 ? .5 : 0), z: FRONT_Z + row * .95 }; }
 function clearField() {
   for (const a of allies) killActor(a.act); for (const f of foes) killActor(f.act); allies = []; foes = [];
   if (lord) { killActor(lord.act); lord = null; }
   VX.clear(); timers = []; for (const s of shots) scene.remove(s.obj); shots = []; for (const s of souls) scene.remove(s.obj); souls = []; texts = [];
 }
+// (re)start the hunt at S.wave: fresh legion around the sovereign in the middle of the field
 function startBattle() {
   clearField();
-  const g = S.g, r = Math.floor(g / TPR), R0 = regionOf(r), n = garrison(g), boss = g % TPR === TPR - 1;
-  setTheme(r);
-  // the garrison waits in loose ranks at the far end
-  const list = []; for (let i = 0; i < n; i++) list.push(pick(R0.e));
-  list.sort((a, b) => (ET[a].rg ? 1 : 0) - (ET[b].rg ? 1 : 0));
-  list.forEach((k, i) => { const row = Math.floor(i / 7), col = i % 7; makeFoe(k, false, (col - 3) * 1.25 + rnd(-.3, .3), FOE_Z + 3 - row * 1.2 - (ET[k].rg ? 1.5 : 0) + rnd(-.3, .3)); });
-  B.boss = boss ? makeFoe(R0.boss[0], true, 0, FOE_Z - 2.5) : null;
-  B.total = foes.length; B.killed = 0;
-  lord = makeLord();
-  B.reserve = deployList();
+  S.wave = Math.max(1, S.wave | 0); syncTerr();
+  setTheme(regOfWave(S.wave));
+  lord = makeLord(0, 0); camFollow(true);
+  B.reserve = deployList(); B.ring = 0;
   const nField = Math.min(FIELD_MAX, B.reserve.length);
-  for (let i = 0; i < nField; i++) { const u = B.reserve.shift(), p = formSlot(i); makeShadow(u.k, p.x, p.z, u.gen); }
-  B.state = 'fight'; B.g = g; B.re = g < S.won; B.t = 0; B.resT = 0; B.empowerT = 0; B.domT = 0; listDirty = true;
+  for (let i = 0; i < nField; i++) { const u = B.reserve.shift(), p = slotPos(i); makeShadow(u.k, p.x, p.z, u.gen); }
+  B.state = 'fight'; B.t = 0; B.resT = 0; B.empowerT = 0; B.domT = 0; B.goT = 0; B.boss = null; listDirty = true;
   for (const s of SKILLS) B.cds[s.id] = s.lv <= S.lord.lv ? s.cd * .35 : 0;
-  el('bossBox').hidden = !B.boss; if (B.boss) el('bossName').textContent = B.boss.name;
+  buildWave(S.wave);
   renderSkills(); hud();
+}
+// formation: rings around the sovereign that turn slowly, so the legion swirls as it moves
+function slotPos(i) {
+  const per = 10, ring = Math.floor(i / per), pos = i % per, ang = pos / per * Math.PI * 2 + ring * .31 + B.t * (ring % 2 ? -.18 : .18);
+  const rad = 1.7 + ring * 1.05, cx = lord ? lord.x : 0, cz = lord ? lord.z : 0;
+  return { x: cx + Math.cos(ang) * rad, z: cz + Math.sin(ang) * rad };
+}
+function buildWave(w) {
+  B.queue = []; B.waveT = 0; B.total = waveCount(w); B.killed = 0;
+  const R0 = regionOf(regOfWave(w)), np = nPortals(w), boss = w % 10 === 0;
+  const act = []; for (let i = 0; i < np; i++) act.push(Math.floor(i * 8 / np) % 8);
+  let t = w === 1 ? 1.5 : .6;
+  for (let i = 0; i < B.total;) { const burst = 1 + Math.floor(Math.random() * 3), pt = pick(act); for (let b = 0; b < burst && i < B.total; b++, i++) B.queue.push({ t, k: pick(R0.e), pt }); t += .75; }
+  if (boss) { B.queue.unshift({ t: .3, k: R0.boss[0], pt: pick(act), boss: true }); B.total++; }
+  B.lastSpawn = t; B.boss = null;
+  // rift markers on the active portals
+  for (const f of portalFx) scene.remove(f); portalFx = [];
+  for (const i of act) {
+    const p = PORTALS[i], g = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: boss ? 0xff4060 : 0xc04aff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: .8 }));
+    g.scale.set(2.2, 3.2, 1); g.position.set(p.x, 1.4, p.z); scene.add(g); portalFx.push(g);
+  }
+  if (boss) { toast(`보스 「${R0.boss[1]}」 출현!`); sfx('gen'); }
+  hud();
+}
+function spawnTick(dt) {
+  B.waveT += dt;
+  while (B.queue.length && B.queue[0].t <= B.waveT) {
+    const q = B.queue.shift(), p = PORTALS[q.pt], x = p.x + rnd(-.8, .8), z = p.z + rnd(-.8, .8);
+    const f = makeFoe(q.k, q.boss, x, z);
+    if (q.boss) { B.boss = f; el('bossBox').hidden = false; el('bossName').textContent = f.name; VX.pillar(x, z, 0xff4060, 9); VX.shake(.3); }
+    else if (Math.random() < .3) VX.burst(x, z, .4, 5, { color: [0xc04aff, 0x5a2ab0], speed: 1.4, up: 1.2, life: .5, size: .25, grav: 0 });
+  }
+}
+function waveDone() {
+  S.cal = Math.max(S.cal || 0, relDiff(Math.floor(gwOf(S.wave))));
+  const bonus = eGold(gwOf(S.wave)) * B.total * .3; S.gold += bonus;
+  if (S.loseG === S.wave) { S.loseG = -1; S.loseN = 0; }
+  if (S.wave % 10 === 0) { toast(`${regionOf(regOfWave(S.wave)).n}${star(regOfWave(S.wave))} 평정!`); sfx('win'); } else sfx('clear');
+  if (S.auto) S.wave++;
+  S.best = Math.max(S.best || 1, S.wave); syncTerr();
+  if (regOfWave(S.wave) !== curTheme) setTheme(regOfWave(S.wave));
+  buildWave(S.wave); save(); listDirty = true;
+}
+// territory-equivalents for the economy (income, 윤회, offline estimate) follow the waves
+function syncTerr() { S.g = Math.floor(gwOf(S.wave)); S.won = Math.max(S.won || 0, Math.floor(gwOf(S.best || 1))); }
+function retreat(why) {
+  if (B.state !== 'fight') return;
+  B.state = 'lost'; B.nextT = 2.6; toast(`${why}… 5웨이브 후퇴`); sfx('lose');
+  if (S.cal) S.cal = Math.min(S.cal, relDiff(Math.floor(gwOf(S.wave))) * .97);
+  stuckHint();
+  S.wave = Math.max(1, S.wave - 5); syncTerr(); save();
+}
+function stuckHint() {
+  if (S.loseG === S.wave) S.loseN++; else { S.loseG = S.wave; S.loseN = 1; }
+  if (S.loseN < 3 || S.loseN % 3) return;
+  const tips = ['군주 수련', '병종 훈련']; if (S.capLv < S.lord.lv / 3) tips.push('지배력 확장');
+  setTimeout(() => toast(`웨이브 ${S.loseG}에서 막혔어요 · ${tips.join(', ')}을 올려 보세요${essGain() ? ' · 그림자 윤회도 할 수 있어요' : ''}`), 1800);
 }
 function shoot(from, to, kind, onHit) {
   let obj;
@@ -616,16 +695,16 @@ function hurtFoe(f, dmg, src) {
 }
 function killFoe(f) {
   f.dead = true; f.hp = 0; B.killed++; S.kills++;
-  const g = f.gold; S.gold += g; if (f.boss || Math.random() < .2) floatText(f, '+' + fmt(g), '#f1d58c');
-  if (f.boss) VX.bigBoom(f.x, f.z, 3, 0x9a5cff); else VX.burst(f.x, f.z, .5, 6, { color: [0x6a5a7a, 0x3a2a4a], speed: 1.4, up: 1, life: .5, size: .3, grav: -2, drag: 2 });
-  play(f.act, f.act.A.death, { once: true }); f.fade = 1.6;
+  const g = f.gold; S.gold += g; if (f.boss || Math.random() < .12) floatText(f, '+' + fmt(g), '#f1d58c');
+  if (f.boss) { VX.bigBoom(f.x, f.z, 3, 0x9a5cff); el('bossBox').hidden = true; } else VX.burst(f.x, f.z, .5, 6, { color: [0x6a5a7a, 0x3a2a4a], speed: 1.4, up: 1, life: .5, size: .3, grav: -2, drag: 2 });
+  play(f.act, f.act.A.death, { once: true }); f.fade = 1.4;
   addSoul(f);
 }
 // a soul lingers over the body; a moment later the sovereign tries to bind it
 function addSoul(f) {
   const obj = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0x9a6cff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
   obj.scale.setScalar(f.boss ? 1.1 : .55); obj.position.set(f.x, .6, f.z); scene.add(obj);
-  souls.push({ obj, x: f.x, z: f.z, k: f.key, boss: f.boss, t: 0, tries: f.boss ? 3 : 1, next: .9, r: Math.floor(S.g / TPR) });
+  souls.push({ obj, x: f.x, z: f.z, k: f.key, boss: f.boss, t: 0, tries: f.boss ? 3 : 1, next: .9, r: f.r });
 }
 function trySoul(s) {
   const ok = Math.random() < bindChance(s.boss);
@@ -637,7 +716,7 @@ function trySoul(s) {
   S.binds++; listDirty = true;
   if (s.boss) {
     const exist = S.gens.find(gn => gn.r === s.r);
-    if (exist) { S.gold += eGold(S.g) * 40; floatText({ x: s.x, z: s.z }, '장군의 혼 흡수', '#d6c2ff', true); }
+    if (exist) { S.gold += eGold(gwOf(S.wave)) * 40; floatText({ x: s.x, z: s.z }, '장군의 혼 흡수', '#d6c2ff', true); }
     else { const gn = { r: s.r, lv: 1 }; S.gens.push(gn); riseAt(s, null, gn); toast(`그림자 장군 「${regionOf(s.r).boss[1]}」 각인!`); }
     return true;
   }
@@ -647,14 +726,14 @@ function trySoul(s) {
   else {
     let weak = null; for (const kk in S.army) if (S.army[kk].n > 0 && (TIER[kk] || 0) < tierNew && (!weak || (TIER[kk] || 0) < (TIER[weak] || 0))) weak = kk;
     if (weak) { S.army[weak].n--; (S.army[k] = S.army[k] || { n: 0, lv: 1 }).n++; riseAt(s, k); floatText({ x: s.x, z: s.z }, `${ET[weak].n} → ${ET[k].n}`, '#d6c2ff'); }
-    else { const gb = eGold(S.g) * 2; S.gold += gb; floatText({ x: s.x, z: s.z }, `혼 흡수 +${fmt(gb)}`, '#d6c2ff'); }
+    else { const gb = eGold(gwOf(S.wave)) * 2; S.gold += gb; floatText({ x: s.x, z: s.z }, `혼 흡수 +${fmt(gb)}`, '#d6c2ff'); }
   }
   return true;
 }
 function riseAt(s, k, gen) {
   VX.pillar(s.x, s.z, 0x8a4dff, gen ? 9 : 5); VX.shockwave(s.x, s.z, gen ? 3 : 1.4, 0x9a6cff, .5);
   VX.burst(s.x, s.z, .2, gen ? 30 : 12, { color: [0xb98cff, 0x5a2ab0, 0xffffff], speed: 1.6, up: 2.4, life: .8, size: .26, grav: 0, drag: 1.5 });
-  if (gen) { VX.shake(.35); }
+  if (gen) VX.shake(.35);
   floatText({ x: s.x, z: s.z }, gen ? '장군 각인!' : '각인!', '#c9a8ff', true);
   sfx(gen ? 'gen' : 'bind');
   const alive = allies.filter(a => !a.dead).length;
@@ -666,38 +745,10 @@ function hurtAlly(a, dmg) {
   a.hp -= dmg; a.hurt = .1;
   if (a.hp > 0) return;
   a.dead = true; a.hp = 0; play(a.act, a.act.A.death, { once: true });
-  if (a.lord) { lordFall(); return; }
-  // a fallen shadow sinks back and re-forms behind the lines after a while
+  if (a.lord) { retreat('군주가 쓰러졌어요'); return; }
+  // a fallen shadow sinks back and re-forms near the sovereign after a while
   a.sink = 1.2; VX.burst(a.x, a.z, .4, 8, { color: [0x5a2ab0, 0x2a1a40], speed: 1, up: 1.6, life: .6, size: .25, grav: 0 });
   later(a.gen ? 9 : 6, () => { if (B.state === 'fight') B.reserve.push(a.gen ? { gen: a.gen, k: a.k } : { k: a.k }); });
-}
-function stuckHint() {
-  if (S.loseG === B.g) S.loseN++; else { S.loseG = B.g; S.loseN = 1; }
-  if (S.loseN < 3 || S.loseN % 3) return false;
-  const tips = ['군주 수련', '병종 훈련'];
-  if (S.capLv < S.lord.lv / 3) tips.push('지배력 확장');
-  setTimeout(() => toast(`${terrName(B.g)}에서 막혔어요 · ${tips.join(', ')}을 올려 보세요${essGain() ? ' · 그림자 윤회도 할 수 있어요' : ''}`), 1800);
-  return true;
-}
-function lordFall() {
-  if (B.state !== 'fight') return;
-  B.state = 'lost'; B.nextT = 3; toast('군주가 쓰러졌어요… 후퇴'); sfx('lose'); stuckHint();
-  if (S.cal) S.cal = Math.min(S.cal, relDiff(S.g) * .97);
-  retreat();
-}
-function retreat() {
-  // fall back one territory and farm it a few times before pushing again
-  if (S.g > 0) { S.g--; } S.farm = 3;
-}
-function battleWon() {
-  B.state = 'won'; B.nextT = 2.6; if (S.loseG === S.g) { S.loseG = -1; S.loseN = 0; }
-  S.cal = Math.max(S.cal || 0, relDiff(S.g));
-  const bonus = eGold(S.g) * garrison(S.g) * .6; S.gold += bonus;
-  if (S.g >= S.won) { S.won = S.g + 1; toast(`${terrName(S.g)} 정복!`); sfx('win'); }
-  else { toast(`${terrName(S.g)} 토벌 +${fmt(bonus)}`); sfx('clear'); }
-  if (S.farm > 0) S.farm--;
-  if (S.auto && S.farm === 0) S.g = S.won; else if (S.auto) S.g = Math.min(S.g, S.won);
-  save();
 }
 function castSkill(id, manual) {
   if (B.state !== 'fight' || !lord || lord.dead) return false;
@@ -724,18 +775,23 @@ function castSkill(id, manual) {
   sfx('skill'); if (manual) renderSkills();
   return true;
 }
+// tap the field to send the sovereign there for a few seconds
+function goTo(x, z) { B.goX = clamp(x, -ARENA + 1, ARENA - 1); B.goZ = clamp(z, -ARENA + 1, ARENA - 1); B.goT = 4; VX.shockwave(B.goX, B.goZ, .9, 0xd6c2ff, .5); }
 function step(dt) {
   B.t += dt;
   if (timers.length) { for (const t of timers) t[0] -= dt; const due = timers.filter(t => t[0] <= 0); timers = timers.filter(t => t[0] > 0); for (const t of due) t[1](); }
   if (B.state !== 'fight') { B.nextT -= dt; if (B.nextT <= 0) startBattle(); return; }
-  B.empowerT = Math.max(0, B.empowerT - dt); B.domT = Math.max(0, B.domT - dt);
+  B.empowerT = Math.max(0, B.empowerT - dt); B.domT = Math.max(0, B.domT - dt); B.goT = Math.max(0, B.goT - dt);
   for (const id in B.cds) B.cds[id] = Math.max(0, B.cds[id] - dt);
+  spawnTick(dt);
   const live = foes.filter(f => !f.dead), mine = allies.filter(a => !a.dead);
   const emp = B.empowerT > 0, dom = B.domT > 0;
-  // reinforcements from the reserve walk in behind the lines
+  // overload: the rifts are winning
+  if (live.length >= OVERLOAD) { retreat('적이 너무 많아요'); return; }
+  // reinforcements from the reserve rise beside the sovereign
   B.resT -= dt;
-  if (B.reserve.length && mine.length < FIELD_MAX && B.resT <= 0) {
-    B.resT = .35; const u = B.reserve.shift(), x = rnd(-4, 4), z = LORD_Z - .5;
+  if (B.reserve.length && mine.length < FIELD_MAX && B.resT <= 0 && lord) {
+    B.resT = .35; const u = B.reserve.shift(), a = rnd(0, 6.28), x = lord.x + Math.cos(a) * 1.4, z = lord.z + Math.sin(a) * 1.4;
     const e = makeShadow(u.k, x, z, u.gen); e.rise = .6; e.act.root.position.y = -1.2; VX.shockwave(x, z, .9, 0x7a3cff, .4);
   }
   // souls
@@ -746,10 +802,26 @@ function step(dt) {
   // skills
   if (S.cast) for (const sk of SKILLS) if (sk.lv <= S.lord.lv && B.cds[sk.id] <= 0) {
     if (sk.id === 'empower' && !live.some(f => mine.some(a => dist(a, f) < 3))) continue;   // wait until the lines meet
-    if (sk.id === 'tide' && live.length < 4 && !(B.boss && !B.boss.dead)) continue;
+    if (sk.id === 'tide' && live.length < 6 && !(B.boss && !B.boss.dead)) continue;
+    if (sk.id === 'dominion' && live.length < 8 && !(B.boss && !B.boss.dead)) continue;
     castSkill(sk.id); break;
   }
-  // foes: hold position until something comes near, then fight; the garrison slowly advances on the sovereign
+  // the sovereign: kite — back off when swarmed, close in when nothing is in reach, or follow a tap
+  if (lord && !lord.dead) {
+    lord.hurt = Math.max(0, lord.hurt - dt); lord.atkT -= dt; lord.hp = Math.min(lord.maxHp, lord.hp + lord.maxHp * .004 * dt);
+    let near = null, nd = 99; for (const f of live) { const d = dist(lord, f); if (d < nd) { nd = d; near = f; } }
+    let mx = 0, mz = 0;
+    if (B.goT > 0) { mx = B.goX - lord.x; mz = B.goZ - lord.z; if (Math.hypot(mx, mz) < .3) { B.goT = 0; mx = mz = 0; } }
+    else if (near && nd < 3) { for (const f of live) { const d = dist(lord, f); if (d < 4.5) { mx += (lord.x - f.x) / (d + .1); mz += (lord.z - f.z) / (d + .1); } } mx -= lord.x * .04; mz -= lord.z * .04; }
+    else if (near && nd > 6.5) { mx = near.x - lord.x; mz = near.z - lord.z; }
+    else if (!near) { mx = -lord.x; mz = -lord.z; if (Math.hypot(mx, mz) < 1) mx = mz = 0; }
+    const ml = Math.hypot(mx, mz);
+    if (ml > .01) { const sp = 3.3 * dt; lord.x += mx / ml * sp; lord.z += mz / ml * sp; lord.moving = true; } else lord.moving = false;
+    let t = null, bd = lord.range; for (const f of live) { const d = dist(lord, f); if (d < bd) { bd = d; t = f; } }
+    lord.face = t || (lord.moving ? { x: lord.x + mx, z: lord.z + mz, dead: false } : null);
+    if (t && lord.atkT <= 0) { lord.atkT = lord.as; lord.anim = 'atk'; const tt = t, dmg = lord.dmg * rnd(.9, 1.1); shoot(lord, tt, 'lord', () => hurtFoe(tt, dmg, lord)); }
+  }
+  // foes: everything hunts the nearest of the legion
   for (const f of live) {
     f.hurt = Math.max(0, f.hurt - dt); f.moving = false;
     let tgt = null, bd = 99;
@@ -765,22 +837,22 @@ function step(dt) {
         if (f.range > 2) shoot(f, t, 'foe', () => { if (f.aoe) { VX.smallBoom(t.x, t.z, f.aoe, 0xff7050); for (const a of [...allies, lord]) if (a && !a.dead && dist(a, t) < f.aoe) hurtAlly(a, dmg * .7); } else hurtAlly(t, dmg); });
         else later(.18, () => { if (f.dead) return; if (f.boss) { VX.slash(f.x, f.z, .9, 1.8, 0xff8060, .3); for (const a of [...allies, lord]) if (a && !a.dead && dist(a, f) < f.aoe + .4) hurtAlly(a, dmg * (a === t ? 1 : .5)); } else hurtAlly(t, dmg); });
       }
-    } else if (bd < (f.boss ? 9 : 7) || B.t > 6) {
+    } else {
       const sp = f.sp * (dom ? .5 : 1) * dt, d = bd || 1;
       f.x += (tgt.x - f.x) / d * sp; f.z += (tgt.z - f.z) / d * sp; f.moving = true; f.face = tgt;
     }
   }
-  // shadows: charge the nearest enemy
-  for (const a of mine) {
+  // shadows: hold the ring around the sovereign, charge anything that comes within reach of it
+  mine.forEach((a, i) => {
     a.hurt = Math.max(0, a.hurt - dt); a.moving = false; a.atkT -= dt * (emp ? 1.25 : 1);
-    if (a.rise > 0) { a.rise -= dt; continue; }
+    if (a.rise > 0) { a.rise -= dt; return; }
     let t = null, bd = 99;
-    for (const f of live) { const d = dist(a, f); if (d < bd) { bd = d; t = f; } }
+    for (const f of live) { if (lord && dist(lord, f) > 8.5) continue; const d = dist(a, f); if (d < bd) { bd = d; t = f; } }
     a.face = t;
-    if (!t) continue;
+    if (!t) { const p = slotPos(i), d = Math.hypot(p.x - a.x, p.z - a.z); if (d > .25) { const sp = Math.min(d, a.sp * 1.15 * dt); a.x += (p.x - a.x) / d * sp; a.z += (p.z - a.z) / d * sp; a.moving = true; a.face = { x: p.x, z: p.z, dead: false }; } return; }
     const reach = a.range + (t.boss ? .6 : 0);
-    if (bd > reach) { const sp = a.sp * dt; a.x += (t.x - a.x) / bd * sp; a.z += (t.z - a.z) / bd * sp; a.moving = true; continue; }
-    if (a.atkT > 0) continue;
+    if (bd > reach) { const sp = a.sp * dt; a.x += (t.x - a.x) / bd * sp; a.z += (t.z - a.z) / bd * sp; a.moving = true; return; }
+    if (a.atkT > 0) return;
     a.atkT = a.as; a.anim = 'atk';
     const dmg = a.dmg * rnd(.85, 1.15) * (emp ? 1.6 : 1), tt = t;
     if (a.range > 2) shoot(a, tt, ET[a.k].st === 'bow' || ET[a.k].st === 'xbow' ? 'arrow' : 'shadow', () => {
@@ -791,36 +863,32 @@ function step(dt) {
       if (a.gen) { VX.slash(a.x, a.z, .9, 1.8, 0x9a6cff, .3); for (const f of foes) if (!f.dead && dist(f, a) < a.aoe + .4) hurtFoe(f, dmg * (f === tt ? 1 : .5), a); }
       else hurtFoe(tt, dmg, a);
     });
-  }
-  // the sovereign shoots dark bolts at whatever is closest
-  if (lord && !lord.dead) {
-    lord.hurt = Math.max(0, lord.hurt - dt); lord.atkT -= dt; lord.hp = Math.min(lord.maxHp, lord.hp + lord.maxHp * .004 * dt);
-    let t = null, bd = lord.range; for (const f of live) { const d = dist(lord, f); if (d < bd) { bd = d; t = f; } }
-    lord.face = t;
-    if (t && lord.atkT <= 0) { lord.atkT = lord.as; lord.anim = 'atk'; const tt = t, dmg = lord.dmg * rnd(.9, 1.1); shoot(lord, tt, 'lord', () => hurtFoe(tt, dmg, lord)); }
-  }
+  });
   // keep bodies apart
   const bodies = [...live, ...mine]; if (lord && !lord.dead) bodies.push(lord);
   for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {
-    const p = bodies[i], q = bodies[j]; let dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
+    const p = bodies[i], q = bodies[j]; let dx = q.x - p.x, dz = q.z - p.z;
+    if (dx > 1.4 || dx < -1.4 || dz > 1.4 || dz < -1.4) continue;
+    let d = Math.hypot(dx, dz);
     const min = (p.boss || q.boss || p.gen || q.gen) ? 1.3 : .62; if (d >= min) continue;
     if (d < 1e-4) { dx = rnd(-1, 1); dz = rnd(-1, 1); d = Math.hypot(dx, dz); }
     const push = (min - d) / 2 / d, wp = p.lord ? .2 : 1, wq = q.lord ? .2 : 1;
     p.x -= dx * push * wp; p.z -= dz * push * wp; q.x += dx * push * wq; q.z += dz * push * wq;
   }
-  for (const b of bodies) { b.x = clamp(b.x, -7.5, 7.5); b.z = clamp(b.z, -16, LORD_Z + .6); }
+  for (const b of bodies) { b.x = clamp(b.x, -ARENA, ARENA); b.z = clamp(b.z, -ARENA, ARENA); }
   // projectiles
   for (let i = shots.length - 1; i >= 0; i--) {
     const s = shots[i]; s.t += dt; const p = Math.min(1, s.t / s.dur);
     if (s.to && !s.to.dead && s.to.x != null) { s.tx = s.to.x; s.tz = s.to.z; }
     s.obj.position.set(s.sx + (s.tx - s.sx) * p, s.sy + (s.ty - s.sy) * p + Math.sin(p * Math.PI) * .6, s.sz + (s.tz - s.sz) * p);
     if (!s.obj.isSprite) s.obj.rotation.set(0, Math.atan2(s.tx - s.sx, s.tz - s.sz), 0);
-    else if (Math.random() < .6) VX.emit({ x: s.obj.position.x, y: s.obj.position.y, z: s.obj.position.z, vx: (Math.random() - .5) * .5, vy: (Math.random() - .5) * .5, vz: (Math.random() - .5) * .5, life: .3, size: s.obj.scale.x * .55, color: s.obj.material.color });
+    else if (Math.random() < .5) VX.emit({ x: s.obj.position.x, y: s.obj.position.y, z: s.obj.position.z, vx: (Math.random() - .5) * .5, vy: (Math.random() - .5) * .5, vz: (Math.random() - .5) * .5, life: .3, size: s.obj.scale.x * .55, color: s.obj.material.color });
     if (p >= 1) { scene.remove(s.obj); shots.splice(i, 1); s.onHit(); }
   }
-  if (!foes.some(f => !f.dead) && !souls.length) battleWon();   // let the last souls get their binding roll first
-  else if (B.t > B.limit) { B.state = 'lost'; B.nextT = 2.5; toast('시간 초과… 후퇴'); stuckHint(); retreat(); }
+  // next wave as soon as this one has finished spawning, its boss is down and the field has thinned out
+  if (!B.queue.length && !(B.boss && !B.boss.dead) && (live.length <= B.total * .35 || B.waveT > B.lastSpawn + 12)) waveDone();
 }
+
 function visual(dt) {
   const upd = e => {
     const a = e.act, p = a.root.position;
@@ -881,9 +949,10 @@ function drawOverlay() {
 let tab = 'army', resetAsk = false, rebAsk = false, listDirty = false;
 const income = () => { let s = 0; for (let g = 0; g < S.won; g++) s += terrIncome(g); return s; };
 function hud() {
-  el('terr').textContent = terrName(B.g) + (B.re ? ' · 토벌' : '');
-  el('terrSub').textContent = B.state === 'fight' ? `적 ${B.total - B.killed} / ${B.total}` : B.state === 'won' ? '승리' : B.state === 'lost' ? '후퇴' : '';
-  el('terrBar').style.width = (B.total ? B.killed / B.total * 100 : 0) + '%';
+  const alive = foes.filter(f => !f.dead).length;
+  el('terr').textContent = waveName(S.wave);
+  el('terrSub').textContent = B.state === 'lost' ? '후퇴 중…' : `과부하 ${alive} / ${OVERLOAD} · 최고 ${S.best}웨이브`;
+  el('terrBar').style.width = Math.min(100, alive / OVERLOAD * 100) + '%'; el('terrBar').style.background = alive > OVERLOAD * .7 ? '#ff6a5a' : 'var(--acc)';
   el('gold').textContent = fmt(S.gold) + ' 금화';
   const inc = income(); el('income').textContent = `영토 수입 ${inc >= 10 ? fmt(inc) : inc.toFixed(1)}/초`;
   const res = B.reserve.length;
@@ -892,7 +961,7 @@ function hud() {
   if (lord) el('lordHp').style.width = Math.max(0, lord.hp / lord.maxHp * 100) + '%';
   if (B.boss && !B.boss.dead) el('bossHp').style.width = B.boss.hp / B.boss.maxHp * 100 + '%'; else el('bossBox').hidden = true;
   el('bSpeed').textContent = `속도 ×${S.speed}`;
-  el('bAuto').classList.toggle('on', S.auto); el('bAuto').textContent = S.auto ? '자동 진격' : '반복 토벌';
+  el('bAuto').classList.toggle('on', S.auto); el('bAuto').textContent = S.auto ? '자동 진행' : '반복 사냥';
   el('bCast').classList.toggle('on', S.cast);
   for (const sk of SKILLS) { const b = el('sk_' + sk.id); if (!b) continue; const cd = B.cds[sk.id] || 0; b.querySelector('.cd').style.setProperty('--p', (cd / sk.cd * 100) + '%'); b.classList.toggle('ready', sk.lv <= S.lord.lv && cd <= 0); }
 }
@@ -942,21 +1011,19 @@ function renderList() {
     for (const sk of SKILLS) h += `<div class="row">${ico(sk.lv <= L ? '#b98cff' : '#4a4058', sk.n[0])}<div class="info"><div class="n">${sk.n}<small>${sk.lv <= L ? `재사용 ${sk.cd}초` : `군주 Lv.${sk.lv}에 열림`}</small></div><div class="s">${sk.desc}</div></div></div>`;
     const gain = essGain();
     h += `<div class="sec"><span>그림자 윤회</span><span>흑정 ${fmt(S.ess || 0)}${S.rebirths ? ` · ${S.rebirths}회` : ''}</span></div>
-      <p class="note" style="margin-top:2px">정복을 내려놓고 처음부터 다시 시작하는 대신 <b style="color:var(--acc2)">흑정</b>을 얻어요. 흑정 1개마다 모든 그림자와 군주가 영구히 4%, 금화가 3% 강해져요.<br>
-      지금 효과: 힘 ×${essMul().toFixed(2)} · 금화 ×${essGold().toFixed(2)}${S.bestWon ? ` · 최고 정복 ${S.bestWon}곳` : ''}</p>
-      <button class="btn ${gain ? 'pri' : ''}" style="width:100%;padding:10px" data-a="reb" ${gain ? '' : 'disabled'}>${!gain ? `영토 ${REB_MIN}곳 정복부터 할 수 있어요 (지금 ${S.won}곳)` : rebAsk ? `정말 윤회할까요? 한 번 더 누르면 흑정 +${gain}` : `윤회하기 · 흑정 +${gain}`}</button>`;
+      <p class="note" style="margin-top:2px">지금까지의 사냥을 내려놓고 웨이브 1부터 다시 시작하는 대신 <b style="color:var(--acc2)">흑정</b>을 얻어요. 흑정 1개마다 모든 그림자와 군주가 영구히 4%, 금화가 3% 강해져요.<br>
+      지금 효과: 힘 ×${essMul().toFixed(2)} · 금화 ×${essGold().toFixed(2)}${S.bestWave ? ` · 역대 최고 ${S.bestWave}웨이브` : ''}</p>
+      <button class="btn ${gain ? 'pri' : ''}" style="width:100%;padding:10px" data-a="reb" ${gain ? '' : 'disabled'}>${!gain ? `웨이브 ${REB_MIN * 2 + 1}까지 가면 할 수 있어요 (최고 ${S.best})` : rebAsk ? `정말 윤회할까요? 한 번 더 누르면 흑정 +${gain}` : `윤회하기 · 흑정 +${gain}`}</button>`;
   } else {
-    const regions = Math.max(REGIONS.length, Math.floor(S.won / TPR) + 1);
+    const regions = Math.max(REGIONS.length, regOfWave(S.best) + 1), cur = regOfWave(S.wave);
+    h += `<div class="sec"><span>사냥 지역</span><span>최고 웨이브 ${S.best}</span></div>`;
     for (let r = 0; r < regions; r++) {
-      const R0 = regionOf(r), wonN = clamp(S.won - r * TPR, 0, TPR);
-      h += `<div class="reg"><h4>${R0.n}${star(r)}<small>${wonN === TPR ? '정복 완료' : wonN ? `${wonN}/${TPR}` : r * TPR > S.won ? '잠김' : '진격 중'}</small></h4><div class="terrs">`;
-      for (let t = 0; t < TPR; t++) {
-        const g = r * TPR + t, won = g < S.won, cur = g === S.g, lock = g > S.won;
-        h += `<div class="tt${won ? ' won' : ''}${cur ? ' cur' : ''}${lock ? ' lock' : ''}${!lock && !cur ? ' go' : ''}" ${!lock && !cur ? `data-a="goto" data-v="${g}"` : ''}><b>${TN[t]}</b>${won ? `+${terrIncome(g) >= 10 ? fmt(terrIncome(g)) : terrIncome(g).toFixed(1)}/초` : cur ? '전투 중' : lock ? '' : '공격'}</div>`;
-      }
-      h += `</div></div>`;
+      const R0 = regionOf(r), w0 = r * 10 + 1, reached = S.best >= w0, done = S.best > w0 + 9;
+      h += `<div class="row"><div class="info"><div class="n">${R0.n}${star(r)}<small>웨이브 ${w0}~${w0 + 9}</small></div><div class="s">${done ? `평정 · 보스 ${R0.boss[1]}` : reached ? `진행 중 · 최고 ${S.best}` : '잠김'}</div></div>
+        <div class="btns">${r === cur ? '<span class="tag" style="font-size:11px;color:var(--acc2)">사냥 중</span>' : reached ? `<button class="btn" data-a="goto" data-v="${w0}">여기서 사냥</button>` : ''}</div></div>`;
     }
-    h += `<p class="note">정복한 영토는 초당 금화를 만들어요. 정복한 곳을 눌러 다시 토벌하면 그곳 적들을 각인할 수 있어요. 자동 진격이 켜져 있으면 이기는 대로 다음 영토로 나아가요.</p>`;
+    h += `<p class="note">웨이브는 끝없이 이어져요. 10웨이브마다 지역이 바뀌고 보스가 나와요. 필드의 적이 ${OVERLOAD}마리를 넘거나 군주가 쓰러지면 5웨이브 뒤로 물러나 다시 버텨요.<br>
+      화면을 누르면 군주가 그쪽으로 잠시 움직여요. 지나온 웨이브만큼 꺼 둬도 금화가 쌓여요(최대 12시간).</p>`;
     h += `<div class="sec"><span>화면</span><span></span></div>
       <div class="row"><div class="info"><div class="n">만화풍 캐릭터</div><div class="s">명암 단계와 외곽선</div></div><button class="tog ${LOOK.toon ? 'on' : ''}" data-a="look" data-v="toon" aria-pressed="${LOOK.toon}"></button></div>
       <div class="row"><div class="info"><div class="n">도트 캐릭터</div><div class="s">2D 도트 + 3D 배경</div></div><button class="tog ${LOOK.dot ? 'on' : ''}" data-a="look" data-v="dot" aria-pressed="${LOOK.dot}"></button></div>
@@ -993,7 +1060,7 @@ el('list').addEventListener('click', e => {
   else if (a === 'dotsize') { LOOK.dotSize = +v; try { localStorage.setItem('mug-dot-size', v); } catch (e) {} }
   else if (a === 'bulk') { S.bulk = v === 'max' ? 'max' : +v; }
   else if (a === 'reb') { if (!essGain()) return; if (!rebAsk) rebAsk = true; else { rebirth(); return; } }
-  else if (a === 'goto') { const g = +v; if (g > S.won) return; S.g = g; S.farm = 0; if (g < S.won) setAuto(false, true); startBattle(); toast(`${terrName(g)}${josa(terrName(g), '으로', '로')} 진군`); }
+  else if (a === 'goto') { const w = +v; if (w > S.best) return; S.wave = w; startBattle(); toast(`${regionOf(regOfWave(w)).n}${josa(regionOf(regOfWave(w)).n, '으로', '로')} 이동`); }
   else if (a === 'reset') { if (!resetAsk) resetAsk = true; else { resetAsk = false; S = fresh(); S.started = true; curTheme = -1; save(); startBattle(); } }
   save(); renderList(); hud();
 });
@@ -1006,13 +1073,13 @@ function refreshStats() {
 function rebirth() {
   const gain = essGain(); if (gain <= 0) return;
   // keep the meta progress and preferences; everything about this conquest starts over
-  const keep = { ess: (S.ess || 0) + gain, rebirths: (S.rebirths || 0) + 1, bestWon: Math.max(S.bestWon || 0, S.won), kills: S.kills, binds: S.binds,
+  const keep = { ess: (S.ess || 0) + gain, rebirths: (S.rebirths || 0) + 1, bestWon: Math.max(S.bestWon || 0, S.won), bestWave: Math.max(S.bestWave || 0, S.best), kills: S.kills, binds: S.binds,
     auto: S.auto, cast: S.cast, speed: S.speed, bulk: S.bulk, started: true };
   S = Object.assign(fresh(), keep); curTheme = -1; resetAsk = false; rebAsk = false;
   save(); startBattle(); renderSkills(); renderList(); hud(); sfx('gen');
   VX.flash('rgba(140,80,255,.5)', .6); toast(`그림자 윤회 · 흑정 +${gain} (총 ${S.ess})`);
 }
-function setAuto(on, quiet) { S.auto = on; if (!quiet) toast(on ? '자동 진격: 이기면 다음 영토로' : '반복 토벌: 지금 영토를 반복해요'); if (on && S.g < S.won && !S.farm) S.g = S.won; hud(); }
+function setAuto(on, quiet) { S.auto = on; if (!quiet) toast(on ? '자동 진행: 웨이브가 계속 올라가요' : '반복 사냥: 지금 웨이브를 반복해요'); hud(); }
 el('bAuto').onclick = () => { audio(); setAuto(!S.auto); save(); };
 el('bCast').onclick = () => { audio(); S.cast = !S.cast; toast(S.cast ? '스킬 자동 사용' : '스킬을 직접 눌러 써요'); hud(); save(); };
 el('bSpeed').onclick = () => { audio(); S.speed = S.speed === 1 ? 2 : S.speed === 2 ? 3 : 1; hud(); save(); };
@@ -1064,15 +1131,17 @@ function simAway(sec) {
 }
 function showAway(r) {
   const h = Math.floor(r.sec / 3600), m = Math.floor(r.sec % 3600 / 60);
-  el('awayMsg').textContent = `${h ? h + '시간 ' : ''}${m}분 동안 군단이 싸웠어요.${r.newTerr ? ` 새 영토 ${r.newTerr}곳을 정복했어요!` : ''}`;
-  el('awayStats').innerHTML = `<div>획득 금화<b>${fmt(r.gold)}</b></div><div>영토 수입<b>${fmt(r.terr)}</b></div><div>치른 전투<b>${fmt(r.fights)}</b></div><div>처치<b>${fmt(r.kills)}</b></div>
-    <div>늘어난 병사<b>${fmt(r.newArmy)}</b></div><div>새 장군<b>${r.newGens}</b></div><div style="grid-column:1/-1">위치<b>${terrName(r.from)} → ${terrName(r.to)}</b></div>`;
+  el('awayMsg').textContent = `${h ? h + '시간 ' : ''}${m}분 동안 군단이 사냥했어요.${r.toW > r.fromW ? ` 웨이브 ${r.toW}까지 나아갔어요!` : ''}`;
+  el('awayStats').innerHTML = `<div>획득 금화<b>${fmt(r.gold)}</b></div><div>영토 수입<b>${fmt(r.terr)}</b></div><div>넘긴 웨이브<b>${fmt(r.fights * 2)}</b></div><div>처치<b>${fmt(r.kills)}</b></div>
+    <div>늘어난 병사<b>${fmt(r.newArmy)}</b></div><div>새 장군<b>${r.newGens}</b></div><div style="grid-column:1/-1">위치<b>${waveName(r.fromW)} → ${waveName(r.toW)}</b></div>`;
   el('away').hidden = false;
 }
 el('awayOk').onclick = () => { el('away').hidden = true; };
 function resumeFrom(sec) {
   if (sec < 60) return;
-  const r = simAway(sec); startBattle(); save(); renderList(); showAway(r);
+  syncTerr(); const w0 = S.wave, r = simAway(sec);
+  S.best = Math.max(S.best, 1 + S.won * 2); S.wave = S.g === Math.floor(gwOf(w0)) ? w0 : 1 + S.g * 2; r.fromW = w0; r.toW = S.wave;
+  startBattle(); save(); renderList(); showAway(r);
 }
 document.addEventListener('visibilitychange', () => {
   if (!S || !S.started) return;
@@ -1109,7 +1178,7 @@ function frame(now) {
   if (renderer) {
     // three r147 tone-maps into render targets too; the grade pass does ACES, so keep the scene linear when post is on
     const tm = FXOPT.on && MGFX.hasPost ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping; if (renderer.toneMapping !== tm) renderer.toneMapping = tm;
-    VX.update(running ? real * (S.speed || 1) : real); MGFX.render(); if (LOOK.dot) dotPass(); drawOverlay();
+    camFollow(false, real); VX.update(running ? real * (S.speed || 1) : real); MGFX.render(); if (LOOK.dot) dotPass(); drawOverlay();
   }
   requestAnimationFrame(frame);
 }
@@ -1126,6 +1195,12 @@ function begin() {
   renderSkills(); startBattle(); renderList(); hud(); running = true; save();
 }
 el('startBtn').onclick = () => { audio(); begin(); };
+const tapRay = new THREE.Raycaster(), tapNdc = new THREE.Vector2(), tapPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), tapHit = new THREE.Vector3();
+glc.addEventListener('pointerdown', e => {
+  if (!running || B.state !== 'fight') return;
+  const r = glc.getBoundingClientRect(); tapNdc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  tapRay.setFromCamera(tapNdc, camera); if (tapRay.ray.intersectPlane(tapPlane, tapHit)) goTo(tapHit.x, tapHit.z);
+});
 const fxBtn = () => { el('bFx').textContent = FXOPT.on ? '효과 켬' : '효과 끔'; el('bFx').classList.toggle('on', FXOPT.on); };
 el('bFx').onclick = () => { FXOPT.on = !FXOPT.on; try { localStorage.setItem('mug-fx', FXOPT.on ? 'on' : 'off'); } catch (e) {} fxBtn(); };
 fxBtn();
@@ -1139,7 +1214,7 @@ async function start() {
 }
 start();
 requestAnimationFrame(frame);
-window.__SH = { get S() { return S; }, set S(v) { S = v; }, fresh, essGain, rebirth, planFor, refreshStats, lordCost, capCost, bindCost, trainCost, genCost, B, simAway, step: dt => step(dt), get allies() { return allies; }, get foes() { return foes; }, armyPower, relDiff, startBattle };
+window.__SH = { get S() { return S; }, set S(v) { S = v; }, fresh, goTo, waveDone, essGain, rebirth, planFor, refreshStats, lordCost, capCost, bindCost, trainCost, genCost, B, simAway, step: dt => step(dt), get allies() { return allies; }, get foes() { return foes; }, armyPower, relDiff, startBattle };
 })();
 </script>
 </body>
