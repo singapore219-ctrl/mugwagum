@@ -186,9 +186,9 @@ const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const THREE = window.THREE;
 const MOBILE = matchMedia('(pointer:coarse)').matches;
 const FXOPT = { on: (() => { try { return localStorage.getItem('mug-fx') !== 'off'; } catch (e) { return true; } })() };
-// look switches (remembered on this device): 만화풍 shared with 오토체스, 도트 for this game; both on by default
+// look switches (remembered on this device): 만화풍 shared with 오토체스 (on by default), 도트 for this game (off by default)
 const optOn = (k, def) => { try { const v = localStorage.getItem(k); return v ? v === 'on' : def; } catch (e) { return def; } };
-const LOOK = { toon: optOn('mug-toon', true), dot: optOn('mug-dot-shadow', true), dotSize: (() => { try { return +localStorage.getItem('mug-dot-size') || 2; } catch (e) { return 2; } })() };
+const LOOK = { toon: optOn('mug-toon', true), dot: optOn('mug-dot-shadow', false), dotSize: (() => { try { return +localStorage.getItem('mug-dot-size') || 2; } catch (e) { return 2; } })() };
 const VX = window.MGFX.VX;
 function fmt(n) {
   n = Math.floor(n);
