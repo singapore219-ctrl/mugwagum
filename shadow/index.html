@@ -105,6 +105,9 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
 .tt.cur{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
 .tt.lock{opacity:.35}
 .tt.go{cursor:pointer}
+.bulk{display:flex;gap:4px;justify-content:flex-end;margin-top:8px}
+.bulk button{background:rgba(255,255,255,.05);border:1px solid var(--line2);border-radius:12px;color:var(--dim);font-size:11px;font-weight:500;padding:3px 10px}
+.bulk button.on{border-color:var(--acc);color:#fff;background:rgba(120,80,220,.3)}
 .tog{width:44px;height:24px;border-radius:12px;border:1px solid var(--line2);background:rgba(255,255,255,.1);position:relative;flex:none}
 .tog::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#c9c2d8;transition:left .15s}
 .tog.on{background:rgba(167,123,255,.4);border-color:var(--acc)}
@@ -157,7 +160,8 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
         전투는 <b>자동</b>이에요. 군단이 진격하고, 뒤에서 <b>군주</b>가 어둠의 화살과 스킬로 싸워요.<br>
         적이 쓰러지면 <b>혼</b>이 남아요. 확률로 그 자리에서 <b>그림자 병사</b>로 일어나 바로 합류해요. 지역 보스는 <b>그림자 장군</b>이 돼요.<br>
         쓰러진 그림자는 잠시 뒤 다시 일어나요. 군단은 <b>지배력</b>만큼 거느리고, 화면에 다 못 나온 병사는 예비대로 계속 투입돼요.<br>
-        군주가 쓰러지면 후퇴해요. 금화로 <b>군주</b>와 <b>병종</b>을 키우세요. 정복한 영토는 꺼 둬도 금화를 만들어요(최대 12시간).
+        군주가 쓰러지면 후퇴해요. 금화로 <b>군주</b>와 <b>병종</b>을 키우세요. 정복한 영토는 꺼 둬도 금화를 만들어요(최대 12시간).<br>
+        영토 15곳을 정복하면 <b>그림자 윤회</b>로 처음부터 다시 시작하며 영구 강화(흑정)를 얻을 수 있어요.
       </div>
       <button class="btn pri wide" id="startBtn">그림자를 깨운다</button>
     </div>
@@ -243,14 +247,19 @@ const lvMul = lv => Math.pow(1.1, lv - 1);
 // enemy strength per territory index g (5 per region)
 const eHp = g => 26 * Math.pow(1.25, g);
 const eDmg = g => 4 * Math.pow(1.18, g);
-const eGold = g => 1.4 * Math.pow(1.19, g);
+const eGold = g => 1.4 * Math.pow(1.19, g) * essGold();
 const garrison = g => Math.min(26, 7 + (g % TPR) * 2 + Math.min(Math.floor(g / TPR), 8));
-const terrIncome = g => .25 * Math.pow(1.19, g);
+const terrIncome = g => .25 * Math.pow(1.19, g) * essGold();
+/* 그림자 윤회: give up the conquest to keep 흑정 (dark essence). Each 흑정 makes every shadow and the sovereign 4% stronger
+   and all gold 3% larger, so the next conquest goes faster and further. */
+const REB_MIN = 15;
+const essMul = () => 1 + ((S && S.ess) || 0) * .04, essGold = () => 1 + ((S && S.ess) || 0) * .03;
+const essGain = () => S.won < REB_MIN ? 0 : Math.floor(Math.pow(S.won / 5, 1.6));
 // the sovereign
 const LORD = { m: 'Rogue_Hooded', s: 1.3, r: 'sword_1handed', st: 'magic', shadow: 1 };
 const lordMul = lv => Math.pow(1.15, lv - 1);
-const lordHp = () => 320 * lordMul(S.lord.lv);
-const lordDmg = () => 13 * lordMul(S.lord.lv);
+const lordHp = () => 320 * lordMul(S.lord.lv) * essMul();
+const lordDmg = () => 13 * lordMul(S.lord.lv) * essMul();
 const SKILLS = [
   { id: 'empower', n: '그림자 강화', lv: 1, cd: 22, desc: '10초간 군단 공격력 +60%, 공격 속도 +25%' },
   { id: 'spear', n: '어둠의 창', lv: 3, cd: 11, desc: '가장 강한 적에게 군주 공격력 14배 피해' },
@@ -269,7 +278,7 @@ const BIND_MAX = 16;
 const FIELD_MAX = MOBILE ? 26 : 32;
 // unit stats for a shadow of kind k
 function shadowStats(k, lv) {
-  const d = ET[k], T = tierMul(TIER[k] || 0) * lvMul(lv);
+  const d = ET[k], T = tierMul(TIER[k] || 0) * lvMul(lv) * essMul();
   return { hp: 70 * d.hp * T, dmg: 7 * T * (d.rg ? .85 : 1) * (d.hp > 1.6 ? 1.25 : 1), as: d.rg ? 1.3 : 1.05, range: d.rg || 1.1, aoe: d.aoe || 0, sp: 2.1 + d.sp * .35 };
 }
 function generalStats(r, lv) {
@@ -282,7 +291,7 @@ const KEY = 'mug-shadow-v1';
 let S = null;
 function fresh() {
   return { gold: 40, g: 0, won: 0, auto: true, cast: true, speed: 1, kills: 0, binds: 0, lastT: Date.now(), started: false, farm: 0,
-    lord: { lv: 1 }, capLv: 0, bind: 0, army: { skmin: { n: 4, lv: 1 } }, gens: [] };
+    lord: { lv: 1 }, capLv: 0, bind: 0, army: { skmin: { n: 4, lv: 1 } }, gens: [], ess: 0, rebirths: 0, bestWon: 0, bulk: 1, loseG: -1, loseN: 0 };
 }
 function save() { if (!S) return; S.lastT = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 function load() { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.army) return Object.assign(fresh(), s); } catch (e) {} return null; }
@@ -612,9 +621,17 @@ function hurtAlly(a, dmg) {
   a.sink = 1.2; VX.burst(a.x, a.z, .4, 8, { color: [0x5a2ab0, 0x2a1a40], speed: 1, up: 1.6, life: .6, size: .25, grav: 0 });
   later(a.gen ? 9 : 6, () => { if (B.state === 'fight') B.reserve.push(a.gen ? { gen: a.gen, k: a.k } : { k: a.k }); });
 }
+function stuckHint() {
+  if (S.loseG === B.g) S.loseN++; else { S.loseG = B.g; S.loseN = 1; }
+  if (S.loseN < 3 || S.loseN % 3) return false;
+  const tips = ['군주 수련', '병종 훈련'];
+  if (S.capLv < S.lord.lv / 3) tips.push('지배력 확장');
+  setTimeout(() => toast(`${terrName(B.g)}에서 막혔어요 · ${tips.join(', ')}을 올려 보세요${essGain() ? ' · 그림자 윤회도 할 수 있어요' : ''}`), 1800);
+  return true;
+}
 function lordFall() {
   if (B.state !== 'fight') return;
-  B.state = 'lost'; B.nextT = 3; toast('군주가 쓰러졌어요… 후퇴'); sfx('lose');
+  B.state = 'lost'; B.nextT = 3; toast('군주가 쓰러졌어요… 후퇴'); sfx('lose'); stuckHint();
   if (S.cal) S.cal = Math.min(S.cal, relDiff(S.g) * .97);
   retreat();
 }
@@ -623,7 +640,7 @@ function retreat() {
   if (S.g > 0) { S.g--; } S.farm = 3;
 }
 function battleWon() {
-  B.state = 'won'; B.nextT = 2.6;
+  B.state = 'won'; B.nextT = 2.6; if (S.loseG === S.g) { S.loseG = -1; S.loseN = 0; }
   S.cal = Math.max(S.cal || 0, relDiff(S.g));
   const bonus = eGold(S.g) * garrison(S.g) * .6; S.gold += bonus;
   if (S.g >= S.won) { S.won = S.g + 1; toast(`${terrName(S.g)} 정복!`); sfx('win'); }
@@ -752,7 +769,7 @@ function step(dt) {
     if (p >= 1) { scene.remove(s.obj); shots.splice(i, 1); s.onHit(); }
   }
   if (!foes.some(f => !f.dead) && !souls.length) battleWon();   // let the last souls get their binding roll first
-  else if (B.t > B.limit) { B.state = 'lost'; B.nextT = 2.5; toast('시간 초과… 후퇴'); retreat(); }
+  else if (B.t > B.limit) { B.state = 'lost'; B.nextT = 2.5; toast('시간 초과… 후퇴'); stuckHint(); retreat(); }
 }
 function visual(dt) {
   const upd = e => {
@@ -811,7 +828,7 @@ function drawOverlay() {
 }
 
 /* ================= UI ================= */
-let tab = 'army', resetAsk = false, listDirty = false;
+let tab = 'army', resetAsk = false, rebAsk = false, listDirty = false;
 const income = () => { let s = 0; for (let g = 0; g < S.won; g++) s += terrIncome(g); return s; };
 function hud() {
   el('terr').textContent = terrName(B.g) + (B.re ? ' · 토벌' : '');
@@ -834,29 +851,50 @@ function renderSkills() {
 }
 el('skills').addEventListener('click', e => { const b = e.target.closest('[data-sk]'); if (!b) return; audio(); castSkill(b.dataset.sk, true); });
 const ico = (col, g) => `<span class="ico" style="background:${col}">${g}</span>`;
-const costBtn = (act, v, cost, label) => `<button class="btn ${S.gold >= cost ? 'pri' : ''}" data-a="${act}" data-v="${v}" data-c="${cost}" ${S.gold >= cost ? '' : 'disabled'}>${label}<small>${fmt(cost)}</small></button>`;
+// how many levels the current buy mode would get for the gold on hand, and what they cost
+function buyLevels(costAt, lv0, max) {
+  const want = S.bulk === 'max' ? 1e4 : S.bulk || 1; let n = 0, cost = 0, lv = lv0;
+  while (n < want && (max == null || lv < max)) { const c = costAt(lv); if (cost + c > S.gold) break; cost += c; lv++; n++; }
+  return { n, cost, next: max != null && lv0 >= max ? 0 : costAt(lv0) };
+}
+function planFor(a, v) {
+  if (a === 'train') { const u = S.army[v]; return u ? buyLevels(lv => trainCost(v, lv), u.lv) : null; }
+  if (a === 'gen') { const gn = S.gens[+v]; return gn ? buyLevels(lv => genCost(gn.r, lv), gn.lv) : null; }
+  if (a === 'lord') return buyLevels(lordCost, S.lord.lv);
+  if (a === 'cap') return buyLevels(capCost, S.capLv);
+  if (a === 'bind') return buyLevels(bindCost, S.bind, BIND_MAX);
+  return null;
+}
+const planLabel = (pl, label) => pl.n ? `${label}${pl.n > 1 ? ' ×' + pl.n : ''}<small>${fmt(pl.cost)}</small>` : `${label}<small>${fmt(pl.next)}</small>`;
+const costBtn = (act, v, label) => { const pl = planFor(act, v); return `<button class="btn ${pl.n ? 'pri' : ''}" data-a="${act}" data-v="${v}" data-l="${label}" ${pl.n ? '' : 'disabled'}>${planLabel(pl, label)}</button>`; };
+const bulkBar = () => `<div class="bulk">${[1, 10, 'max'].map(m => `<button class="${S.bulk === m ? 'on' : ''}" data-a="bulk" data-v="${m}">${m === 'max' ? '최대' : '×' + m}</button>`).join('')}</div>`;
 const TIER_COL = ['#b8a8d8', '#a8c0e8', '#9fd8c0', '#e8d090', '#f0a890', '#d890e8', '#90b0ff', '#ff90b0', '#c0ff90', '#ffd0f0'];
 function renderList() {
   let h = '';
   if (tab === 'army') {
-    h += `<div class="sec"><span>군단 ${armyCount()} / ${cap()}</span><span>각인 ${fmt(S.binds)}회</span></div>`;
+    h += bulkBar() + `<div class="sec"><span>군단 ${armyCount()} / ${cap()}</span><span>각인 ${fmt(S.binds)}회</span></div>`;
     for (const gn of S.gens) {
       const st = generalStats(gn.r, gn.lv), R0 = regionOf(gn.r);
-      h += `<div class="row">${ico('#d6c2ff', '將')}<div class="info"><div class="n">장군 ${R0.boss[1]}${star(gn.r)}<small>Lv.${gn.lv}</small></div><div class="s">체력 ${fmt(st.hp)} · 공격 ${fmt(st.dmg)} · 범위 공격</div></div><div class="btns">${costBtn('gen', S.gens.indexOf(gn), genCost(gn.r, gn.lv), '훈련')}</div></div>`;
+      h += `<div class="row">${ico('#d6c2ff', '將')}<div class="info"><div class="n">장군 ${R0.boss[1]}${star(gn.r)}<small>Lv.${gn.lv}</small></div><div class="s">체력 ${fmt(st.hp)} · 공격 ${fmt(st.dmg)} · 범위 공격</div></div><div class="btns">${costBtn('gen', S.gens.indexOf(gn), '훈련')}</div></div>`;
     }
     const ks = Object.keys(S.army).filter(k => S.army[k].n > 0).sort((a, b) => (TIER[b] || 0) - (TIER[a] || 0));
     for (const k of ks) {
       const u = S.army[k], st = shadowStats(k, u.lv), d = ET[k], t = TIER[k] || 0;
-      h += `<div class="row">${ico(TIER_COL[t % TIER_COL.length], d.n[0])}<div class="info"><div class="n">그림자 ${d.n} ×${u.n}<small>Lv.${u.lv}</small></div><div class="s">${d.rg ? (d.aoe ? '범위 마법' : '원거리') : '근접'} · 체력 ${fmt(st.hp)} · 공격 ${fmt(st.dmg)}</div></div><div class="btns">${costBtn('train', k, trainCost(k, u.lv), '훈련')}</div></div>`;
+      h += `<div class="row">${ico(TIER_COL[t % TIER_COL.length], d.n[0])}<div class="info"><div class="n">그림자 ${d.n} ×${u.n}<small>Lv.${u.lv}</small></div><div class="s">${d.rg ? (d.aoe ? '범위 마법' : '원거리') : '근접'} · 체력 ${fmt(st.hp)} · 공격 ${fmt(st.dmg)}</div></div><div class="btns">${costBtn('train', k, '훈련')}</div></div>`;
     }
     h += `<p class="note">훈련하면 그 병종 전체가 강해져요(레벨당 +10%). 지배력이 가득 차면 새로 각인한 강한 병종이 가장 약한 병사와 자리를 바꿔요.</p>`;
   } else if (tab === 'lord') {
     const L = S.lord.lv;
-    h += `<div class="row">${ico('#a77bff', '主')}<div class="info"><div class="n">군주 수련<small>Lv.${L}</small></div><div class="s">체력 ${fmt(lordHp())} · 공격 ${fmt(lordDmg())} · 레벨당 +15%</div></div><div class="btns">${costBtn('lord', 1, lordCost(L), '수련')}</div></div>`;
-    h += `<div class="row">${ico('#8fa8ff', '支')}<div class="info"><div class="n">지배력<small>Lv.${S.capLv}</small></div><div class="s">거느릴 수 있는 병사 ${cap()} → ${capOf(S.capLv + 1)}</div></div><div class="btns">${costBtn('cap', 1, capCost(S.capLv), '확장')}</div></div>`;
-    h += `<div class="row">${ico('#c9a8ff', '印')}<div class="info"><div class="n">각인술<small>Lv.${S.bind}${S.bind >= BIND_MAX ? ' (최대)' : ''}</small></div><div class="s">각인 확률 ${Math.round(bindChance(false) * 100)}% · 보스 ${Math.round(bindChance(true) * 100)}%</div></div><div class="btns">${S.bind < BIND_MAX ? costBtn('bind', 1, bindCost(S.bind), '연마') : ''}</div></div>`;
+    h += bulkBar() + `<div class="row">${ico('#a77bff', '主')}<div class="info"><div class="n">군주 수련<small>Lv.${L}</small></div><div class="s">체력 ${fmt(lordHp())} · 공격 ${fmt(lordDmg())} · 레벨당 +15%</div></div><div class="btns">${costBtn('lord', 1, '수련')}</div></div>`;
+    h += `<div class="row">${ico('#8fa8ff', '支')}<div class="info"><div class="n">지배력<small>Lv.${S.capLv}</small></div><div class="s">거느릴 수 있는 병사 ${cap()} → ${capOf(S.capLv + 1)}</div></div><div class="btns">${costBtn('cap', 1, '확장')}</div></div>`;
+    h += `<div class="row">${ico('#c9a8ff', '印')}<div class="info"><div class="n">각인술<small>Lv.${S.bind}${S.bind >= BIND_MAX ? ' (최대)' : ''}</small></div><div class="s">각인 확률 ${Math.round(bindChance(false) * 100)}% · 보스 ${Math.round(bindChance(true) * 100)}%</div></div><div class="btns">${S.bind < BIND_MAX ? costBtn('bind', 1, '연마') : ''}</div></div>`;
     h += `<div class="sec"><span>군주의 권능</span><span>스킬 자동 ${S.cast ? '켬' : '끔'}</span></div>`;
     for (const sk of SKILLS) h += `<div class="row">${ico(sk.lv <= L ? '#b98cff' : '#4a4058', sk.n[0])}<div class="info"><div class="n">${sk.n}<small>${sk.lv <= L ? `재사용 ${sk.cd}초` : `군주 Lv.${sk.lv}에 열림`}</small></div><div class="s">${sk.desc}</div></div></div>`;
+    const gain = essGain();
+    h += `<div class="sec"><span>그림자 윤회</span><span>흑정 ${fmt(S.ess || 0)}${S.rebirths ? ` · ${S.rebirths}회` : ''}</span></div>
+      <p class="note" style="margin-top:2px">정복을 내려놓고 처음부터 다시 시작하는 대신 <b style="color:var(--acc2)">흑정</b>을 얻어요. 흑정 1개마다 모든 그림자와 군주가 영구히 4%, 금화가 3% 강해져요.<br>
+      지금 효과: 힘 ×${essMul().toFixed(2)} · 금화 ×${essGold().toFixed(2)}${S.bestWon ? ` · 최고 정복 ${S.bestWon}곳` : ''}</p>
+      <button class="btn ${gain ? 'pri' : ''}" style="width:100%;padding:10px" data-a="reb" ${gain ? '' : 'disabled'}>${!gain ? `영토 ${REB_MIN}곳 정복부터 할 수 있어요 (지금 ${S.won}곳)` : rebAsk ? `정말 윤회할까요? 한 번 더 누르면 흑정 +${gain}` : `윤회하기 · 흑정 +${gain}`}</button>`;
   } else {
     const regions = Math.max(REGIONS.length, Math.floor(S.won / TPR) + 1);
     for (let r = 0; r < regions; r++) {
@@ -879,12 +917,23 @@ el('list').addEventListener('click', e => {
   const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
   audio();
   const a = b.dataset.a, v = b.dataset.v;
-  const pay = c => { if (S.gold < c) return false; S.gold -= c; sfx('buy'); return true; };
-  if (a === 'train') { const u = S.army[v]; if (u && pay(trainCost(v, u.lv))) { u.lv++; refreshStats(); } }
-  else if (a === 'gen') { const gn = S.gens[+v]; if (gn && pay(genCost(gn.r, gn.lv))) { gn.lv++; refreshStats(); } }
-  else if (a === 'lord') { if (pay(lordCost(S.lord.lv))) { S.lord.lv++; if (lord) { const r = lord.hp / lord.maxHp; lord.maxHp = lordHp(); lord.hp = lord.maxHp * r; lord.dmg = lordDmg(); } renderSkills(); if (SKILLS.some(s => s.lv === S.lord.lv)) toast(`새 권능: ${SKILLS.find(s => s.lv === S.lord.lv).n}`); } }
-  else if (a === 'cap') { if (pay(capCost(S.capLv))) S.capLv++; }
-  else if (a === 'bind') { if (S.bind < BIND_MAX && pay(bindCost(S.bind))) S.bind++; }
+  if (a !== 'reb') rebAsk = false;
+  const pl = planFor(a, v);
+  if (pl) {   // buy as many levels as the mode allows, in one payment
+    if (!pl.n || S.gold < pl.cost) return;
+    S.gold -= pl.cost; sfx('buy');
+    if (a === 'train') { S.army[v].lv += pl.n; refreshStats(); }
+    else if (a === 'gen') { S.gens[+v].lv += pl.n; refreshStats(); }
+    else if (a === 'lord') {
+      const L0 = S.lord.lv; S.lord.lv += pl.n;
+      if (lord) { const r = lord.hp / lord.maxHp; lord.maxHp = lordHp(); lord.hp = lord.maxHp * r; lord.dmg = lordDmg(); }
+      renderSkills(); const ns = SKILLS.filter(s => s.lv > L0 && s.lv <= S.lord.lv); if (ns.length) toast(`새 권능: ${ns.map(s => s.n).join(', ')}`);
+    }
+    else if (a === 'cap') S.capLv += pl.n;
+    else if (a === 'bind') S.bind += pl.n;
+  }
+  else if (a === 'bulk') { S.bulk = v === 'max' ? 'max' : +v; }
+  else if (a === 'reb') { if (!essGain()) return; if (!rebAsk) rebAsk = true; else { rebirth(); return; } }
   else if (a === 'goto') { const g = +v; if (g > S.won) return; S.g = g; S.farm = 0; if (g < S.won) setAuto(false, true); startBattle(); toast(`${terrName(g)}${josa(terrName(g), '으로', '로')} 진군`); }
   else if (a === 'reset') { if (!resetAsk) resetAsk = true; else { resetAsk = false; S = fresh(); S.started = true; curTheme = -1; save(); startBattle(); } }
   save(); renderList(); hud();
@@ -894,6 +943,15 @@ function refreshStats() {
     const st = a.gen ? generalStats(a.gen.r, a.gen.lv) : shadowStats(a.k, S.army[a.k] ? S.army[a.k].lv : 1);
     const r = a.hp / a.maxHp; a.maxHp = st.hp; a.hp = a.dead ? 0 : st.hp * r; a.dmg = st.dmg;
   }
+}
+function rebirth() {
+  const gain = essGain(); if (gain <= 0) return;
+  // keep the meta progress and preferences; everything about this conquest starts over
+  const keep = { ess: (S.ess || 0) + gain, rebirths: (S.rebirths || 0) + 1, bestWon: Math.max(S.bestWon || 0, S.won), kills: S.kills, binds: S.binds,
+    auto: S.auto, cast: S.cast, speed: S.speed, bulk: S.bulk, started: true };
+  S = Object.assign(fresh(), keep); curTheme = -1; resetAsk = false; rebAsk = false;
+  save(); startBattle(); renderSkills(); renderList(); hud(); sfx('gen');
+  VX.flash('rgba(140,80,255,.5)', .6); toast(`그림자 윤회 · 흑정 +${gain} (총 ${S.ess})`);
 }
 function setAuto(on, quiet) { S.auto = on; if (!quiet) toast(on ? '자동 진격: 이기면 다음 영토로' : '반복 토벌: 지금 영토를 반복해요'); if (on && S.g < S.won && !S.farm) S.g = S.won; hud(); }
 el('bAuto').onclick = () => { audio(); setAuto(!S.auto); save(); };
@@ -996,8 +1054,13 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
+// cheap per-tick update: recompute what each buy button would get, without rebuilding the list (so taps aren't eaten)
 function refreshButtons() {
-  for (const b of el('list').querySelectorAll('[data-c]')) { const ok = S.gold >= +b.dataset.c; b.disabled = !ok; b.classList.toggle('pri', ok); }
+  for (const b of el('list').querySelectorAll('[data-l]')) {
+    const pl = planFor(b.dataset.a, b.dataset.v); if (!pl) continue;
+    const html = planLabel(pl, b.dataset.l); if (b.innerHTML !== html) b.innerHTML = html;
+    b.disabled = !pl.n; b.classList.toggle('pri', !!pl.n);
+  }
 }
 function begin() {
   el('title').hidden = true; S.started = true;
@@ -1017,7 +1080,7 @@ async function start() {
 }
 start();
 requestAnimationFrame(frame);
-window.__SH = { get S() { return S; }, set S(v) { S = v; }, fresh, refreshStats, lordCost, capCost, bindCost, trainCost, genCost, B, simAway, step: dt => step(dt), get allies() { return allies; }, get foes() { return foes; }, armyPower, relDiff, startBattle };
+window.__SH = { get S() { return S; }, set S(v) { S = v; }, fresh, essGain, rebirth, planFor, refreshStats, lordCost, capCost, bindCost, trainCost, genCost, B, simAway, step: dt => step(dt), get allies() { return allies; }, get foes() { return foes; }, armyPower, relDiff, startBattle };
 })();
 </script>
 </body>
