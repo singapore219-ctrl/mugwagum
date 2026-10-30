@@ -858,8 +858,9 @@ function step(dt) {
     a.hurt = Math.max(0, a.hurt - dt); a.moving = false; a.atkT -= dt * (emp ? 1.25 : 1);
     if (a.rise > 0) { a.rise -= dt; return; }
     let t = null, bd = 99;
-    if (a.tgt && !a.tgt.dead && (!lord || a.tgt.z > lord.z - 9.5)) { t = a.tgt; bd = dist(a, t); }
-    else { for (const f of live) { if (lord && f.z < lord.z - 7.5) continue; const d = dist(a, f); if (d < bd) { bd = d; t = f; } } a.tgt = t; }
+    // every enemy on the field is fair game, enemy archers hanging back by the rifts included
+    if (a.tgt && !a.tgt.dead) { t = a.tgt; bd = dist(a, t); }
+    else { for (const f of live) { const d = dist(a, f); if (d < bd) { bd = d; t = f; } } a.tgt = t; }
     a.face = t;
     if (!t) { const p = slotPos(si, a.range > 2), d = Math.hypot(p.x - a.x, p.z - a.z); if (d > .25) { const sp = Math.min(d, a.sp * 1.15 * dt); a.x += (p.x - a.x) / d * sp; a.z += (p.z - a.z) / d * sp; a.moving = true; a.face = { x: p.x, z: p.z, dead: false }; } return; }
     const reach = a.range + (t.boss ? .6 : 0);
