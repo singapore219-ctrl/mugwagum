@@ -160,7 +160,7 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
         전투는 <b>자동</b>이에요. <b>군주</b>가 사냥터를 누비고, 그림자 군단이 군주 곁을 돌며 몰려오는 적을 덮쳐요. 화면을 누르면 군주가 그쪽으로 움직여요.<br>
         적은 북쪽 적진의 균열에서 <b>끝없는 웨이브</b>로 몰려오고, 군단은 남쪽에서 전열을 지켜요. 10웨이브마다 지역이 바뀌고 보스가 나와요.<br>
         적이 쓰러지면 <b>혼</b>이 남아요. 확률로 그 자리에서 <b>그림자 병사</b>로 일어나 바로 합류해요. 지역 보스는 고유 스킬을 쓰는 <b>그림자 장군</b>이 되고, 장군은 윤회해도 남아서 같은 보스를 또 각인하면 수가 늘어나요(보스마다 최대 5).<br>
-        쓰러진 그림자는 잠시 뒤 다시 일어나요. 군단은 <b>지배력</b>만큼 거느리고, 화면에 다 못 나온 병사는 예비대로 계속 투입돼요.<br>
+        쓰러진 그림자는 잠시 뒤 다시 일어나요. 군단은 <b>지배력</b>만큼 거느려요. 전장에는 병사가 최대 32명 서고, 그보다 많으면 한 명이 여러 명 몫의 힘을 가져요.<br>
         군주가 쓰러지면 바로 <b>그림자 윤회</b>: 도달한 웨이브만큼 <b>흑정</b>(영구 강화)을 받고 웨이브 1부터 다시 일어나요. 그래서 방치해도 끝없이 강해져요(꺼 둔 동안 최대 12시간 정산).<br>
         금화로 <b>군주</b>와 <b>병종</b>을 키우세요.
       </div>
@@ -282,12 +282,15 @@ const bindCost = lv => Math.round(120 * Math.pow(1.7, lv));
 const trainCost = (k, lv) => Math.round(18 * rankMul(rankOf(k)) * Math.pow(1.17, lv - 1));
 const genCost = (gn, lv) => Math.round(90 * rankMul(gn.g) * Math.pow(1.19, lv - 1));
 const BIND_MAX = 16;
-const FIELD_MAX = MOBILE ? 26 : 32;
+const FIELD_MAX = 32;
+// past FIELD_MAX soldiers the legion fights as squads: each soldier on the field carries several soldiers' strength
+const squadMul = () => Math.max(1, armyCount() / FIELD_MAX);
 // unit stats for a shadow of kind k
 function shadowStats(k, lv, g = rankOf(k)) {
   const d = ET[k], T = rankMul(g) * lvMul(lv) * essMul();
   return { hp: 70 * d.hp * T, dmg: 7 * T * (d.rg ? .85 : 1) * (d.hp > 1.6 ? 1.25 : 1), as: d.rg ? 1.3 : 1.05, range: d.rg || 1.1, aoe: d.aoe || 0, sp: 2.1 + d.sp * .35 };
 }
+function squadStats(k) { const st = shadowStats(k, S.army[k] ? S.army[k].lv : 1), m = squadMul(); return { ...st, hp: st.hp * m, dmg: st.dmg * m }; }
 function generalStats(gn) {
   const R0 = regionOf(gn.r), base = shadowStats(R0.boss[0], 1, gn.g), m = lvMul(gn.lv);
   return { hp: base.hp * 9 * m, dmg: base.dmg * 5 * m, as: 1.2, range: ET[R0.boss[0]].rg ? 6 : 1.5, aoe: 1.6, sp: 2.4 };
@@ -588,7 +591,7 @@ let portalFx = [];
 const waveName = w => `${regionOf(regOfWave(w)).n}${star(regOfWave(w))} · 웨이브 ${w}`;
 
 function makeShadow(k, x, z, gen) {
-  const st = gen ? generalStats(gen) : shadowStats(k, S.army[k] ? S.army[k].lv : 1);
+  const st = gen ? generalStats(gen) : squadStats(k);
   const d = gen ? { ...ET[k], s: (ET[k].s || 1) * 1.45, shadow: 1, hd: BOSS_HD[gen.r % REGIONS.length] } : { ...ET[k], shadow: 1 };
   const e = { side: 'ally', k, gen, x, z, hp: st.hp, maxHp: st.hp, dmg: st.dmg, as: st.as, range: st.range, aoe: st.aoe, sp: st.sp, atkT: rnd(0, .6), dead: false, hurt: 0, rise: 0, slot: B.ring++ };
   e.act = makeActor(d); e.act.root.position.set(x, 0, z); e.act.root.rotation.y = Math.PI;
@@ -612,7 +615,7 @@ function makeFoe(key, boss, x, z) {
 // everything the legion owns, as a deploy queue: generals first, then soldiers interleaved by kind
 function deployList() {
   const list = []; for (const gn of S.gens) for (let i = 0; i < (gn.n || 1); i++) list.push({ gen: gn, k: regionOf(gn.r).boss[0] });
-  const ks = Object.keys(S.army).filter(k => S.army[k].n > 0), left = ks.map(k => S.army[k].n);
+  const ks = Object.keys(S.army).filter(k => S.army[k].n > 0), m = squadMul(), left = ks.map(k => Math.max(1, Math.round(S.army[k].n / m)));
   let more = true; while (more) { more = false; ks.forEach((k, i) => { if (left[i] > 0) { left[i]--; list.push({ k }); more = true; } }); }
   return list;
 }
@@ -741,21 +744,28 @@ function trySoul(s) {
   // a soul from a later wave lifts its whole kind to that wave's strength
   const k = s.k, u = S.army[k], up = u && u.n > 0 && s.g > rankOf(k);
   if (up) { u.g = s.g; refreshStats(); floatText({ x: s.x, z: s.z }, `${ET[k].n} ${rankWave(s.g)}웨이브급`, '#ffd27a', true); }
-  const join = () => { const v = S.army[k] = S.army[k] || { n: 0, lv: 1, g: s.g }; v.g = Math.max(v.g, s.g); v.n++; riseAt(s, k); };
-  if (armyCount() < cap()) join();
+  const join = body => { const v = S.army[k] = S.army[k] || { n: 0, lv: 1, g: s.g }; v.g = Math.max(v.g, s.g); v.n++; if (body) riseAt(s, k); else { riseAt(s, null, null, true); refreshStats(); } };
+  if (armyCount() < cap()) join(armyCount() < FIELD_MAX || !(S.army[k] && S.army[k].n));
   else {
     let weak = null; for (const kk in S.army) if (kk !== k && S.army[kk].n > 0 && rankOf(kk) < s.g && (!weak || rankOf(kk) < rankOf(weak))) weak = kk;
-    if (weak) { S.army[weak].n--; join(); floatText({ x: s.x, z: s.z }, `${ET[weak].n} → ${ET[k].n}`, '#d6c2ff'); }
+    if (weak) { S.army[weak].n--; swapBody(weak, k); join(false); floatText({ x: s.x, z: s.z }, `${ET[weak].n} → ${ET[k].n}`, '#d6c2ff'); }
     else if (!up) { const gb = eGold(gwOf(S.wave)) * 2; S.gold += gb; floatText({ x: s.x, z: s.z }, `혼 흡수 +${fmt(gb)}`, '#d6c2ff'); }
   }
   return true;
 }
-function riseAt(s, k, gen) {
+// a full legion trades a kind: one body of the old kind turns into the new one
+function swapBody(from, to) {
+  const a = allies.find(o => !o.dead && !o.gen && o.k === from);
+  if (a) { killActor(a.act); allies.splice(allies.indexOf(a), 1); const e = makeShadow(to, a.x, a.z); e.rise = .5; return; }
+  const r = B.reserve.find(u => !u.gen && u.k === from); if (r) r.k = to;
+}
+function riseAt(s, k, gen, fxOnly) {
   VX.pillar(s.x, s.z, 0x8a4dff, gen ? 9 : 5); VX.shockwave(s.x, s.z, gen ? 3 : 1.4, 0x9a6cff, .5);
   VX.burst(s.x, s.z, .2, gen ? 30 : 12, { color: [0xb98cff, 0x5a2ab0, 0xffffff], speed: 1.6, up: 2.4, life: .8, size: .26, grav: 0, drag: 1.5 });
   if (gen) VX.shake(.35);
   floatText({ x: s.x, z: s.z }, gen ? '장군 각인!' : '각인!', '#c9a8ff', true);
   sfx(gen ? 'gen' : 'bind');
+  if (fxOnly) return;
   const alive = allies.filter(a => !a.dead).length;
   if (B.state === 'fight' && (alive < FIELD_MAX || gen)) { const e = makeShadow(gen ? regionOf(gen.r).boss[0] : k, s.x, s.z, gen); e.rise = .7; e.act.root.position.y = -1.2; }
   else B.reserve.push(gen ? { gen, k: regionOf(gen.r).boss[0] } : { k });
@@ -1032,7 +1042,7 @@ function hud() {
   el('gold').textContent = fmt(S.gold) + ' 금화';
   const inc = income(); el('income').textContent = `영토 수입 ${inc >= 10 ? fmt(inc) : inc.toFixed(1)}/초`;
   const res = B.reserve.length;
-  el('armyTxt').innerHTML = `군단 <b>${armyCount()}</b> / ${cap()}${S.gens.length ? ` · 장군 ${genCount()}` : ''}${res ? ` · 예비 ${res}` : ''}`;
+  el('armyTxt').innerHTML = `군단 <b>${armyCount()}</b> / ${cap()}${S.gens.length ? ` · 장군 ${genCount()}` : ''}${squadMul() > 1 ? ` · 1명당 ×${squadMul().toFixed(1)}` : ''}${res ? ` · 예비 ${res}` : ''}`;
   el('lordNm').textContent = `군주 Lv.${S.lord.lv}`;
   if (lord) el('lordHp').style.width = Math.max(0, lord.hp / lord.maxHp * 100) + '%';
   if (B.boss && !B.boss.dead) el('bossHp').style.width = B.boss.hp / B.boss.maxHp * 100 + '%'; else el('bossBox').hidden = true;
@@ -1142,7 +1152,7 @@ el('list').addEventListener('click', e => {
 });
 function refreshStats() {
   for (const a of allies) {
-    const st = a.gen ? generalStats(a.gen) : shadowStats(a.k, S.army[a.k] ? S.army[a.k].lv : 1);
+    const st = a.gen ? generalStats(a.gen) : squadStats(a.k);
     const r = a.hp / a.maxHp; a.maxHp = st.hp; a.hp = a.dead ? 0 : st.hp * r; a.dmg = st.dmg;
   }
 }
