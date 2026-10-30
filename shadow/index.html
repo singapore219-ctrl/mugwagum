@@ -161,15 +161,15 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
         적은 사방의 균열에서 <b>끝없는 웨이브</b>로 몰려와요. 10웨이브마다 지역이 바뀌고 보스가 나와요.<br>
         적이 쓰러지면 <b>혼</b>이 남아요. 확률로 그 자리에서 <b>그림자 병사</b>로 일어나 바로 합류해요. 지역 보스는 <b>그림자 장군</b>이 돼요.<br>
         쓰러진 그림자는 잠시 뒤 다시 일어나요. 군단은 <b>지배력</b>만큼 거느리고, 화면에 다 못 나온 병사는 예비대로 계속 투입돼요.<br>
-        적이 너무 쌓이거나 군주가 쓰러지면 <b>5웨이브 후퇴</b>해서 다시 버텨요. 그래서 꺼 두거나 방치해도 끝나지 않아요(꺼 둔 동안 최대 12시간 정산).<br>
-        금화로 <b>군주</b>와 <b>병종</b>을 키우고, 웨이브 31부터는 <b>그림자 윤회</b>로 영구 강화(흑정)를 얻을 수 있어요.
+        군주가 쓰러지면 바로 <b>그림자 윤회</b>: 도달한 웨이브만큼 <b>흑정</b>(영구 강화)을 받고 웨이브 1부터 다시 일어나요. 그래서 방치해도 끝없이 강해져요(꺼 둔 동안 최대 12시간 정산).<br>
+        금화로 <b>군주</b>와 <b>병종</b>을 키우세요.
       </div>
       <button class="btn pri wide" id="startBtn">그림자를 깨운다</button>
     </div>
   </div>
   <div class="ovl" id="away" hidden>
     <div class="card">
-      <div class="logo" style="font-size:28px">그동안의 정벌</div>
+      <div class="logo" style="font-size:28px" id="awayTitle">그동안의 정벌</div>
       <p class="sub" id="awayMsg"></p>
       <div class="stats" id="awayStats"></div>
       <button class="btn pri wide" id="awayOk">확인</button>
@@ -256,9 +256,9 @@ const garrison = g => Math.min(26, 7 + (g % TPR) * 2 + Math.min(Math.floor(g / T
 const terrIncome = g => .25 * Math.pow(1.19, g) * essGold();
 /* 그림자 윤회: give up the conquest to keep 흑정 (dark essence). Each 흑정 makes every shadow and the sovereign 4% stronger
    and all gold 3% larger, so the next conquest goes faster and further. */
-const REB_MIN = 15;
+const REB_MIN = 8;   // first wave that pays any 흑정
 const essMul = () => 1 + ((S && S.ess) || 0) * .04, essGold = () => 1 + ((S && S.ess) || 0) * .03;
-const essGain = () => S.won < REB_MIN ? 0 : Math.floor(Math.pow(S.won / 5, 1.6));
+const essGain = () => Math.floor(Math.pow((S.best || 1) / REB_MIN, 1.5));   // wave 8: 1, 20: 3, 40: 11, 80: 31
 // the sovereign
 const LORD = { m: 'Rogue_Hooded', s: 1.3, r: 'sword_1handed', st: 'magic', shadow: 1 };
 const lordMul = lv => Math.pow(1.15, lv - 1);
@@ -306,7 +306,7 @@ const cap = () => capOf(S.capLv);
 const view = el('view'), glc = el('gl'), ovc = el('ov'), octx = ovc.getContext('2d');
 let camDist = 30, W = 0, H = 0, dpr = 1, renderer, scene, camera, ground, MODELS = {}, CLIPS = {}, PROPS = {}, CHAR_SCALE = .5, GLOW_TEX, sun, hemi;
 const lin = h => new THREE.Color(h).convertSRGBToLinear();
-const ARENA = 15;   // the hunting field is a square, -ARENA..ARENA on x and z
+const ARENA = 9;   // the hunting field is a square, -ARENA..ARENA on x and z
 const CAM = { h: 20, back: 14, x: 0, z: 0 };
 function initGL() {
   renderer = new THREE.WebGLRenderer({ canvas: glc, antialias: true });
@@ -381,7 +381,7 @@ function setTheme(r) {
   const tint = new THREE.Color(snow ? 0xdde6f0 : dead ? 0x8a7a7a : 0xb0b8a8);
   // trees and rocks all around the field's edge, a few stones scattered inside
   for (let i = 0; i < 110; i++) {
-    const inside = i < 14, x = inside ? rnd(-ARENA + 2, ARENA - 2) : rnd(-34, 34), z = inside ? rnd(-ARENA + 2, ARENA - 2) : rnd(-34, 34);
+    const inside = i < 6, x = inside ? rnd(-ARENA + 2, ARENA - 2) : rnd(-34, 34), z = inside ? rnd(-ARENA + 2, ARENA - 2) : rnd(-34, 34);
     if (!inside && Math.abs(x) < ARENA + 1.5 && Math.abs(z) < ARENA + 1.5) continue;
     if (inside && Math.hypot(x, z) < 4) continue;
     const isRock = inside || Math.random() < (dead ? .45 : .25);
@@ -400,7 +400,7 @@ function resize() {
   if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); MGFX.resize(W, H, dpr); }
   ovc.width = W * dpr; ovc.height = H * dpr;
   // show about 17 x 15 units around the sovereign
-  const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(8.5 / (half * camera.aspect), 7.5 / half), tilt = .78;
+  const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(9.8 / (half * camera.aspect), 8.6 / half), tilt = .8;
   CAM.h = Math.cos(tilt) * need; CAM.back = Math.sin(tilt) * need; camDist = need;
   camera.far = need + 60; camera.updateProjectionMatrix();
   if (scene && scene.fog) { scene.fog.near = need * 1.05; scene.fog.far = need * 2.2; }
@@ -408,7 +408,7 @@ function resize() {
 }
 function camFollow(snap, dt = 1) {
   if (!camera) return;
-  const tx = lord ? lord.x : 0, tz = lord ? lord.z : 0, k = snap ? 1 : Math.min(1, dt * 3);
+  const tx = lord ? lord.x * .3 : 0, tz = lord ? lord.z * .3 : 0, k = snap ? 1 : Math.min(1, dt * 3);   // the whole field stays in view
   CAM.x += (tx - CAM.x) * k; CAM.z += (tz - CAM.z) * k;
   camera.position.set(CAM.x, CAM.h, CAM.z + CAM.back); camera.lookAt(CAM.x, 0, CAM.z);
   if (sun) { sun.position.set(CAM.x + 6, 14, CAM.z + 8); sun.target.position.set(CAM.x, 0, CAM.z); }
@@ -549,8 +549,8 @@ const lerpAng = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= Math.PI *
 /* ================= BATTLE: endless hunt =================
    An open field like 무과금 사냥터. The sovereign roams it (auto, or tap the ground to steer); the legion circles
    the sovereign and charges whatever comes close. Enemies pour out of rifts on the edges in waves that never end;
-   every 10 waves the region changes and its boss appears. Too many enemies on the field (과부하) or a fallen
-   sovereign means a retreat of 5 waves instead of a game over, so it can be left running forever. */
+   every 10 waves the region changes and its boss appears. When the sovereign falls the hunt ends in 그림자 윤회:
+   흑정 for the waves reached, then wave 1 again, a little stronger each time — so it can be left running forever. */
 // entity: {side, k, x, z, hp, maxHp, dmg, as, range, aoe, sp, atkT, act, dead, ...}
 let allies = [], foes = [], shots = [], souls = [], texts = [], lord = null;
 const B = { state: 'idle', t: 0, nextT: 0, total: 0, killed: 0, boss: null, reserve: [], resT: 0, empowerT: 0, domT: 0, cds: {},
@@ -565,7 +565,7 @@ function toast(t) { const e = el('toast'); e.textContent = t; e.classList.add('s
 // waves: territory-equivalent index gw = (wave-1)/2 keeps the old enemy/gold curves and costs balanced
 const regOfWave = w => Math.floor((w - 1) / 10);
 const gwOf = w => (w - 1) / 2;
-const OVERLOAD = MOBILE ? 48 : 60;
+const FOE_CAP = MOBILE ? 45 : 60;   // the rifts hold back while this many enemies are already on the field
 const waveCount = w => Math.min(42, 8 + Math.floor(w * 1.1));
 const nPortals = w => Math.min(8, 2 + Math.floor(w / 8));
 const PORTALS = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]].map(([x, z]) => ({ x: x * (ARENA - .6), z: z * (ARENA - .6) }));
@@ -621,7 +621,7 @@ function startBattle() {
 }
 // formation: rings around the sovereign that turn slowly, so the legion swirls as it moves
 function slotPos(i) {
-  const per = 10, ring = Math.floor(i / per), pos = i % per, ang = pos / per * Math.PI * 2 + ring * .31 + B.t * (ring % 2 ? -.18 : .18);
+  const per = 10, ring = Math.floor(i / per), pos = i % per, ang = pos / per * Math.PI * 2 + ring * .31 + B.t * (ring % 2 ? -.07 : .07);
   const rad = 1.7 + ring * 1.05, cx = lord ? lord.x : 0, cz = lord ? lord.z : 0;
   return { x: cx + Math.cos(ang) * rad, z: cz + Math.sin(ang) * rad };
 }
@@ -644,7 +644,8 @@ function buildWave(w) {
 }
 function spawnTick(dt) {
   B.waveT += dt;
-  while (B.queue.length && B.queue[0].t <= B.waveT) {
+  let room = FOE_CAP - foes.filter(f => !f.dead).length;
+  while (B.queue.length && B.queue[0].t <= B.waveT && room-- > 0) {
     const q = B.queue.shift(), p = PORTALS[q.pt], x = p.x + rnd(-.8, .8), z = p.z + rnd(-.8, .8);
     const f = makeFoe(q.k, q.boss, x, z);
     if (q.boss) { B.boss = f; el('bossBox').hidden = false; el('bossName').textContent = f.name; VX.pillar(x, z, 0xff4060, 9); VX.shake(.3); }
@@ -663,18 +664,15 @@ function waveDone() {
 }
 // territory-equivalents for the economy (income, 윤회, offline estimate) follow the waves
 function syncTerr() { S.g = Math.floor(gwOf(S.wave)); S.won = Math.max(S.won || 0, Math.floor(gwOf(S.best || 1))); }
-function retreat(why) {
+// the sovereign has fallen: the legion dissolves and is reborn at wave 1 with the 흑정 this hunt earned
+function lordDown() {
   if (B.state !== 'fight') return;
-  B.state = 'lost'; B.nextT = 2.6; toast(`${why}… 5웨이브 후퇴`); sfx('lose');
+  B.state = 'lost'; B.nextT = 999; sfx('lose');
   if (S.cal) S.cal = Math.min(S.cal, relDiff(Math.floor(gwOf(S.wave))) * .97);
-  stuckHint();
-  S.wave = Math.max(1, S.wave - 5); syncTerr(); save();
-}
-function stuckHint() {
-  if (S.loseG === S.wave) S.loseN++; else { S.loseG = S.wave; S.loseN = 1; }
-  if (S.loseN < 3 || S.loseN % 3) return;
-  const tips = ['군주 수련', '병종 훈련']; if (S.capLv < S.lord.lv / 3) tips.push('지배력 확장');
-  setTimeout(() => toast(`웨이브 ${S.loseG}에서 막혔어요 · ${tips.join(', ')}을 올려 보세요${essGain() ? ' · 그림자 윤회도 할 수 있어요' : ''}`), 1800);
+  const best = S.best, gain = essGain();
+  toast(`군주가 쓰러졌어요 · 웨이브 ${best}`);
+  VX.flash('rgba(40,10,80,.55)', 1.2);
+  later(2.4, () => rebirth(true, best, gain));
 }
 function shoot(from, to, kind, onHit) {
   let obj;
@@ -745,7 +743,7 @@ function hurtAlly(a, dmg) {
   a.hp -= dmg; a.hurt = .1;
   if (a.hp > 0) return;
   a.dead = true; a.hp = 0; play(a.act, a.act.A.death, { once: true });
-  if (a.lord) { retreat('군주가 쓰러졌어요'); return; }
+  if (a.lord) { lordDown(); return; }
   // a fallen shadow sinks back and re-forms near the sovereign after a while
   a.sink = 1.2; VX.burst(a.x, a.z, .4, 8, { color: [0x5a2ab0, 0x2a1a40], speed: 1, up: 1.6, life: .6, size: .25, grav: 0 });
   later(a.gen ? 9 : 6, () => { if (B.state === 'fight') B.reserve.push(a.gen ? { gen: a.gen, k: a.k } : { k: a.k }); });
@@ -786,8 +784,6 @@ function step(dt) {
   spawnTick(dt);
   const live = foes.filter(f => !f.dead), mine = allies.filter(a => !a.dead);
   const emp = B.empowerT > 0, dom = B.domT > 0;
-  // overload: the rifts are winning
-  if (live.length >= OVERLOAD) { retreat('적이 너무 많아요'); return; }
   // reinforcements from the reserve rise beside the sovereign
   B.resT -= dt;
   if (B.reserve.length && mine.length < FIELD_MAX && B.resT <= 0 && lord) {
@@ -812,11 +808,10 @@ function step(dt) {
     let near = null, nd = 99; for (const f of live) { const d = dist(lord, f); if (d < nd) { nd = d; near = f; } }
     let mx = 0, mz = 0;
     if (B.goT > 0) { mx = B.goX - lord.x; mz = B.goZ - lord.z; if (Math.hypot(mx, mz) < .3) { B.goT = 0; mx = mz = 0; } }
-    else if (near && nd < 3) { for (const f of live) { const d = dist(lord, f); if (d < 4.5) { mx += (lord.x - f.x) / (d + .1); mz += (lord.z - f.z) / (d + .1); } } mx -= lord.x * .04; mz -= lord.z * .04; }
-    else if (near && nd > 6.5) { mx = near.x - lord.x; mz = near.z - lord.z; }
-    else if (!near) { mx = -lord.x; mz = -lord.z; if (Math.hypot(mx, mz) < 1) mx = mz = 0; }
+    else if (near && nd < 2.2) { for (const f of live) { const d = dist(lord, f); if (d < 3.2) { mx += (lord.x - f.x) / (d + .1); mz += (lord.z - f.z) / (d + .1); } } mx -= lord.x * .08; mz -= lord.z * .08; }
+    else if (Math.hypot(lord.x, lord.z) > 1.2) { mx = -lord.x; mz = -lord.z; }
     const ml = Math.hypot(mx, mz);
-    if (ml > .01) { const sp = 3.3 * dt; lord.x += mx / ml * sp; lord.z += mz / ml * sp; lord.moving = true; } else lord.moving = false;
+    if (ml > .01) { const sp = 2.8 * dt; lord.x += mx / ml * sp; lord.z += mz / ml * sp; lord.moving = true; } else lord.moving = false;
     let t = null, bd = lord.range; for (const f of live) { const d = dist(lord, f); if (d < bd) { bd = d; t = f; } }
     lord.face = t || (lord.moving ? { x: lord.x + mx, z: lord.z + mz, dead: false } : null);
     if (t && lord.atkT <= 0) { lord.atkT = lord.as; lord.anim = 'atk'; const tt = t, dmg = lord.dmg * rnd(.9, 1.1); shoot(lord, tt, 'lord', () => hurtFoe(tt, dmg, lord)); }
@@ -847,7 +842,8 @@ function step(dt) {
     a.hurt = Math.max(0, a.hurt - dt); a.moving = false; a.atkT -= dt * (emp ? 1.25 : 1);
     if (a.rise > 0) { a.rise -= dt; return; }
     let t = null, bd = 99;
-    for (const f of live) { if (lord && dist(lord, f) > 8.5) continue; const d = dist(a, f); if (d < bd) { bd = d; t = f; } }
+    if (a.tgt && !a.tgt.dead && (!lord || dist(lord, a.tgt) < 9)) { t = a.tgt; bd = dist(a, t); }
+    else { for (const f of live) { if (lord && dist(lord, f) > 6.5) continue; const d = dist(a, f); if (d < bd) { bd = d; t = f; } } a.tgt = t; }
     a.face = t;
     if (!t) { const p = slotPos(i), d = Math.hypot(p.x - a.x, p.z - a.z); if (d > .25) { const sp = Math.min(d, a.sp * 1.15 * dt); a.x += (p.x - a.x) / d * sp; a.z += (p.z - a.z) / d * sp; a.moving = true; a.face = { x: p.x, z: p.z, dead: false }; } return; }
     const reach = a.range + (t.boss ? .6 : 0);
@@ -951,8 +947,8 @@ const income = () => { let s = 0; for (let g = 0; g < S.won; g++) s += terrIncom
 function hud() {
   const alive = foes.filter(f => !f.dead).length;
   el('terr').textContent = waveName(S.wave);
-  el('terrSub').textContent = B.state === 'lost' ? '후퇴 중…' : `과부하 ${alive} / ${OVERLOAD} · 최고 ${S.best}웨이브`;
-  el('terrBar').style.width = Math.min(100, alive / OVERLOAD * 100) + '%'; el('terrBar').style.background = alive > OVERLOAD * .7 ? '#ff6a5a' : 'var(--acc)';
+  el('terrSub').textContent = B.state === 'lost' ? '군주가 쓰러졌어요…' : `적 ${alive} · 최고 ${S.best}웨이브 · 흑정 +${essGain()}`;
+  el('terrBar').style.width = Math.min(100, alive / FOE_CAP * 100) + '%'; el('terrBar').style.background = alive > FOE_CAP * .7 ? '#ff6a5a' : 'var(--acc)';
   el('gold').textContent = fmt(S.gold) + ' 금화';
   const inc = income(); el('income').textContent = `영토 수입 ${inc >= 10 ? fmt(inc) : inc.toFixed(1)}/초`;
   const res = B.reserve.length;
@@ -1011,9 +1007,9 @@ function renderList() {
     for (const sk of SKILLS) h += `<div class="row">${ico(sk.lv <= L ? '#b98cff' : '#4a4058', sk.n[0])}<div class="info"><div class="n">${sk.n}<small>${sk.lv <= L ? `재사용 ${sk.cd}초` : `군주 Lv.${sk.lv}에 열림`}</small></div><div class="s">${sk.desc}</div></div></div>`;
     const gain = essGain();
     h += `<div class="sec"><span>그림자 윤회</span><span>흑정 ${fmt(S.ess || 0)}${S.rebirths ? ` · ${S.rebirths}회` : ''}</span></div>
-      <p class="note" style="margin-top:2px">지금까지의 사냥을 내려놓고 웨이브 1부터 다시 시작하는 대신 <b style="color:var(--acc2)">흑정</b>을 얻어요. 흑정 1개마다 모든 그림자와 군주가 영구히 4%, 금화가 3% 강해져요.<br>
+      <p class="note" style="margin-top:2px">군주가 쓰러지면 자동으로 윤회해요. 직접 눌러서 지금 바로 할 수도 있어요. 웨이브 1부터 다시 시작하는 대신 <b style="color:var(--acc2)">흑정</b>을 얻어요. 흑정 1개마다 모든 그림자와 군주가 영구히 4%, 금화가 3% 강해져요.<br>
       지금 효과: 힘 ×${essMul().toFixed(2)} · 금화 ×${essGold().toFixed(2)}${S.bestWave ? ` · 역대 최고 ${S.bestWave}웨이브` : ''}</p>
-      <button class="btn ${gain ? 'pri' : ''}" style="width:100%;padding:10px" data-a="reb" ${gain ? '' : 'disabled'}>${!gain ? `웨이브 ${REB_MIN * 2 + 1}까지 가면 할 수 있어요 (최고 ${S.best})` : rebAsk ? `정말 윤회할까요? 한 번 더 누르면 흑정 +${gain}` : `윤회하기 · 흑정 +${gain}`}</button>`;
+      <button class="btn ${gain ? 'pri' : ''}" style="width:100%;padding:10px" data-a="reb" ${gain ? '' : 'disabled'}>${!gain ? `웨이브 ${REB_MIN}까지 가면 흑정을 얻어요 (지금 ${S.best})` : rebAsk ? `정말 윤회할까요? 한 번 더 누르면 흑정 +${gain}` : `윤회하기 · 흑정 +${gain}`}</button>`;
   } else {
     const regions = Math.max(REGIONS.length, regOfWave(S.best) + 1), cur = regOfWave(S.wave);
     h += `<div class="sec"><span>사냥 지역</span><span>최고 웨이브 ${S.best}</span></div>`;
@@ -1022,7 +1018,7 @@ function renderList() {
       h += `<div class="row"><div class="info"><div class="n">${R0.n}${star(r)}<small>웨이브 ${w0}~${w0 + 9}</small></div><div class="s">${done ? `평정 · 보스 ${R0.boss[1]}` : reached ? `진행 중 · 최고 ${S.best}` : '잠김'}</div></div>
         <div class="btns">${r === cur ? '<span class="tag" style="font-size:11px;color:var(--acc2)">사냥 중</span>' : reached ? `<button class="btn" data-a="goto" data-v="${w0}">여기서 사냥</button>` : ''}</div></div>`;
     }
-    h += `<p class="note">웨이브는 끝없이 이어져요. 10웨이브마다 지역이 바뀌고 보스가 나와요. 필드의 적이 ${OVERLOAD}마리를 넘거나 군주가 쓰러지면 5웨이브 뒤로 물러나 다시 버텨요.<br>
+    h += `<p class="note">웨이브는 끝없이 이어져요. 10웨이브마다 지역이 바뀌고 보스가 나와요. 군주가 쓰러지면 그때까지의 웨이브만큼 흑정을 받고 자동으로 윤회해요.<br>
       화면을 누르면 군주가 그쪽으로 잠시 움직여요. 지나온 웨이브만큼 꺼 둬도 금화가 쌓여요(최대 12시간).</p>`;
     h += `<div class="sec"><span>화면</span><span></span></div>
       <div class="row"><div class="info"><div class="n">만화풍 캐릭터</div><div class="s">명암 단계와 외곽선</div></div><button class="tog ${LOOK.toon ? 'on' : ''}" data-a="look" data-v="toon" aria-pressed="${LOOK.toon}"></button></div>
@@ -1070,14 +1066,20 @@ function refreshStats() {
     const r = a.hp / a.maxHp; a.maxHp = st.hp; a.hp = a.dead ? 0 : st.hp * r; a.dmg = st.dmg;
   }
 }
-function rebirth() {
-  const gain = essGain(); if (gain <= 0) return;
+function rebirth(auto, best, gain) {
+  if (!auto) { gain = essGain(); best = S.best; if (gain <= 0) return; }
   // keep the meta progress and preferences; everything about this conquest starts over
   const keep = { ess: (S.ess || 0) + gain, rebirths: (S.rebirths || 0) + 1, bestWon: Math.max(S.bestWon || 0, S.won), bestWave: Math.max(S.bestWave || 0, S.best), kills: S.kills, binds: S.binds,
     auto: S.auto, cast: S.cast, speed: S.speed, bulk: S.bulk, started: true };
   S = Object.assign(fresh(), keep); curTheme = -1; resetAsk = false; rebAsk = false;
   save(); startBattle(); renderSkills(); renderList(); hud(); sfx('gen');
   VX.flash('rgba(140,80,255,.5)', .6); toast(`그림자 윤회 · 흑정 +${gain} (총 ${S.ess})`);
+  if (auto) {   // a short report of the hunt that just ended
+    el('awayTitle').textContent = '그림자 윤회';
+    el('awayMsg').textContent = `군주가 쓰러져 군단이 흩어졌어요. 다시 웨이브 1부터 일어나요.`;
+    el('awayStats').innerHTML = `<div>도달한 웨이브<b>${best}</b></div><div>얻은 흑정<b>+${gain}</b></div><div>모은 흑정<b>${fmt(S.ess)}</b></div><div>영구 힘<b>×${essMul().toFixed(2)}</b></div>`;
+    el('away').hidden = false;
+  }
 }
 function setAuto(on, quiet) { S.auto = on; if (!quiet) toast(on ? '자동 진행: 웨이브가 계속 올라가요' : '반복 사냥: 지금 웨이브를 반복해요'); hud(); }
 el('bAuto').onclick = () => { audio(); setAuto(!S.auto); save(); };
@@ -1131,6 +1133,7 @@ function simAway(sec) {
 }
 function showAway(r) {
   const h = Math.floor(r.sec / 3600), m = Math.floor(r.sec % 3600 / 60);
+  el('awayTitle').textContent = '그동안의 사냥';
   el('awayMsg').textContent = `${h ? h + '시간 ' : ''}${m}분 동안 군단이 사냥했어요.${r.toW > r.fromW ? ` 웨이브 ${r.toW}까지 나아갔어요!` : ''}`;
   el('awayStats').innerHTML = `<div>획득 금화<b>${fmt(r.gold)}</b></div><div>영토 수입<b>${fmt(r.terr)}</b></div><div>넘긴 웨이브<b>${fmt(r.fights * 2)}</b></div><div>처치<b>${fmt(r.kills)}</b></div>
     <div>늘어난 병사<b>${fmt(r.newArmy)}</b></div><div>새 장군<b>${r.newGens}</b></div><div style="grid-column:1/-1">위치<b>${waveName(r.fromW)} → ${waveName(r.toW)}</b></div>`;
