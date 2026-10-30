@@ -247,6 +247,9 @@ const terrName = g => `${regionOf(Math.floor(g / TPR)).n}${star(Math.floor(g / T
 // a kind's tier = first region it appears in; shadows of later kinds start stronger
 const TIER = {}; REGIONS.forEach((R0, r) => { for (const k of R0.e) if (TIER[k] == null) TIER[k] = r; });
 const tierMul = t => Math.pow(1.8, t);
+const rankMul = g => tierMul(g / TPR);   // x1.8 per 10 waves, without end
+const rankOf = k => S.army[k] && S.army[k].g != null ? S.army[k].g : (TIER[k] || 0) * TPR;
+const rankWave = g => Math.round(g * 2 + 1);
 const lvMul = lv => Math.pow(1.1, lv - 1);
 // enemy strength per territory index g (5 per region)
 const eHp = g => 26 * Math.pow(1.25, g);
@@ -276,17 +279,17 @@ const bindChance = (boss) => boss ? clamp(.22 + S.bind * .02, 0, .5) : clamp(.32
 const lordCost = lv => Math.round(40 * Math.pow(1.21, lv - 1));
 const capCost = lv => Math.round(70 * Math.pow(1.5, lv));
 const bindCost = lv => Math.round(120 * Math.pow(1.7, lv));
-const trainCost = (k, lv) => Math.round(18 * tierMul(TIER[k] || 0) * Math.pow(1.17, lv - 1));
-const genCost = (r, lv) => Math.round(90 * tierMul(r % REGIONS.length) * Math.pow(1.5, Math.floor(r / REGIONS.length)) * Math.pow(1.19, lv - 1));
+const trainCost = (k, lv) => Math.round(18 * rankMul(rankOf(k)) * Math.pow(1.17, lv - 1));
+const genCost = (gn, lv) => Math.round(90 * rankMul(gn.g) * Math.pow(1.19, lv - 1));
 const BIND_MAX = 16;
 const FIELD_MAX = MOBILE ? 26 : 32;
 // unit stats for a shadow of kind k
-function shadowStats(k, lv) {
-  const d = ET[k], T = tierMul(TIER[k] || 0) * lvMul(lv) * essMul();
+function shadowStats(k, lv, g = rankOf(k)) {
+  const d = ET[k], T = rankMul(g) * lvMul(lv) * essMul();
   return { hp: 70 * d.hp * T, dmg: 7 * T * (d.rg ? .85 : 1) * (d.hp > 1.6 ? 1.25 : 1), as: d.rg ? 1.3 : 1.05, range: d.rg || 1.1, aoe: d.aoe || 0, sp: 2.1 + d.sp * .35 };
 }
-function generalStats(r, lv) {
-  const R0 = regionOf(r), base = shadowStats(R0.boss[0], 1), m = Math.pow(1.5, Math.floor(r / REGIONS.length)) * lvMul(lv);
+function generalStats(gn) {
+  const R0 = regionOf(gn.r), base = shadowStats(R0.boss[0], 1, gn.g), m = lvMul(gn.lv);
   return { hp: base.hp * 9 * m, dmg: base.dmg * 5 * m, as: 1.2, range: ET[R0.boss[0]].rg ? 6 : 1.5, aoe: 1.6, sp: 2.4 };
 }
 
@@ -295,10 +298,10 @@ const KEY = 'mug-shadow-v1';
 let S = null;
 function fresh() {
   return { gold: 40, g: 0, won: 0, auto: true, cast: true, speed: 1, kills: 0, binds: 0, lastT: Date.now(), started: false, farm: 0,
-    lord: { lv: 1 }, capLv: 0, bind: 0, army: { skmin: { n: 4, lv: 1 } }, gens: [], ess: 0, rebirths: 0, bestWon: 0, bulk: 1, loseG: -1, loseN: 0, wave: 1, best: 1, bestWave: 0 };
+    lord: { lv: 1 }, capLv: 0, bind: 0, army: { skmin: { n: 4, lv: 1, g: 0 } }, gens: [], ess: 0, rebirths: 0, bestWon: 0, bulk: 1, loseG: -1, loseN: 0, wave: 1, best: 1, bestWave: 0 };
 }
 function save() { if (!S) return; S.lastT = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
-function load() { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.army) { if (s.wave == null) { s.wave = 1 + (s.g || 0) * 2; s.best = 1 + (s.won || 0) * 2; } for (const gn of s.gens || []) gn.n = gn.n || 1; return Object.assign(fresh(), s); } } catch (e) {} return null; }
+function load() { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.army) { if (s.wave == null) { s.wave = 1 + (s.g || 0) * 2; s.best = 1 + (s.won || 0) * 2; } for (const gn of s.gens || []) { gn.n = gn.n || 1; if (gn.g == null) gn.g = gn.r * TPR; } for (const k in s.army || {}) if (s.army[k].g == null) s.army[k].g = (TIER[k] || 0) * TPR; return Object.assign(fresh(), s); } } catch (e) {} return null; }
 const armyCount = () => Object.values(S.army).reduce((a, u) => a + u.n, 0);
 const genCount = () => S.gens.reduce((a, g) => a + (g.n || 1), 0);
 const GEN_MAX = 5;   // generals of one region boss
@@ -585,7 +588,7 @@ let portalFx = [];
 const waveName = w => `${regionOf(regOfWave(w)).n}${star(regOfWave(w))} · 웨이브 ${w}`;
 
 function makeShadow(k, x, z, gen) {
-  const st = gen ? generalStats(gen.r, gen.lv) : shadowStats(k, S.army[k] ? S.army[k].lv : 1);
+  const st = gen ? generalStats(gen) : shadowStats(k, S.army[k] ? S.army[k].lv : 1);
   const d = gen ? { ...ET[k], s: (ET[k].s || 1) * 1.45, shadow: 1, hd: BOSS_HD[gen.r % REGIONS.length] } : { ...ET[k], shadow: 1 };
   const e = { side: 'ally', k, gen, x, z, hp: st.hp, maxHp: st.hp, dmg: st.dmg, as: st.as, range: st.range, aoe: st.aoe, sp: st.sp, atkT: rnd(0, .6), dead: false, hurt: 0, rise: 0, slot: B.ring++ };
   e.act = makeActor(d); e.act.root.position.set(x, 0, z); e.act.root.rotation.y = Math.PI;
@@ -715,7 +718,7 @@ function killFoe(f) {
 function addSoul(f) {
   const obj = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0x9a6cff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
   obj.scale.setScalar(f.boss ? 1.1 : .55); obj.position.set(f.x, .6, f.z); scene.add(obj);
-  souls.push({ obj, x: f.x, z: f.z, k: f.key, boss: f.boss, t: 0, tries: f.boss ? 3 : 1, next: .9, r: f.r });
+  souls.push({ obj, x: f.x, z: f.z, k: f.key, boss: f.boss, t: 0, tries: f.boss ? 3 : 1, next: .9, r: f.r, g: gwOf(S.wave) });
 }
 function trySoul(s) {
   const ok = Math.random() < bindChance(s.boss);
@@ -727,18 +730,22 @@ function trySoul(s) {
   S.binds++; listDirty = true;
   if (s.boss) {
     const exist = S.gens.find(gn => gn.r === s.r);
+    if (exist && s.g > exist.g) { exist.g = s.g; refreshStats(); }   // a later binding lifts every general of that boss
     if (exist && exist.n >= GEN_MAX) { S.gold += eGold(gwOf(S.wave)) * 40; floatText({ x: s.x, z: s.z }, '장군의 혼 흡수', '#d6c2ff', true); }
     else if (exist) { exist.n++; riseAt(s, null, exist); toast(`그림자 장군 「${regionOf(s.r).boss[1]}」 ×${exist.n}!`); }
-    else { const gn = { r: s.r, lv: 1, n: 1 }; S.gens.push(gn); riseAt(s, null, gn); toast(`그림자 장군 「${regionOf(s.r).boss[1]}」 각인!`); }
+    else { const gn = { r: s.r, lv: 1, n: 1, g: s.g }; S.gens.push(gn); riseAt(s, null, gn); toast(`그림자 장군 「${regionOf(s.r).boss[1]}」 각인!`); }
     return true;
   }
   // roster grows up to the command limit; a full legion trades its weakest shadow for a stronger kind
-  const k = s.k, tierNew = TIER[k] || 0;
-  if (armyCount() < cap()) { (S.army[k] = S.army[k] || { n: 0, lv: 1 }).n++; riseAt(s, k); }
+  // a soul from a later wave lifts its whole kind to that wave's strength
+  const k = s.k, u = S.army[k], up = u && u.n > 0 && s.g > rankOf(k);
+  if (up) { u.g = s.g; refreshStats(); floatText({ x: s.x, z: s.z }, `${ET[k].n} ${rankWave(s.g)}웨이브급`, '#ffd27a', true); }
+  const join = () => { const v = S.army[k] = S.army[k] || { n: 0, lv: 1, g: s.g }; v.g = Math.max(v.g, s.g); v.n++; riseAt(s, k); };
+  if (armyCount() < cap()) join();
   else {
-    let weak = null; for (const kk in S.army) if (S.army[kk].n > 0 && (TIER[kk] || 0) < tierNew && (!weak || (TIER[kk] || 0) < (TIER[weak] || 0))) weak = kk;
-    if (weak) { S.army[weak].n--; (S.army[k] = S.army[k] || { n: 0, lv: 1 }).n++; riseAt(s, k); floatText({ x: s.x, z: s.z }, `${ET[weak].n} → ${ET[k].n}`, '#d6c2ff'); }
-    else { const gb = eGold(gwOf(S.wave)) * 2; S.gold += gb; floatText({ x: s.x, z: s.z }, `혼 흡수 +${fmt(gb)}`, '#d6c2ff'); }
+    let weak = null; for (const kk in S.army) if (kk !== k && S.army[kk].n > 0 && rankOf(kk) < s.g && (!weak || rankOf(kk) < rankOf(weak))) weak = kk;
+    if (weak) { S.army[weak].n--; join(); floatText({ x: s.x, z: s.z }, `${ET[weak].n} → ${ET[k].n}`, '#d6c2ff'); }
+    else if (!up) { const gb = eGold(gwOf(S.wave)) * 2; S.gold += gb; floatText({ x: s.x, z: s.z }, `혼 흡수 +${fmt(gb)}`, '#d6c2ff'); }
   }
   return true;
 }
@@ -991,7 +998,7 @@ function buyLevels(costAt, lv0, max) {
 }
 function planFor(a, v) {
   if (a === 'train') { const u = S.army[v]; return u ? buyLevels(lv => trainCost(v, lv), u.lv) : null; }
-  if (a === 'gen') { const gn = S.gens[+v]; return gn ? buyLevels(lv => genCost(gn.r, lv), gn.lv) : null; }
+  if (a === 'gen') { const gn = S.gens[+v]; return gn ? buyLevels(lv => genCost(gn, lv), gn.lv) : null; }
   if (a === 'lord') return buyLevels(lordCost, S.lord.lv);
   if (a === 'cap') return buyLevels(capCost, S.capLv);
   if (a === 'bind') return buyLevels(bindCost, S.bind, BIND_MAX);
@@ -1006,15 +1013,15 @@ function renderList() {
   if (tab === 'army') {
     h += bulkBar() + `<div class="sec"><span>군단 ${armyCount()} / ${cap()}</span><span>각인 ${fmt(S.binds)}회</span></div>`;
     for (const gn of S.gens) {
-      const st = generalStats(gn.r, gn.lv), R0 = regionOf(gn.r);
-      h += `<div class="row">${ico('#d6c2ff', '將')}<div class="info"><div class="n">장군 ${R0.boss[1]}${star(gn.r)} ×${gn.n || 1}<small>Lv.${gn.lv}</small></div><div class="s">체력 ${fmt(st.hp)} · 공격 ${fmt(st.dmg)} · 범위 공격 · 윤회해도 남아요</div></div><div class="btns">${costBtn('gen', S.gens.indexOf(gn), '훈련')}</div></div>`;
+      const st = generalStats(gn), R0 = regionOf(gn.r);
+      h += `<div class="row">${ico('#d6c2ff', '將')}<div class="info"><div class="n">장군 ${R0.boss[1]}${star(gn.r)} ×${gn.n || 1}<small>Lv.${gn.lv}</small></div><div class="s">${rankWave(gn.g)}웨이브급 · 체력 ${fmt(st.hp)} · 공격 ${fmt(st.dmg)} · 범위 공격 · 윤회해도 남아요</div></div><div class="btns">${costBtn('gen', S.gens.indexOf(gn), '훈련')}</div></div>`;
     }
-    const ks = Object.keys(S.army).filter(k => S.army[k].n > 0).sort((a, b) => (TIER[b] || 0) - (TIER[a] || 0));
+    const ks = Object.keys(S.army).filter(k => S.army[k].n > 0).sort((a, b) => rankOf(b) - rankOf(a));
     for (const k of ks) {
-      const u = S.army[k], st = shadowStats(k, u.lv), d = ET[k], t = TIER[k] || 0;
-      h += `<div class="row">${ico(TIER_COL[t % TIER_COL.length], d.n[0])}<div class="info"><div class="n">그림자 ${d.n} ×${u.n}<small>Lv.${u.lv}</small></div><div class="s">${d.rg ? (d.aoe ? '범위 마법' : '원거리') : '근접'} · 체력 ${fmt(st.hp)} · 공격 ${fmt(st.dmg)}</div></div><div class="btns">${costBtn('train', k, '훈련')}</div></div>`;
+      const u = S.army[k], st = shadowStats(k, u.lv), d = ET[k], t = Math.floor(rankOf(k) / TPR);
+      h += `<div class="row">${ico(TIER_COL[t % TIER_COL.length], d.n[0])}<div class="info"><div class="n">그림자 ${d.n} ×${u.n}<small>Lv.${u.lv}</small></div><div class="s">${rankWave(rankOf(k))}웨이브급 · ${d.rg ? (d.aoe ? '범위 마법' : '원거리') : '근접'} · 체력 ${fmt(st.hp)} · 공격 ${fmt(st.dmg)}</div></div><div class="btns">${costBtn('train', k, '훈련')}</div></div>`;
     }
-    h += `<p class="note">훈련하면 그 병종 전체가 강해져요(레벨당 +10%). 지배력이 가득 차면 새로 각인한 강한 병종이 가장 약한 병사와 자리를 바꿔요.</p>`;
+    h += `<p class="note">병사는 각인한 웨이브만큼 강해요(웨이브급). 같은 병종을 더 높은 웨이브에서 각인하면 그 병종 전체가 그 웨이브급으로 올라가요. 훈련하면 그 병종 전체가 강해져요(레벨당 +10%). 지배력이 가득 차면 새로 각인한 병사가 가장 낮은 웨이브급 병사와 자리를 바꿔요.</p>`;
   } else if (tab === 'lord') {
     const L = S.lord.lv;
     h += bulkBar() + `<div class="row">${ico('#a77bff', '主')}<div class="info"><div class="n">군주 수련<small>Lv.${L}</small></div><div class="s">체력 ${fmt(lordHp())} · 공격 ${fmt(lordDmg())} · 레벨당 +15%</div></div><div class="btns">${costBtn('lord', 1, '수련')}</div></div>`;
@@ -1079,14 +1086,14 @@ el('list').addEventListener('click', e => {
 });
 function refreshStats() {
   for (const a of allies) {
-    const st = a.gen ? generalStats(a.gen.r, a.gen.lv) : shadowStats(a.k, S.army[a.k] ? S.army[a.k].lv : 1);
+    const st = a.gen ? generalStats(a.gen) : shadowStats(a.k, S.army[a.k] ? S.army[a.k].lv : 1);
     const r = a.hp / a.maxHp; a.maxHp = st.hp; a.hp = a.dead ? 0 : st.hp * r; a.dmg = st.dmg;
   }
 }
 function rebirth(auto, best, gain) {
   if (!auto) { gain = essGain(); best = S.best; if (gain <= 0) return; }
   // keep the meta progress and preferences; everything about this conquest starts over
-  const keep = { gens: S.gens.map(gn => ({ r: gn.r, lv: 1, n: gn.n || 1 })), ess: (S.ess || 0) + gain, rebirths: (S.rebirths || 0) + 1, bestWon: Math.max(S.bestWon || 0, S.won), bestWave: Math.max(S.bestWave || 0, S.best), kills: S.kills, binds: S.binds,
+  const keep = { gens: S.gens.map(gn => ({ r: gn.r, lv: 1, n: gn.n || 1, g: gn.g })), ess: (S.ess || 0) + gain, rebirths: (S.rebirths || 0) + 1, bestWon: Math.max(S.bestWon || 0, S.won), bestWave: Math.max(S.bestWave || 0, S.best), kills: S.kills, binds: S.binds,
     auto: S.auto, cast: S.cast, speed: S.speed, bulk: S.bulk, started: true };
   S = Object.assign(fresh(), keep); curTheme = -1; resetAsk = false; rebAsk = false;
   save(); startBattle(); renderSkills(); renderList(); hud(); sfx('gen');
@@ -1108,13 +1115,13 @@ el('bSpeed').onclick = () => { audio(); S.speed = S.speed === 1 ? 2 : S.speed ==
 function armyDps() {
   let d = lordDmg() / 1.1 * 1.6;
   for (const k in S.army) { const u = S.army[k]; if (!u.n) continue; const st = shadowStats(k, u.lv); d += u.n * st.dmg / st.as * (st.aoe ? 1.8 : 1); }
-  for (const gn of S.gens) { const st = generalStats(gn.r, gn.lv); d += (gn.n || 1) * st.dmg / st.as * 2; }
+  for (const gn of S.gens) { const st = generalStats(gn); d += (gn.n || 1) * st.dmg / st.as * 2; }
   return d;
 }
 function armyTank() {
   let t = lordHp();
   for (const k in S.army) { const u = S.army[k]; if (u.n) t += u.n * shadowStats(k, u.lv).hp; }
-  for (const gn of S.gens) t += (gn.n || 1) * generalStats(gn.r, gn.lv).hp;
+  for (const gn of S.gens) t += (gn.n || 1) * generalStats(gn).hp;
   return t;
 }
 const armyPower = () => armyDps() * Math.sqrt(armyTank());
@@ -1140,10 +1147,10 @@ function simAway(sec) {
     const n = garrison(g); kills += n; S.gold += eGold(g) * n * 1.6;
     // binding while away: same odds as watching; extras past the command limit turn into gold
     const R0 = regionOf(Math.floor(g / TPR));
-    for (let i = 0; i < n; i++) if (Math.random() < bindChance(false)) { const k = pick(R0.e); if (armyCount() < cap()) { (S.army[k] = S.army[k] || { n: 0, lv: 1 }).n++; S.binds++; } else S.gold += eGold(g) * 2; }
+    for (let i = 0; i < n; i++) if (Math.random() < bindChance(false)) { const k = pick(R0.e), u = S.army[k]; if (u && u.n > 0 && g > u.g) u.g = g; if (armyCount() < cap()) { const v = S.army[k] = S.army[k] || { n: 0, lv: 1, g }; v.g = Math.max(v.g, g); v.n++; S.binds++; } else S.gold += eGold(g) * 2; }
     if (g % TPR === TPR - 1 && Math.random() < 1 - Math.pow(1 - bindChance(true), 3)) {
       const r = Math.floor(g / TPR), ex = S.gens.find(gn => gn.r === r);
-      if (!ex) { S.gens.push({ r, lv: 1, n: 1 }); S.binds++; } else if (ex.n < GEN_MAX) { ex.n++; S.binds++; }
+      if (!ex) { S.gens.push({ r, lv: 1, n: 1, g }); S.binds++; } else { ex.g = Math.max(ex.g, g); if (ex.n < GEN_MAX) { ex.n++; S.binds++; } }
     }
     if (g >= S.won) S.won = g + 1;
     if (S.auto) S.g = S.won;
