@@ -632,11 +632,11 @@ function startBattle() {
   buildWave(S.wave);
   renderSkills(); hud();
 }
-// formation: battle lines facing north, melee ranks ahead of the sovereign, archers and casters behind it
+// formation: battle lines facing north, melee ranks up front, archers and casters between them and the sovereign
 function slotPos(i, back) {
-  const per = back ? 8 : 10, row = Math.floor(i / per), pos = i % per, gap = back ? 1.3 : 1.2;
+  const per = 10, row = Math.floor(i / per), pos = i % per, gap = back ? 1.1 : 1.2;
   const cx = lord ? lord.x : 0, cz = lord ? lord.z : HOME_Z;
-  return { x: cx + (pos - (per - 1) / 2) * gap + (row % 2 ? gap / 2 : 0), z: back ? cz + 1 + row * .9 : cz - 2 - row * .95 };
+  return { x: cx + (pos - (per - 1) / 2) * gap + (row % 2 ? gap / 2 : 0), z: back ? (row < 2 ? cz - 1.2 - row * .85 : cz + 1 + (row - 2) * .9) : cz - 3.2 - row * .95 };
 }
 function buildWave(w) {
   B.queue = []; B.waveT = 0; B.total = waveCount(w); B.killed = 0;
