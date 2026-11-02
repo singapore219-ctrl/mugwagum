@@ -57,6 +57,7 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
 #tideFill{background:linear-gradient(90deg,#6a3cd8,#b98cff);transition:width .3s}
 #tideTxt{font-size:10.5px;color:var(--dim);font-variant-numeric:tabular-nums}
 #tideTxt b{color:#ffb070}
+#tideTxt i{font-style:normal;color:#ff7a6a}
 #awk{color:var(--gold);font-weight:500;margin-left:4px}
 #bossBox{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 100px);width:min(70%,320px);text-align:center;pointer-events:none}
 #bossName{font-size:12px;font-weight:700;color:#ffb8a8}
@@ -165,9 +166,9 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
       <p class="sub">쓰러진 적의 혼을 거둬 나의 군대로.<br>끝없이 불어나는 그림자로 대륙을 정복하세요.</p>
       <div class="rules">
         전투는 <b>자동</b>이에요. <b>군주</b>가 사냥터를 누비고, 그림자 군단이 군주 곁을 돌며 몰려오는 적을 덮쳐요. 화면을 누르면 군주가 그쪽으로 움직여요.<br>
-        적은 북쪽 적진의 균열에서 <b>끝없는 웨이브</b>로 몰려오고, 군단은 남쪽에서 전열을 지켜요. 10웨이브마다 지역이 바뀌고 보스가 나와요.<br>
+        적은 북쪽 적진의 균열에서 <b>끝없는 웨이브</b>로 떼 지어 돌격해 오고, 군단은 남쪽에서 전열을 지켜요. 10웨이브마다 지역이 바뀌고 보스가 나와요.<br>
         적이 쓰러지면 <b>혼</b>이 남아요. 확률로 그 자리에서 <b>그림자 병사</b>로 일어나 바로 합류해요. 지역 보스는 고유 스킬을 쓰는 <b>그림자 장군</b>이 되고, 장군은 윤회해도 남아서 같은 보스를 또 각인하면 수가 늘어나요(보스마다 최대 5).<br>
-        쓰러진 그림자는 잠시 뒤 다시 일어나요. 군단은 <b>지배력</b>만큼 거느려요. 전장에는 병사가 최대 32명 서고, 그보다 많으면 한 명이 여러 명 몫의 힘을 가져요. 전세가 밀리면 <b>역전 투지</b>로 강해지고, 전선이 무너지거나 군주가 위험해지면 <b>각성</b>해 쓰러진 병사를 모두 일으켜요(보스를 잡으면 다시 충전). 보스도 체력이 바닥나면 광폭화해요.<br>
+        쓰러진 그림자는 잠시 뒤 다시 일어나요. 군단은 <b>지배력</b>만큼 거느려요. 전장에는 병사가 최대 32명 서고, 그보다 많으면 한 명이 여러 명 몫의 힘을 가져요. 전세가 밀리면 <b>역전 투지</b>로 강해지고, 반대로 이기고 있으면 적이 거세게 반격해요. 군주가 위험해지면 <b>각성</b>해 쓰러진 병사를 모두 일으켜요(보스를 잡으면 다시 충전). 보스도 체력이 바닥나면 광폭화해요.<br>
         군주가 쓰러지면 바로 <b>그림자 윤회</b>: 도달한 웨이브만큼 <b>흑정</b>(영구 강화)을 받고 웨이브 1부터 다시 일어나요. 그래서 방치해도 끝없이 강해져요(꺼 둔 동안 최대 12시간 정산).<br>
         금화로 <b>군주</b>와 <b>병종</b>을 키우세요.
       </div>
@@ -291,7 +292,9 @@ const genCost = (gn, lv) => Math.round(90 * rankMul(gn.g) * Math.pow(1.19, lv - 
 const BIND_MAX = 16;
 const FIELD_MAX = 32;
 // past FIELD_MAX soldiers the legion fights as squads: each soldier on the field carries several soldiers' strength
-const squadMul = () => Math.max(1, armyCount() / FIELD_MAX);
+// tuning: squad strength grows slower than head count; the side ahead lets the other side push back
+const TUNE = { squadPow: .75, grit: .6, surge: 2, gap: 4, foeHp: 1.5, foeDmg: 6 };
+const squadMul = () => Math.max(1, Math.pow(armyCount() / FIELD_MAX, TUNE.squadPow));
 // unit stats for a shadow of kind k
 function shadowStats(k, lv, g = rankOf(k)) {
   const d = ET[k], T = rankMul(g) * lvMul(lv) * essMul();
@@ -577,7 +580,7 @@ const lerpAng = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= Math.PI *
    흑정 for the waves reached, then wave 1 again, a little stronger each time — so it can be left running forever. */
 // entity: {side, k, x, z, hp, maxHp, dmg, as, range, aoe, sp, atkT, act, dead, ...}
 let allies = [], foes = [], shots = [], souls = [], texts = [], lord = null;
-const B = { state: 'idle', t: 0, nextT: 0, total: 0, killed: 0, boss: null, reserve: [], fallen: [], resT: 0, empowerT: 0, domT: 0, cds: {}, share: .5, grit: 1, awake: 1, invT: 0,
+const B = { state: 'idle', t: 0, nextT: 0, total: 0, killed: 0, boss: null, reserve: [], fallen: [], resT: 0, empowerT: 0, domT: 0, cds: {}, share: .5, grit: 1, surge: 1, awake: 1, invT: 0,
   queue: [], waveT: 0, lastSpawn: 0, goX: 0, goZ: 0, goT: 0, ring: 0 };
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 let timers = [];
@@ -613,8 +616,8 @@ function makeLord(x = 0, z = 0) {
 function makeFoe(key, boss, x, z) {
   const d = ET[key], w = S.wave, gw = gwOf(w), r = regOfWave(w), R0 = regionOf(r), ri = r % REGIONS.length;
   const def = boss ? { ...d, s: R0.boss[2], glow: d.glow || '#ff4060', hd: BOSS_HD[ri] } : d;
-  const hp = eHp(gw) * d.hp * (boss ? 30 : 1);
-  const e = { side: 'foe', key, boss: !!boss, name: boss ? R0.boss[1] : d.n, x, z, hp, maxHp: hp, dmg: eDmg(gw) * (boss ? 6 : d.rg ? .8 : 1), as: boss ? 1.6 : 1.2,
+  const hp = eHp(gw) * d.hp * (boss ? 30 : 1) * TUNE.foeHp;
+  const e = { side: 'foe', key, boss: !!boss, name: boss ? R0.boss[1] : d.n, x, z, hp, maxHp: hp, dmg: eDmg(gw) * (boss ? 6 : d.rg ? .8 : 1) * TUNE.foeDmg, as: boss ? 1.6 : 1.2,
     range: d.rg || (boss ? 1.7 : 1.05), aoe: boss ? 1.8 : d.aoe || 0, sp: d.sp * (boss ? .7 : 1) * .95, atkT: rnd(.2, .8), dead: false, hurt: 0, gold: eGold(gw) * (boss ? 25 : 1) * (d.hp > 1.6 ? 1.4 : 1), r };
   e.act = makeActor(def); e.act.root.position.set(x, 0, z); e.act.root.rotation.y = 0;
   foes.push(e); return e;
@@ -642,7 +645,7 @@ function startBattle() {
   const nField = Math.min(FIELD_MAX, B.reserve.length);
   for (let i = 0; i < nField; i++) { const u = B.reserve.shift(), e = makeShadow(u.k, 0, HOME_Z, u.gen), p = slotPos(e.range > 2 ? ri++ : mi++, e.range > 2); e.x = p.x; e.z = p.z; e.act.root.position.set(p.x, 0, p.z); }
   B.state = 'fight'; B.t = 0; B.resT = 0; B.empowerT = 0; B.domT = 0; B.goT = 0; B.boss = null; listDirty = true;
-  B.fallen = []; B.share = .5; B.grit = 1; B.awake = 1; B.invT = 0;
+  B.fallen = []; B.share = .5; B.grit = 1; B.surge = 1; B.awake = 1; B.invT = 0;
   for (const s of SKILLS) B.cds[s.id] = s.lv <= S.lord.lv ? s.cd * .35 : 0;
   buildWave(S.wave);
   renderSkills(); hud();
@@ -658,7 +661,9 @@ function buildWave(w) {
   const R0 = regionOf(regOfWave(w)), np = nPortals(w), boss = w % 10 === 0;
   const act = PORTAL_ORDER.slice(0, np);
   let t = w === 1 ? 1.5 : .6;
-  for (let i = 0; i < B.total;) { const burst = 1 + Math.floor(Math.random() * 3), pt = pick(act); for (let b = 0; b < burst && i < B.total; b++, i++) B.queue.push({ t, k: pick(R0.e), pt }); t += .75; }
+  // the wave charges in a few massed assaults out of every open rift, not a trickle the legion can pick off one by one
+  const groups = Math.max(2, Math.min(5, Math.round(B.total / 9)));
+  for (let i = 0, gi = 0; i < B.total; gi++) { const n = Math.ceil((B.total - i) / (groups - gi)); for (let b = 0; b < n; b++, i++) B.queue.push({ t: t + b * .07, k: pick(R0.e), pt: act[b % act.length] }); t += TUNE.gap; }
   if (boss) { B.queue.unshift({ t: .3, k: R0.boss[0], pt: pick(act), boss: true }); B.total++; }
   B.lastSpawn = t; B.boss = null;
   // rift markers on the active portals
@@ -907,8 +912,8 @@ function step(dt) {
     for (const f of foes) if (!f.dead) { fh += f.hp; fd += f.dmg / f.as; }
     const pa = Math.sqrt(ah * ad), pf = Math.sqrt(fh * fd), tgt = pa + pf > 0 ? pa / (pa + pf) : .5;
     B.share += (tgt - B.share) * Math.min(1, dt * 2);
-    B.grit = B.share < .5 ? 1 + (.5 - B.share) * 1.2 : 1; }   // up to +60% when nearly overrun
-  if (B.awake && B.share < .3 && lord && !lord.dead) awaken();   // the line is about to break: the sovereign awakens
+    B.grit = B.share < .5 ? 1 + (.5 - B.share) * TUNE.grit : 1;    // legion pushed back: up to +30%
+    B.surge = B.share > .5 ? 1 + (B.share - .5) * TUNE.surge : 1; }   // legion winning: enemies hit up to x2 harder
   for (const id in B.cds) B.cds[id] = Math.max(0, B.cds[id] - dt);
   spawnTick(dt);
   const live = foes.filter(f => !f.dead), mine = allies.filter(a => !a.dead);
@@ -957,7 +962,7 @@ function step(dt) {
       f.atkT -= dt; f.face = tgt;
       if (f.atkT <= 0) {
         f.atkT = f.as; f.anim = 'atk';
-        const dmg = f.dmg * rnd(.85, 1.15) * (dom ? .6 : 1), t = tgt;
+        const dmg = f.dmg * rnd(.85, 1.15) * (dom ? .6 : 1) * B.surge, t = tgt;
         if (f.range > 2) shoot(f, t, 'foe', () => { if (f.aoe) { VX.smallBoom(t.x, t.z, f.aoe, 0xff7050); for (const a of [...allies, lord]) if (a && !a.dead && dist(a, t) < f.aoe) hurtAlly(a, dmg * .7); } else hurtAlly(t, dmg); });
         else later(.18, () => { if (f.dead) return; if (f.boss) { VX.slash(f.x, f.z, .9, 1.8, 0xff8060, .3); for (const a of [...allies, lord]) if (a && !a.dead && dist(a, f) < f.aoe + .4) hurtAlly(a, dmg * (a === t ? 1 : .5)); } else hurtAlly(t, dmg); });
       }
@@ -1090,7 +1095,7 @@ function hud() {
   el('armyTxt').innerHTML = `군단 <b>${armyCount()}</b> / ${cap()}${S.gens.length ? ` · 장군 ${genCount()}` : ''}${squadMul() > 1 ? ` · 1명당 ×${squadMul().toFixed(1)}` : ''}${res ? ` · 예비 ${res}` : ''}`;
   el('lordNm').textContent = `군주 Lv.${S.lord.lv}`; el('awk').textContent = B.awake ? '각성 ●' : '각성 ○';
   el('tideFill').style.width = B.share * 100 + '%';
-  el('tideTxt').innerHTML = `전세 ${Math.round(B.share * 100)} : ${100 - Math.round(B.share * 100)}${B.grit > 1.02 ? ` · <b>역전 투지 +${Math.round((B.grit - 1) * 100)}%</b>` : ''}`;
+  el('tideTxt').innerHTML = `전세 ${Math.round(B.share * 100)} : ${100 - Math.round(B.share * 100)}${B.grit > 1.02 ? ` · <b>역전 투지 +${Math.round((B.grit - 1) * 100)}%</b>` : B.surge > 1.05 ? ` · <i>적 반격 +${Math.round((B.surge - 1) * 100)}%</i>` : ''}`;
   if (lord) el('lordHp').style.width = Math.max(0, lord.hp / lord.maxHp * 100) + '%';
   if (B.boss && !B.boss.dead) el('bossHp').style.width = B.boss.hp / B.boss.maxHp * 100 + '%'; else el('bossBox').hidden = true;
   el('bSpeed').textContent = `속도 ×${S.speed}`;
@@ -1357,7 +1362,7 @@ async function start() {
 }
 start();
 requestAnimationFrame(frame);
-window.__SH = { get S() { return S; }, set S(v) { S = v; }, fresh, goTo, waveDone, essGain, rebirth, planFor, refreshStats, lordCost, capCost, bindCost, trainCost, genCost, B, simAway, step: dt => step(dt), get allies() { return allies; }, get foes() { return foes; }, armyPower, relDiff, startBattle };
+window.__SH = { get S() { return S; }, set S(v) { S = v; }, fresh, goTo, waveDone, essGain, rebirth, planFor, refreshStats, lordCost, capCost, bindCost, trainCost, genCost, B, simAway, step: dt => step(dt), get allies() { return allies; }, get foes() { return foes; }, armyPower, relDiff, startBattle, TUNE };
 })();
 </script>
 </body>
