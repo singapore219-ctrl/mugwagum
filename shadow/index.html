@@ -52,7 +52,13 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
 #lordBox .nm{font-size:11.5px;font-weight:700;color:var(--acc2)}
 #lordBox .bar{height:7px}
 #lordHp{background:linear-gradient(90deg,#7a3cff,#c39bff)}
-#bossBox{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 62px);width:min(70%,320px);text-align:center;pointer-events:none}
+#tide{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 62px);width:min(52%,240px);text-align:center;pointer-events:none;padding:4px 8px}
+#tide .bar{height:6px;background:linear-gradient(90deg,#ff8a5a,#c0302a);margin-top:3px}
+#tideFill{background:linear-gradient(90deg,#6a3cd8,#b98cff);transition:width .3s}
+#tideTxt{font-size:10.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+#tideTxt b{color:#ffb070}
+#awk{color:var(--gold);font-weight:500;margin-left:4px}
+#bossBox{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 100px);width:min(70%,320px);text-align:center;pointer-events:none}
 #bossName{font-size:12px;font-weight:700;color:#ffb8a8}
 #bossBox .bar{height:7px}
 #bossHp{background:linear-gradient(90deg,#c0302a,#ff8a5a)}
@@ -136,6 +142,7 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
       <div class="glass"><div id="terr">-</div><div id="terrSub">-</div><div class="bar" style="width:140px"><i id="terrBar" style="background:var(--acc)"></i></div></div>
       <div class="glass" id="right"><div id="gold">0</div><div id="income">-</div><div id="armyTxt">-</div></div>
     </div>
+    <div class="glass" id="tide"><div id="tideTxt">전세</div><div class="bar"><i id="tideFill" style="width:50%"></i></div></div>
     <div class="glass" id="bossBox" hidden><div id="bossName">보스</div><div class="bar"><i id="bossHp"></i></div></div>
     <div id="ctl">
       <button class="chip" id="bSpeed">속도 ×1</button>
@@ -143,7 +150,7 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
       <button class="chip on" id="bCast">스킬 자동</button>
       <button class="chip" id="bFx">효과 켬</button>
     </div>
-    <div class="glass" id="lordBox"><div class="nm" id="lordNm">군주 Lv.1</div><div class="bar"><i id="lordHp"></i></div></div>
+    <div class="glass" id="lordBox"><div class="nm"><span id="lordNm">군주 Lv.1</span><span id="awk"></span></div><div class="bar"><i id="lordHp"></i></div></div>
     <div id="skills"></div>
     <div id="toast"></div>
   </div>
@@ -160,7 +167,7 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
         전투는 <b>자동</b>이에요. <b>군주</b>가 사냥터를 누비고, 그림자 군단이 군주 곁을 돌며 몰려오는 적을 덮쳐요. 화면을 누르면 군주가 그쪽으로 움직여요.<br>
         적은 북쪽 적진의 균열에서 <b>끝없는 웨이브</b>로 몰려오고, 군단은 남쪽에서 전열을 지켜요. 10웨이브마다 지역이 바뀌고 보스가 나와요.<br>
         적이 쓰러지면 <b>혼</b>이 남아요. 확률로 그 자리에서 <b>그림자 병사</b>로 일어나 바로 합류해요. 지역 보스는 고유 스킬을 쓰는 <b>그림자 장군</b>이 되고, 장군은 윤회해도 남아서 같은 보스를 또 각인하면 수가 늘어나요(보스마다 최대 5).<br>
-        쓰러진 그림자는 잠시 뒤 다시 일어나요. 군단은 <b>지배력</b>만큼 거느려요. 전장에는 병사가 최대 32명 서고, 그보다 많으면 한 명이 여러 명 몫의 힘을 가져요.<br>
+        쓰러진 그림자는 잠시 뒤 다시 일어나요. 군단은 <b>지배력</b>만큼 거느려요. 전장에는 병사가 최대 32명 서고, 그보다 많으면 한 명이 여러 명 몫의 힘을 가져요. 전세가 밀리면 <b>역전 투지</b>로 강해지고, 전선이 무너지거나 군주가 위험해지면 <b>각성</b>해 쓰러진 병사를 모두 일으켜요(보스를 잡으면 다시 충전). 보스도 체력이 바닥나면 광폭화해요.<br>
         군주가 쓰러지면 바로 <b>그림자 윤회</b>: 도달한 웨이브만큼 <b>흑정</b>(영구 강화)을 받고 웨이브 1부터 다시 일어나요. 그래서 방치해도 끝없이 강해져요(꺼 둔 동안 최대 12시간 정산).<br>
         금화로 <b>군주</b>와 <b>병종</b>을 키우세요.
       </div>
@@ -570,7 +577,7 @@ const lerpAng = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= Math.PI *
    흑정 for the waves reached, then wave 1 again, a little stronger each time — so it can be left running forever. */
 // entity: {side, k, x, z, hp, maxHp, dmg, as, range, aoe, sp, atkT, act, dead, ...}
 let allies = [], foes = [], shots = [], souls = [], texts = [], lord = null;
-const B = { state: 'idle', t: 0, nextT: 0, total: 0, killed: 0, boss: null, reserve: [], resT: 0, empowerT: 0, domT: 0, cds: {},
+const B = { state: 'idle', t: 0, nextT: 0, total: 0, killed: 0, boss: null, reserve: [], fallen: [], resT: 0, empowerT: 0, domT: 0, cds: {}, share: .5, grit: 1, awake: 1, invT: 0,
   queue: [], waveT: 0, lastSpawn: 0, goX: 0, goZ: 0, goT: 0, ring: 0 };
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 let timers = [];
@@ -635,6 +642,7 @@ function startBattle() {
   const nField = Math.min(FIELD_MAX, B.reserve.length);
   for (let i = 0; i < nField; i++) { const u = B.reserve.shift(), e = makeShadow(u.k, 0, HOME_Z, u.gen), p = slotPos(e.range > 2 ? ri++ : mi++, e.range > 2); e.x = p.x; e.z = p.z; e.act.root.position.set(p.x, 0, p.z); }
   B.state = 'fight'; B.t = 0; B.resT = 0; B.empowerT = 0; B.domT = 0; B.goT = 0; B.boss = null; listDirty = true;
+  B.fallen = []; B.share = .5; B.grit = 1; B.awake = 1; B.invT = 0;
   for (const s of SKILLS) B.cds[s.id] = s.lv <= S.lord.lv ? s.cd * .35 : 0;
   buildWave(S.wave);
   renderSkills(); hud();
@@ -676,7 +684,7 @@ function waveDone() {
   S.cal = Math.max(S.cal || 0, relDiff(Math.floor(gwOf(S.wave))));
   const bonus = eGold(gwOf(S.wave)) * B.total * .3; S.gold += bonus;
   if (S.loseG === S.wave) { S.loseG = -1; S.loseN = 0; }
-  if (S.wave % 10 === 0) { toast(`${regionOf(regOfWave(S.wave)).n}${star(regOfWave(S.wave))} 평정!`); sfx('win'); } else sfx('clear');
+  if (S.wave % 10 === 0) { toast(`${regionOf(regOfWave(S.wave)).n}${star(regOfWave(S.wave))} 평정!`); sfx('win'); if (!B.awake && lord) { B.awake = 1; floatText(lord, '각성 충전', '#ffd27a', true); } } else sfx('clear');
   if (S.auto) S.wave++;
   S.best = Math.max(S.best || 1, S.wave); syncTerr();
   if (regOfWave(S.wave) !== curTheme) setTheme(regOfWave(S.wave));
@@ -708,6 +716,7 @@ function hurtFoe(f, dmg, src) {
   if (f.dead) return;
   const crit = Math.random() < (src && src.lord ? .2 : .07); if (crit) dmg *= 1.8;
   f.hp -= dmg; f.hurt = .1;
+  if (f.boss && !f.rage && f.hp > 0 && f.hp < f.maxHp * .3) enrage(f);
   if (crit || f.boss || (src && src.lord)) floatText(f, fmt(dmg), crit ? '#ffd070' : '#fff', crit);
   if (f.hp <= 0) killFoe(f);
 }
@@ -773,13 +782,38 @@ function riseAt(s, k, gen, fxOnly) {
 function hurtAlly(a, dmg) {
   if (a.dead) return;
   if (a.guardT > 0) dmg *= .5;
+  if (a.lord) { if (B.invT > 0) return; if (B.awake && a.hp - dmg < a.maxHp * .3) { awaken(); return; } }
   a.hp -= dmg; a.hurt = .1;
   if (a.hp > 0) return;
   a.dead = true; a.hp = 0; play(a.act, a.act.A.death, { once: true });
   if (a.lord) { lordDown(); return; }
   // a fallen shadow sinks back and re-forms near the sovereign after a while
   a.sink = 1.2; VX.burst(a.x, a.z, .4, 8, { color: [0x5a2ab0, 0x2a1a40], speed: 1, up: 1.6, life: .6, size: .25, grav: 0 });
-  later(a.gen ? 9 : 6, () => { if (B.state === 'fight') B.reserve.push(a.gen ? { gen: a.gen, k: a.k } : { k: a.k }); });
+  B.fallen.push({ t: a.gen ? 9 : 6, u: a.gen ? { gen: a.gen, k: a.k } : { k: a.k } });
+}
+// last stand: once per charge the sovereign refuses to fall — the legion rises around it and turns the fight
+function awaken() {
+  B.awake = 0; B.invT = 3; lord.hp = lord.maxHp * .7; lord.anim = 'atk';
+  VX.flash('rgba(150,90,255,.5)', .6); VX.shake(.5); VX.pillar(lord.x, lord.z, 0xc9a8ff, 12); VX.shockwave(lord.x, lord.z, 5, 0xc9a8ff, .7);
+  for (const f of foes) if (!f.dead) { const d = dist(lord, f) || .1; if (d < 5) { const k = Math.min(3, 5 - d) / d; f.x += (f.x - lord.x) * k; f.z += (f.z - lord.z) * k; hurtFoe(f, lordDmg() * 8, lord); } }
+  for (const fl of B.fallen) B.reserve.unshift(fl.u); B.fallen = [];
+  let n = allies.filter(a => !a.dead).length;
+  while (B.reserve.length && n++ < FIELD_MAX) {
+    const u = B.reserve.shift(), an = rnd(0, 6.28), r = rnd(1, 2.4), e = makeShadow(u.k, lord.x + Math.cos(an) * r, lord.z + Math.sin(an) * r, u.gen);
+    e.rise = .4; e.act.root.position.y = -1.2;
+  }
+  for (const a of allies) if (!a.dead) { a.hp = Math.min(a.maxHp, a.hp + a.maxHp * .5); a.buffT = 8; }
+  toast('군주 각성! 역전의 시간'); floatText(lord, '각성', '#ffd27a', true); sfx('gen');
+}
+// the enemy side gets its comeback too: a boss near death goes berserk and calls its guard
+function enrage(f) {
+  f.rage = true; f.dmg *= 1.5; f.as *= .7; f.sp *= 1.3;
+  for (const m of f.act.mats) { m.userData.baseE = new THREE.Color(.7, .06, .03); m.userData.baseI = .7; m.emissive.copy(m.userData.baseE); m.emissiveIntensity = .7; }
+  VX.flash('rgba(255,40,40,.3)', .4); VX.shake(.4); VX.shockwave(f.x, f.z, 3, 0xff4060, .6); VX.pillar(f.x, f.z, 0xff4060, 9);
+  const R0 = regionOf(f.r);
+  for (let i = 0; i < 4; i++) { const an = i / 4 * 6.28; makeFoe(pick(R0.e), false, clamp(f.x + Math.cos(an) * 1.6, -ARENA, ARENA), clamp(f.z + Math.sin(an) * 1.6, -ARENA, ARENA)); B.total++; }
+  toast(`「${f.name}」 광폭화!`); floatText(f, '광폭화', '#ff6a5a', true); sfx('gen');
+  el('bossName').textContent = f.name + ' · 광폭화';
 }
 function castSkill(id, manual) {
   if (B.state !== 'fight' || !lord || lord.dead) return false;
@@ -822,7 +856,7 @@ const GEN_SKILLS = [
 ];
 const genSkill = gn => GEN_SKILLS[gn.r % REGIONS.length];
 function castGenSkill(a, live) {
-  const ri = a.gen.r % REGIONS.length, sk = GEN_SKILLS[ri], D = a.dmg * (B.empowerT > 0 ? 1.6 : 1);
+  const ri = a.gen.r % REGIONS.length, sk = GEN_SKILLS[ri], D = a.dmg * (B.empowerT > 0 ? 1.6 : 1) * B.grit;
   const near = r => live.filter(f => dist(a, f) < r), crew = r => [...allies.filter(o => !o.dead && dist(o, a) < r), ...(lord && !lord.dead && dist(lord, a) < r ? [lord] : [])];
   const aoe = (x, z, r, m) => { for (const f of live) if (!f.dead && Math.hypot(f.x - x, f.z - z) < r) hurtFoe(f, D * m, a); };
   if (!near(ri === 7 ? 6 : ri === 8 ? 9 : 4).length) return false;
@@ -864,7 +898,17 @@ function step(dt) {
   B.t += dt;
   if (timers.length) { for (const t of timers) t[0] -= dt; const due = timers.filter(t => t[0] <= 0); timers = timers.filter(t => t[0] > 0); for (const t of due) t[1](); }
   if (B.state !== 'fight') { B.nextT -= dt; if (B.nextT <= 0) startBattle(); return; }
-  B.empowerT = Math.max(0, B.empowerT - dt); B.domT = Math.max(0, B.domT - dt); B.goT = Math.max(0, B.goT - dt);
+  B.empowerT = Math.max(0, B.empowerT - dt); B.domT = Math.max(0, B.domT - dt); B.goT = Math.max(0, B.goT - dt); B.invT = Math.max(0, B.invT - dt);
+  for (let i = B.fallen.length - 1; i >= 0; i--) if ((B.fallen[i].t -= dt) <= 0) B.reserve.push(B.fallen.splice(i, 1)[0].u);
+  // tide of battle: each side's field strength ~ sqrt(total hp x total dps); the side being pushed back fights harder
+  { let ah = 0, ad = 0, fh = 0, fd = 0;
+    for (const a of allies) if (!a.dead) { ah += a.hp; ad += a.dmg / a.as; }
+    if (lord && !lord.dead) { ah += lord.hp; ad += lord.dmg / lord.as; }
+    for (const f of foes) if (!f.dead) { fh += f.hp; fd += f.dmg / f.as; }
+    const pa = Math.sqrt(ah * ad), pf = Math.sqrt(fh * fd), tgt = pa + pf > 0 ? pa / (pa + pf) : .5;
+    B.share += (tgt - B.share) * Math.min(1, dt * 2);
+    B.grit = B.share < .5 ? 1 + (.5 - B.share) * 1.2 : 1; }   // up to +60% when nearly overrun
+  if (B.awake && B.share < .3 && lord && !lord.dead) awaken();   // the line is about to break: the sovereign awakens
   for (const id in B.cds) B.cds[id] = Math.max(0, B.cds[id] - dt);
   spawnTick(dt);
   const live = foes.filter(f => !f.dead), mine = allies.filter(a => !a.dead);
@@ -899,7 +943,7 @@ function step(dt) {
     if (ml > .01) { const sp = 2.8 * dt; lord.x += mx / ml * sp; lord.z += mz / ml * sp; lord.moving = true; } else lord.moving = false;
     let t = null, bd = lord.range; for (const f of live) { const d = dist(lord, f); if (d < bd) { bd = d; t = f; } }
     lord.face = t || (lord.moving ? { x: lord.x + mx, z: lord.z + mz, dead: false } : null);
-    if (t && lord.atkT <= 0) { lord.atkT = lord.as; lord.anim = 'atk'; const tt = t, dmg = lord.dmg * rnd(.9, 1.1); shoot(lord, tt, 'lord', () => hurtFoe(tt, dmg, lord)); }
+    if (t && lord.atkT <= 0) { lord.atkT = lord.as; lord.anim = 'atk'; const tt = t, dmg = lord.dmg * rnd(.9, 1.1) * B.grit; shoot(lord, tt, 'lord', () => hurtFoe(tt, dmg, lord)); }
   }
   // foes: everything hunts the nearest of the legion
   for (const f of live) {
@@ -940,7 +984,7 @@ function step(dt) {
     if (bd > reach) { const sp = a.sp * dt; a.x += (t.x - a.x) / bd * sp; a.z += (t.z - a.z) / bd * sp; a.moving = true; return; }
     if (a.atkT > 0) return;
     a.atkT = a.as; a.anim = 'atk';
-    const dmg = a.dmg * rnd(.85, 1.15) * (emp ? 1.6 : 1) * (a.buffT > 0 ? 1.4 : 1), tt = t;
+    const dmg = a.dmg * rnd(.85, 1.15) * (emp ? 1.6 : 1) * (a.buffT > 0 ? 1.4 : 1) * B.grit, tt = t;
     if (a.range > 2) shoot(a, tt, ET[a.k].st === 'bow' || ET[a.k].st === 'xbow' ? 'arrow' : 'shadow', () => {
       if (a.aoe) { VX.smallBoom(tt.x, tt.z, a.aoe, 0x8a4dff); for (const f of foes) if (!f.dead && dist(f, tt) < a.aoe) hurtFoe(f, dmg, a); } else hurtFoe(tt, dmg, a);
     });
@@ -997,6 +1041,7 @@ function visual(dt) {
     if (hurt !== a.fl) { a.fl = hurt; for (const m of a.mats) { if (hurt) { m.emissive.setRGB(.9, .15, .08); m.emissiveIntensity = .8; } else { m.emissive.copy(m.userData.baseE); m.emissiveIntensity = m.userData.baseI; } } }
     a.mixer.update(dt);
     // shadows trail a little violet smoke while the empower buff is on
+    if (e.side === 'ally' && B.grit > 1.15 && Math.random() < dt * (B.grit - 1) * 12) VX.emit({ x: e.x + rnd(-.2, .2), y: rnd(.1, .6), z: e.z + rnd(-.2, .2), vy: rnd(1, 2), life: .5, size: .18, color: 0xff9a40, drag: 1 });
     if (e.side === 'ally' && B.empowerT > 0 && Math.random() < dt * 6) VX.emit({ x: e.x + rnd(-.2, .2), y: rnd(.1, .8), z: e.z + rnd(-.2, .2), vy: rnd(.8, 1.6), life: .6, size: .22, color: 0x9a6cff, drag: 1 });
   };
   allies.forEach(upd); foes.forEach(upd); if (lord) upd(lord);
@@ -1043,7 +1088,9 @@ function hud() {
   const inc = income(); el('income').textContent = `영토 수입 ${inc >= 10 ? fmt(inc) : inc.toFixed(1)}/초`;
   const res = B.reserve.length;
   el('armyTxt').innerHTML = `군단 <b>${armyCount()}</b> / ${cap()}${S.gens.length ? ` · 장군 ${genCount()}` : ''}${squadMul() > 1 ? ` · 1명당 ×${squadMul().toFixed(1)}` : ''}${res ? ` · 예비 ${res}` : ''}`;
-  el('lordNm').textContent = `군주 Lv.${S.lord.lv}`;
+  el('lordNm').textContent = `군주 Lv.${S.lord.lv}`; el('awk').textContent = B.awake ? '각성 ●' : '각성 ○';
+  el('tideFill').style.width = B.share * 100 + '%';
+  el('tideTxt').innerHTML = `전세 ${Math.round(B.share * 100)} : ${100 - Math.round(B.share * 100)}${B.grit > 1.02 ? ` · <b>역전 투지 +${Math.round((B.grit - 1) * 100)}%</b>` : ''}`;
   if (lord) el('lordHp').style.width = Math.max(0, lord.hp / lord.maxHp * 100) + '%';
   if (B.boss && !B.boss.dead) el('bossHp').style.width = B.boss.hp / B.boss.maxHp * 100 + '%'; else el('bossBox').hidden = true;
   el('bSpeed').textContent = `속도 ×${S.speed}`;
