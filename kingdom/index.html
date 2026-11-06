@@ -1505,7 +1505,8 @@ function buildTown() {
   ground.material.map = groundTex(0x4a6a34); ground.material.color.set(0xffffff); ground.material.needsUpdate = true;
   scene.background = lin(0x3e5a46); scene.fog = new THREE.Fog(lin(0x3e5a46), 40, 80);
   hemi.color.set(0xfff4e0); hemi.groundColor.set(0x2a3020); hemi.intensity = .85; sun.intensity = 1.15;
-  Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22 }); sun.shadow.camera.updateProjectionMatrix(); sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22 }); sun.shadow.camera.updateProjectionMatrix();
+  const sm = MOBILE ? 1024 : 2048; if (sun.shadow.mapSize.x !== sm) { sun.shadow.mapSize.set(sm, sm); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
   const plaza = new THREE.Mesh(new THREE.CircleGeometry(WALL_R - .3, 40), new THREE.MeshStandardMaterial({ color: lin('#8a7a5a'), roughness: 1, transparent: true, opacity: .55, depthWrite: false }));
   plaza.rotation.x = -Math.PI / 2; plaza.position.y = .015; plaza.receiveShadow = true; scene.add(plaza);
   // roads out of the gate and toward the fields
@@ -1536,14 +1537,16 @@ function scaffold(i) {
   for (const y of [.9, 1.9]) { g.add(mesh(G3.box(2.7, .06, .06), '#c8a070', x, y, z - r)); g.add(mesh(G3.box(2.7, .06, .06), '#c8a070', x, y, z + r)); }
   scene.add(g); return g;
 }
+// drop a group and free its geometry (materials are shared through MATS)
+function dropGroup(g) { if (!g) return; scene.remove(g); g.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
 // bring the 3D town in line with the player's buildings
 function syncTown(force) {
   if (!town.ready) return; const L = P();
   KC.SLOTS.forEach((s, i) => {
     const lv = L.blds[i], cur = town.blds[i];
-    if (s.k === 'wall') { if (town.wallLv !== lv) { if (town.wall) scene.remove(town.wall); town.wall = makeWall(lv); scene.add(town.wall); town.wallLv = lv; } }
+    if (s.k === 'wall') { if (town.wallLv !== lv) { dropGroup(town.wall); town.wall = makeWall(lv); scene.add(town.wall); town.wallLv = lv; } }
     else if (force || !cur || cur.lv !== lv || (s.k === 'embassy' && cur.ally !== L.alliance)) {
-      if (cur && cur.g) scene.remove(cur.g);
+      if (cur) dropGroup(cur.g);
       let g = null; if (lv > 0) { g = makeBuilding(s.k, lv); g.position.set(PLOT[i][0], 0, PLOT[i][1]); g.rotation.y = Math.atan2(-PLOT[i][0], -PLOT[i][1] + 30) * .15; g.traverse(o => { o.userData.slot = i; }); scene.add(g); if (cur && !force) VX.pillar(PLOT[i][0], PLOT[i][1], 0xf1d58c, 5); }
       town.blds[i] = { g, lv, ally: L.alliance };
     }
@@ -1551,7 +1554,7 @@ function syncTown(force) {
     if (ring) { const open = KC.keepLv(L) >= s.need; ring.visible = lv === 0 && (open || s.need === nextUnlock(L)); ring.material.color.set(open ? 0xf1d58c : 0x777788); ring.material.opacity = open ? .55 + Math.sin(performance.now() / 300) * .2 : .25; }
     const building = L.bq.some(q => q.slot === i);
     if (building && !town.scaff[i]) town.scaff[i] = scaffold(i);
-    if (!building && town.scaff[i]) { scene.remove(town.scaff[i]); town.scaff[i] = null; }
+    if (!building && town.scaff[i]) { dropGroup(town.scaff[i]); town.scaff[i] = null; }
   });
 }
 
@@ -2056,12 +2059,12 @@ function catchUp(real) {
   el('away').hidden = false;
 }
 el('awayOk').onclick = () => { audio(); el('away').hidden = true; };
-document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else { const o = JSON.parse(localStorage.getItem(KEY) || 'null'); if (o && o.real && Date.now() - o.real > 60000) { catchUp(o.real); syncTown(); syncLife(); } } });
+document.addEventListener('visibilitychange', () => { if (!KC.W || !running) return; if (document.hidden) save(); else { const o = JSON.parse(localStorage.getItem(KEY) || 'null'); if (o && o.real && Date.now() - o.real > 60000) { catchUp(o.real); syncTown(); syncLife(); } } });
 
 /* ================= LOOP ================= */
 let last = performance.now(), running = false, uiT = 0, saveT = 0, lifeT = 0, mailSeen = 0;
 // errors show on screen (phones have no console at hand) and never stop the loop
-const VERSION = 'v1.4';
+const VERSION = 'v1.5';
 function showErr(e) { const m = (e && (e.stack || e.message)) || String(e); console.error(e); if (showErr.n++ > 3) return; let d = el('errbox'); if (!d) { d = document.createElement('div'); d.id = 'errbox'; d.style.cssText = 'position:absolute;left:8px;right:8px;top:40%;z-index:20;background:rgba(80,10,10,.92);color:#fff;font:11px monospace;padding:8px;border-radius:8px;white-space:pre-wrap;max-height:40%;overflow:auto'; d.onclick = () => d.remove(); document.body.appendChild(d); } d.textContent = `[${VERSION}] 오류 (눌러서 닫기)\n` + m.slice(0, 600); }
 showErr.n = 0;
 addEventListener('error', e => showErr(e.error || e.message));
@@ -2101,6 +2104,11 @@ function begin(fresh) {
   try { buildTown(); syncLife(); } catch (e) { showErr(e); }
   running = true; resize(); hud();   // resize also fits the fog to the camera
 }
+// phones sometimes drop the 3D context (app in the background, GPU memory): save and reload instead of a black screen
+let glLost = false;
+function glRecover(why) { if (glLost) return; glLost = true; save(); toast('화면을 다시 불러와요…'); console.warn('gl', why); setTimeout(() => location.reload(), 600); }
+glc.addEventListener('webglcontextlost', e => { e.preventDefault(); glRecover('lost'); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && renderer && renderer.getContext().isContextLost()) glRecover('hidden'); });
 el('startBtn').onclick = () => { audio(); try { begin(true); } catch (e) { showErr(e); } };
 async function start() {
   initGL();
