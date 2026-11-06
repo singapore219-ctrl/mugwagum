@@ -1593,7 +1593,8 @@ function resize() {
   ovc.width = W * dpr; ovc.height = H * dpr;
   const mc = el('mapc'); mc.width = W * dpr; mc.height = H * dpr;
   if (!camera) return;
-  const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(13 / (half * camera.aspect), 11 / half), tilt = .9;
+  // narrow portrait screens frame the walled town (pan to the fields); wide screens show the fields too
+  const half = Math.tan(camera.fov * Math.PI / 360), wide = camera.aspect < .75 ? 9.5 : 13, need = Math.max(wide / (half * camera.aspect), 11 / half), tilt = .9;
   CAM.h = Math.cos(tilt) * need; CAM.back = Math.sin(tilt) * need; camDist = need; camera.far = need * 3 + 60; camera.updateProjectionMatrix();
   camFollow(true); if (tab === 'map') drawMap();
 }
@@ -2085,7 +2086,7 @@ function notify() {
 function begin(fresh) {
   el('title').hidden = true;
   if (fresh) { KC.newWorld(Date.now() % 1e9); save(); }
-  buildTown(); syncLife(); running = true; hud();
+  buildTown(); syncLife(); running = true; resize(); hud();   // resize also fits the fog to the camera
 }
 el('startBtn').onclick = () => { audio(); begin(true); };
 async function start() {
