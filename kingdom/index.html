@@ -2058,7 +2058,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) save(
 /* ================= LOOP ================= */
 let last = performance.now(), running = false, uiT = 0, saveT = 0, lifeT = 0, mailSeen = 0;
 // errors show on screen (phones have no console at hand) and never stop the loop
-const VERSION = 'v1.2';
+const VERSION = 'v1.3';
 function showErr(e) { const m = (e && (e.stack || e.message)) || String(e); console.error(e); if (showErr.n++ > 3) return; let d = el('errbox'); if (!d) { d = document.createElement('div'); d.id = 'errbox'; d.style.cssText = 'position:absolute;left:8px;right:8px;top:40%;z-index:20;background:rgba(80,10,10,.92);color:#fff;font:11px monospace;padding:8px;border-radius:8px;white-space:pre-wrap;max-height:40%;overflow:auto'; d.onclick = () => d.remove(); document.body.appendChild(d); } d.textContent = `[${VERSION}] 오류 (눌러서 닫기)\n` + m.slice(0, 600); }
 showErr.n = 0;
 addEventListener('error', e => showErr(e.error || e.message));
@@ -2077,7 +2077,7 @@ function frameBody(now) {
     if (sheet && sheetLive && !(now - (frame.sheetT || 0) < 1000)) { frame.sheetT = now; renderSheet(); }
     if (tab === 'map' && !(now - (frame.mapT || 0) < 100)) { frame.mapT = now; drawMap(); }
   }
-  if (renderer && tab === 'town') {
+  if (renderer && tab === 'town' && KC.W && town.ready) {   // no world yet on the title screen
     updateLife(dt);
     for (const b of town.blds) if (b && b.g && b.g.userData.orb) b.g.userData.orb.position.y += Math.sin(now / 400) * .002;
     const tm = FXOPT.on && MGFX.hasPost ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping; if (renderer.toneMapping !== tm) renderer.toneMapping = tm;
