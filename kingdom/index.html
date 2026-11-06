@@ -1,0 +1,2105 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0a10">
+<title>무과금 왕국</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@700;800&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="../lib/three.min.js"></script>
+<script src="../lib/GLTFLoader.js"></script>
+<script src="../lib/SkeletonUtils.js"></script>
+<script src="../lib/CopyShader.js"></script>
+<script src="../lib/LuminosityHighPassShader.js"></script>
+<script src="../lib/EffectComposer.js"></script>
+<script src="../lib/RenderPass.js"></script>
+<script src="../lib/ShaderPass.js"></script>
+<script src="../lib/UnrealBloomPass.js"></script>
+<script src="../lib/mgfx.js"></script>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0b0a10; --acc:#a77bff; --acc2:#d6c2ff; --text:#ece8f4; --dim:rgba(236,232,244,.56); --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.16);
+  --gold:#f1d58c; --good:#8fe0a0; --bad:#ff8a78;
+  --serif:'Nanum Myeongjo', 'Batang', serif;
+  --sans:'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+#game{position:relative;width:100%;height:100%;overflow:hidden;display:flex;flex-direction:column}
+#view{position:relative;flex:1;min-height:0;touch-action:none}
+#gl,#ov{position:absolute;inset:0;width:100%;height:100%;display:block}
+#ov{pointer-events:none}
+button{font-family:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
+
+/* ===== 무과금 왕국 UI ===== */
+.glass{background:rgba(10,8,16,.55);border:1px solid rgba(255,255,255,.1);border-radius:10px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+#mapc{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;background:#18201a}
+#top{position:absolute;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + 6px);display:flex;flex-wrap:wrap;gap:4px;pointer-events:none;z-index:3}
+.rc{display:flex;align-items:center;gap:4px;padding:3px 8px;font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rc i{font-style:normal;font-size:12px}
+.rc.low{color:#ff9a8a}
+.rc.pow{color:var(--gold);margin-left:auto}
+#queues{position:absolute;left:8px;top:calc(env(safe-area-inset-top,0px) + 34px);display:flex;flex-direction:column;gap:4px;z-index:3;max-width:min(240px,55vw)}
+.qrow{display:flex;align-items:center;gap:6px;padding:4px 8px;font-size:11px;cursor:pointer}
+.qrow b{font-weight:700;color:#efe8ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.qrow span{color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+.qrow .qb{position:relative;height:3px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;width:44px;flex:none}
+.qrow .qb i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#7a3cff,#d6c2ff)}
+.qrow.idle b{color:#8fe0a0}
+#side{position:absolute;right:8px;top:calc(env(safe-area-inset-top,0px) + 34px);display:flex;flex-direction:column;gap:5px;z-index:3;align-items:flex-end}
+.chip{background:rgba(10,8,16,.55);border:1px solid rgba(255,255,255,.16);color:#efe8ff;border-radius:16px;padding:5px 10px;font-size:11px;font-weight:500}
+.chip.on{border-color:rgba(167,123,255,.85);color:#fff;background:rgba(98,56,190,.5)}
+#think{max-width:min(260px,60vw);font-size:10.5px;color:#d6c2ff;padding:5px 9px;line-height:1.4;pointer-events:none;text-align:right}
+#questbar{position:absolute;left:8px;right:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 62px);display:flex;align-items:center;gap:8px;padding:6px 10px;z-index:3;font-size:12px}
+#questbar b{color:var(--gold);flex:none}
+#questbar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#nav{position:absolute;left:0;right:0;bottom:0;display:flex;padding:4px 4px calc(env(safe-area-inset-bottom,0px) + 4px);gap:2px;z-index:4;background:linear-gradient(0deg,rgba(8,6,14,.95),rgba(8,6,14,.82));border-top:1px solid rgba(255,255,255,.08)}
+#nav button{flex:1;min-width:0;background:none;border:0;border-radius:8px;padding:5px 0 4px;display:flex;flex-direction:column;align-items:center;gap:1px;font-size:10.5px;color:var(--dim);position:relative}
+#nav button i{font-style:normal;font-size:18px;line-height:1.1}
+#nav button.on{color:#fff;background:rgba(167,123,255,.18)}
+#nav .badge{position:absolute;top:2px;right:calc(50% - 18px);background:#e0503a;color:#fff;border-radius:8px;font-size:9px;padding:0 4px;font-weight:700}
+#sheet{position:absolute;left:0;right:0;bottom:0;z-index:6;max-height:78%;display:flex;flex-direction:column;background:rgba(16,13,24,.97);border-top:1px solid rgba(167,123,255,.4);border-radius:14px 14px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.5)}
+@media (orientation:landscape) and (min-width:700px){#sheet{left:auto;width:min(460px,52vw);top:0;bottom:calc(env(safe-area-inset-bottom,0px) + 54px);max-height:none;border-radius:0 0 0 14px;border-top:0;border-left:1px solid rgba(167,123,255,.4)}}
+#sheetHead{display:flex;align-items:center;gap:8px;padding:12px 14px 8px}
+#sheetHead b{font-size:16px;flex:1;font-family:var(--serif)}
+#sheetBody{overflow-y:auto;padding:0 14px calc(env(safe-area-inset-bottom,0px) + 16px);-webkit-overflow-scrolling:touch}
+.x{background:rgba(255,255,255,.08);border:0;border-radius:50%;width:30px;height:30px;font-size:15px;color:#fff}
+.sec{font-size:12px;color:var(--acc2);font-weight:700;margin:14px 0 6px;letter-spacing:.3px}
+.card2{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:7px}
+.row2{display:flex;align-items:center;gap:8px}
+.row2 .grow{flex:1;min-width:0}
+.t1{font-size:13.5px;font-weight:700;color:#f4f0fa}
+.t2{font-size:11.5px;color:var(--dim);margin-top:1px;line-height:1.45}
+.cost{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11.5px;margin-top:4px;font-variant-numeric:tabular-nums}
+.cost .no{color:#ff8a78}
+.btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);color:#efe8ff;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:500;white-space:nowrap;line-height:1.2}
+.btn:disabled{opacity:.38}
+.btn.pri{background:#8a5cf0;border-color:#8a5cf0;color:#fff;font-weight:700}
+.btn.gold{background:#a8822a;border-color:#c9a040;color:#fff;font-weight:700}
+.btn.sm{padding:5px 8px;font-size:11px}
+.btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;margin-right:4px;vertical-align:1px}
+.r0{background:#5a5a68;color:#fff}.r1{background:#2f7a4a;color:#fff}.r2{background:#6a3cc8;color:#fff}.r3{background:#c08a20;color:#fff}
+.bar2{height:5px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:5px}
+.bar2 i{display:block;height:100%;background:linear-gradient(90deg,#7a3cff,#d6c2ff)}
+.tgl{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.sw{width:44px;height:24px;border-radius:12px;background:rgba(255,255,255,.15);position:relative;border:0;flex:none}
+.sw::after{content:'';position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s}
+.sw.on{background:#8a5cf0}.sw.on::after{left:23px}
+.log{font-size:11.5px;line-height:1.55;color:#e4dcf4}
+.log div{padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.log time{color:var(--dim);font-size:10.5px;margin-right:6px;font-variant-numeric:tabular-nums}
+.mail{padding:8px 0;border-bottom:1px solid var(--line)}
+.mail b{font-size:12.5px}.mail.win b{color:#8fe0a0}.mail.lose b{color:#ff9a8a}.mail.warn b{color:#ffcf70}.mail.rally b{color:#9ad0ff}
+.mail p{margin:2px 0 0;font-size:11.5px;color:var(--dim);line-height:1.45}
+input[type=range]{width:100%;accent-color:#a77bff}
+.seg{display:flex;gap:4px;flex-wrap:wrap}
+.seg button{flex:1;min-width:52px}
+.seg button.on{background:#8a5cf0;border-color:#8a5cf0;color:#fff}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;font-size:11.5px;font-variant-numeric:tabular-nums}
+.grid3 div{background:rgba(255,255,255,.04);border-radius:6px;padding:5px 7px}
+#toast{position:absolute;left:50%;top:22%;transform:translateX(-50%);font-weight:800;font-size:15px;color:#fff;background:rgba(20,14,34,.88);border:1px solid rgba(167,123,255,.5);
+  padding:8px 14px;border-radius:12px;pointer-events:none;opacity:0;transition:opacity .35s;z-index:9;max-width:88%;text-align:center}
+#toast.show{opacity:1;transition:none}
+#toast.bad{border-color:rgba(255,90,70,.7);color:#ffd0c8}
+.ovl{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:20px 16px;background:radial-gradient(ellipse at 50% 40%,rgba(36,22,64,.94),rgba(6,5,10,.98))}
+.card{width:min(460px,100%);text-align:center;max-height:100%;overflow-y:auto}
+.logo{font-family:var(--serif);font-weight:800;font-size:clamp(30px,9vw,44px);color:var(--acc2);line-height:1.15;text-shadow:0 0 30px rgba(167,123,255,.55),0 2px 0 #1a0f33}
+.sub{color:var(--dim);font-size:13px;line-height:1.65;margin:10px 0 16px}
+.rules{text-align:left;font-size:12.5px;line-height:1.75;background:rgba(255,255,255,.04);border:1px solid var(--line2);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.rules b{color:var(--acc2)}
+.wide{width:100%;padding:13px;font-size:15px}
+.loadbar{height:5px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:16px}
+.loadbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#6a3cd8,#d6c2ff)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0 16px;text-align:left}
+.stats div{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--dim)}
+.stats b{display:block;color:#fff;font-size:15px;margin-top:2px}
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="view">
+    <canvas id="gl"></canvas>
+    <canvas id="ov"></canvas>
+    <canvas id="mapc" hidden></canvas>
+    <div id="top"></div>
+    <div id="queues"></div>
+    <div id="side">
+      <button class="chip on" id="bChanc">🧠 재상 켬</button>
+      <button class="chip" id="bFx">효과 켬</button>
+      <div class="glass" id="think" hidden></div>
+    </div>
+    <div class="glass" id="questbar"><b>임무</b><span id="questTxt"></span><button class="btn sm gold" id="questBtn">받기</button></div>
+    <div id="nav">
+      <button data-tab="town" class="on"><i>🏰</i>영지</button>
+      <button data-tab="map"><i>🗺</i>지도</button>
+      <button data-tab="heroes"><i>🎖</i>영웅</button>
+      <button data-tab="army"><i>⚔</i>군대</button>
+      <button data-tab="tech"><i>📚</i>연구</button>
+      <button data-tab="ally"><i>🤝</i>동맹</button>
+      <button data-tab="chanc"><i>🧠</i>재상</button>
+      <button data-tab="mail"><i>📜</i>소식<span class="badge" id="mailBadge" hidden></span></button>
+    </div>
+    <div id="sheet" hidden><div id="sheetHead"><b id="sheetTitle"></b><button class="x" id="sheetX" aria-label="닫기">✕</button></div><div id="sheetBody"></div></div>
+    <div id="toast"></div>
+  </div>
+  <div class="ovl" id="loading"><div class="card"><div class="logo">무과금 왕국</div><p class="sub" id="loadMsg">왕국을 세우고 있어요…</p><div class="loadbar"><i id="loadBar"></i></div></div></div>
+  <div class="ovl" id="title" hidden>
+    <div class="card">
+      <div class="logo">무과금 왕국</div>
+      <p class="sub">작은 영지에서 시작해 왕좌까지.<br>열한 명의 AI 영주가 같은 땅에서 함께 자라요.</p>
+      <div class="rules">
+        <b>영지</b>: 농장·벌목장·채석장·철광산이 시간마다 자원을 만들어요. 본성을 올리면 새 건물 자리가 열리고, 모든 건물은 본성 레벨까지 올라가요(최대 30).<br>
+        <b>군대</b>: 보병은 기병에, 기병은 궁병에, 궁병은 보병에 강해요. 병사는 식량을 먹고, 다친 병사는 치료소에서 고쳐요.<br>
+        <b>지도</b>: 자원지에서 채집하고, 야수 소굴을 토벌하고, 동맹과 함께 거대 야수와 중앙의 <b>왕좌</b>에 집결하세요. 왕좌를 가진 동맹은 자원 생산 +15%.<br>
+        <b>AI 영주</b>: 농부·약탈자·상인·수비형 등 저마다 성격이 있어요. 같은 규칙으로 건설하고, 동맹을 맺고, 약한 영지를 노려요. 선물로 호감을 얻거나 동맹에 들어가 보세요.<br>
+        <b>재상</b>: 켜 두면 AI 재상이 건설·연구·훈련·치료·채집·사냥을 대신 해요. 무엇을 왜 했는지 기록해 두고, 하나씩 끌 수도 있어요.<br>
+        꺼 둔 동안에도 최대 12시간이 흘러요.
+      </div>
+      <button class="btn pri wide" id="startBtn">영지 세우기</button>
+    </div>
+  </div>
+  <div class="ovl" id="away" hidden>
+    <div class="card">
+      <div class="logo" style="font-size:28px">그동안의 영지</div>
+      <p class="sub" id="awayMsg"></p>
+      <div class="stats" id="awayStats"></div>
+      <button class="btn pri wide" id="awayOk">확인</button>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+'use strict';
+const el = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const THREE = window.THREE;
+const MOBILE = matchMedia('(pointer:coarse)').matches;
+const FXOPT = { on: (() => { try { return localStorage.getItem('mug-fx') !== 'off'; } catch (e) { return true; } })() };
+// look switches (remembered on this device): 만화풍 shared with 오토체스 (on by default), 도트 for this game (off by default)
+const optOn = (k, def) => { try { const v = localStorage.getItem(k); return v ? v === 'on' : def; } catch (e) { return def; } };
+const LOOK = { toon: optOn('mug-toon', true), dot: optOn('mug-dot-shadow', false), dotSize: (() => { try { return +localStorage.getItem('mug-dot-size') || 2; } catch (e) { return 2; } })() };
+const VX = window.MGFX.VX;
+function fmt(n) {
+  n = Math.floor(n);
+  if (n < 1e4) return n.toLocaleString('ko-KR');
+  const u = [[1e16, '경'], [1e12, '조'], [1e8, '억'], [1e4, '만']];
+  for (const [v, s] of u) if (n >= v) { const x = n / v; return (x >= 100 ? Math.floor(x) : x.toFixed(x >= 10 ? 1 : 2).replace(/\.?0+$/, '')) + s; }
+  return String(n);
+}
+const josa = (w, a, b) => { const c = w.charCodeAt(w.length - 1); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? a : b; };
+
+/* ================= 3D ================= */
+const view = el('view'), glc = el('gl'), ovc = el('ov'), octx = ovc.getContext('2d');
+let camDist = 30, W = 0, H = 0, dpr = 1, renderer, scene, camera, ground, MODELS = {}, CLIPS = {}, PROPS = {}, CHAR_SCALE = .5, GLOW_TEX, sun, hemi;
+const lin = h => new THREE.Color(h).convertSRGBToLinear();
+const ARENA = 9;   // the hunting field is a square, -ARENA..ARENA on x and z
+const HOME_Z = 4.5;   // the sovereign's post in the south half; the rifts are all on the north edge
+const CAM = { h: 20, back: 14, x: 0, z: 0 };
+function initGL() {
+  renderer = new THREE.WebGLRenderer({ canvas: glc, antialias: true });
+  renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(40, 1, .5, 90);
+  hemi = new THREE.HemisphereLight(0xd8d0ff, 0x1a1420, .7); scene.add(hemi);
+  sun = new THREE.DirectionalLight(0xfff0e0, 1.05); sun.position.set(6, 14, 8); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); sun.shadow.camera.layers.enableAll();
+  Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 16, bottom: -16 }); sun.target.position.set(0, 0, -3); scene.add(sun, sun.target);
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(.3, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); GLOW_TEX = new THREE.CanvasTexture(c);
+  MGFX.init({ renderer, scene, camera, host: view, glowTex: GLOW_TEX, mobile: MOBILE, low: () => !FXOPT.on, post: () => FXOPT.on, toon: () => LOOK.toon, exposure: 1, grade: { vig: .38, con: 1.05, sat: .95 }, bloom: { threshold: 1, strength: .6 } });
+  ground = new THREE.Mesh(new THREE.PlaneGeometry(110, 110), new THREE.MeshStandardMaterial({ color: 0x334422, roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.z = 0; ground.receiveShadow = true; scene.add(ground);
+  resize();
+}
+// painted-looking ground: soft blotches over the region colour, so the field never reads as one flat plane
+function groundTex(base) {
+  const N = 512, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d');
+  const col = new THREE.Color(base); g.fillStyle = '#' + col.getHexString(); g.fillRect(0, 0, N, N);
+  // every mark is drawn at its wrapped positions too, so the repeated texture has no visible seams
+  const wrap = (x, y, r, fn) => { for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) if (x + ox + r > 0 && x + ox - r < N && y + oy + r > 0 && y + oy - r < N) fn(x + ox, y + oy); };
+  for (let k = 0; k < 420; k++) {
+    const x = Math.random() * N, y = Math.random() * N, r = 8 + Math.random() * 46, dark = Math.random() < .55, a = dark ? .06 + Math.random() * .1 : .03 + Math.random() * .05;
+    wrap(x, y, r, (px, py) => {
+      const gr = g.createRadialGradient(px, py, 0, px, py, r);
+      gr.addColorStop(0, dark ? `rgba(0,0,0,${a})` : `rgba(255,250,230,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(px - r, py - r, r * 2, r * 2);
+    });
+  }
+  g.lineWidth = 1; for (let k = 0; k < 2600; k++) { const x = Math.random() * N, y = Math.random() * N; g.strokeStyle = `rgba(${Math.random() < .5 ? '0,0,0,.18' : '255,255,240,.08'})`; g.beginPath(); g.moveTo(x, y); g.lineTo(x + rnd(-1, 1.5), y - rnd(2, 5)); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(9, 9); t.anisotropy = 4;
+  return t;
+}
+// KayKit's nature atlas is lime green with red trunks; recolour a copy toward sage leaves and brown bark
+const MUTED = new Map();
+function muted(tex) {
+  if (MUTED.has(tex)) return MUTED.get(tex);
+  const img = tex.image, c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height), a = d.data;
+  const f = (p, q, t) => { t = (t % 1 + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < .5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+  for (let i = 0; i < a.length; i += 4) {
+    const r = a[i] / 255, gg = a[i + 1] / 255, b = a[i + 2] / 255, mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+    if (mx === mn) continue;
+    let l = (mx + mn) / 2; const dd = mx - mn; let s = l > .5 ? dd / (2 - mx - mn) : dd / (mx + mn);
+    let h = (mx === r ? (gg - b) / dd + (gg < b ? 6 : 0) : mx === gg ? (b - r) / dd + 2 : (r - gg) / dd + 4) * 60;
+    if (s < .15) continue;
+    if (h > 60 && h < 160) { h = 92 + (h - 100) * .35; s *= .5; l *= .72; }
+    else if (h < 40 || h > 330) { h = 20; s *= .45; l *= .7; }
+    else continue;
+    const q = l < .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q, hh = h / 360;
+    a[i] = f(p, q, hh + 1 / 3) * 255; a[i + 1] = f(p, q, hh) * 255; a[i + 2] = f(p, q, hh - 1 / 3) * 255;
+  }
+  g.putImageData(d, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.encoding = tex.encoding; t.flipY = tex.flipY; t.wrapS = tex.wrapS; t.wrapT = tex.wrapT;
+  MUTED.set(tex, t); return t;
+}
+const DOT = { rt: null, scene: null, cam: null, mat: null, cc: new THREE.Color() };
+function dotPass() {
+  const k = LOOK.dotSize, w = Math.max(1, Math.round(W / k)), h = Math.max(1, Math.round(H / k));
+  if (!DOT.scene) {
+    DOT.mat = new THREE.ShaderMaterial({
+      uniforms: { tex: { value: null }, px: { value: new THREE.Vector2() }, exposure: { value: 1 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: `uniform sampler2D tex; uniform vec2 px; uniform float exposure; varying vec2 vUv;
+        vec3 rrt(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
+        vec3 aces(vec3 c){ const mat3 i = mat3(vec3(0.59719,0.07600,0.02840), vec3(0.35458,0.90834,0.13383), vec3(0.04823,0.01566,0.83777));
+          const mat3 o = mat3(vec3(1.60475,-0.10208,-0.00327), vec3(-0.53108,1.10813,-0.07276), vec3(-0.07367,-0.00605,1.07602));
+          c *= exposure / 0.6; c = i * c; c = rrt(c); c = o * c; return clamp(c, 0.0, 1.0); }
+        vec3 srgb(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(0.0031308, c)); }
+        void main(){
+          vec2 uv = (floor(vUv / px) + 0.5) * px;
+          vec4 c = texture2D(tex, uv);
+          if (c.a < 0.5) {
+            float n = max(max(texture2D(tex, uv + vec2(px.x, 0.0)).a, texture2D(tex, uv - vec2(px.x, 0.0)).a), max(texture2D(tex, uv + vec2(0.0, px.y)).a, texture2D(tex, uv - vec2(0.0, px.y)).a));
+            if (n < 0.5) discard;
+            gl_FragColor = vec4(0.05, 0.035, 0.07, 1.0); return;
+          }
+          vec3 col = aces(c.rgb);
+          float l = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(vec3(l), col, 1.15);
+          gl_FragColor = vec4(srgb(clamp(col, 0.0, 1.0)), 1.0);
+        }`,
+      depthTest: false, depthWrite: false, transparent: true,
+    });
+    DOT.scene = new THREE.Scene(); DOT.cam = new THREE.Camera();
+    const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), DOT.mat); q.frustumCulled = false; DOT.scene.add(q);
+  }
+  if (!DOT.rt || DOT.rt.width !== w || DOT.rt.height !== h) {
+    if (DOT.rt) DOT.rt.dispose();
+    const hf = renderer.capabilities.isWebGL2 && renderer.extensions.has('EXT_color_buffer_float');
+    DOT.rt = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, type: hf ? THREE.HalfFloatType : THREE.UnsignedByteType });
+    DOT.mat.uniforms.tex.value = DOT.rt.texture; DOT.mat.uniforms.px.value.set(1 / w, 1 / h);
+  }
+  DOT.mat.uniforms.exposure.value = renderer.toneMappingExposure;
+  for (const o of scene.children) if (o.isLight) o.layers.enable(1);   // lights are layer-filtered too
+  const bg = scene.background, ca = renderer.getClearAlpha(), tm = renderer.toneMapping; renderer.getClearColor(DOT.cc);
+  scene.background = null; camera.layers.set(1); renderer.toneMapping = THREE.NoToneMapping;   // the quad does the ACES step
+  renderer.setRenderTarget(DOT.rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, camera);
+  renderer.setRenderTarget(null); renderer.toneMapping = tm; camera.layers.set(0); scene.background = bg; renderer.setClearColor(DOT.cc, ca);
+  const ac = renderer.autoClear; renderer.autoClear = false; renderer.render(DOT.scene, DOT.cam); renderer.autoClear = ac;
+}
+async function loadAssets() {
+  const loader = new THREE.GLTFLoader(), files = ['chars', 'anims', 'props'], prog = [0, 0, 0];
+  const fetchModel = (f, i) => new Promise((ok, bad) => {
+    const x = new XMLHttpRequest(); x.open('GET', `../assets/${f}.txt?v=2`);
+    x.onprogress = e => { prog[i] = e.loaded; el('loadBar').style.width = Math.min(100, (prog[0] + prog[1] + prog[2]) / 7e6 * 100) + '%'; };
+    x.onerror = () => bad(new Error(f));
+    x.onload = () => {
+      try {
+        const bin = atob(x.responseText.trim()), u8 = new Uint8Array(bin.length);
+        for (let k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k);
+        const cib = window.createImageBitmap; window.createImageBitmap = undefined;
+        try { loader.parse(u8.buffer, '', ok, bad); } finally { window.createImageBitmap = cib; }
+      } catch (e) { bad(e); }
+    };
+    x.send();
+  });
+  const [chars, anims, props] = await Promise.all(files.map(fetchModel));
+  const names = new Set(); anims.scene.traverse(o => names.add(o.name));
+  for (const c of chars.scene.children) { c.traverse(o => { const m = /^(.*)_(\d+)$/.exec(o.name); if (m && names.has(m[1])) o.name = m[1]; }); MODELS[c.name] = c; }
+  for (const a of anims.animations) CLIPS[a.name] = a;
+  for (const p of props.scene.children) PROPS[p.name] = p;
+  const kb = new THREE.Box3().setFromObject(MODELS.Knight); CHAR_SCALE = 1.05 / (kb.max.y - kb.min.y);
+  MGFX.assets({ clips: CLIPS, props: PROPS, charScale: CHAR_SCALE });
+  try { await MGFX.hdSetup({ base: '../assets/models/', knight: MODELS.Knight, charH: 1.05, preload: [], onReady: () => {} }); } catch (e) { console.warn(e); }
+}
+function styleAnims(st, sk) {
+  return {
+    idle: sk ? 'Skeletons_Idle' : st === 'bow' ? 'Ranged_Bow_Idle' : st === '2h' ? 'Idle_B' : 'Idle_A',
+    run: sk ? 'Skeletons_Walking' : st === 'bow' ? 'Running_HoldingBow' : 'Running_A',
+    atk: { '1h': ['Melee_1H_Attack_Chop', 'Melee_1H_Attack_Slice_Diagonal'], '2h': ['Melee_2H_Attack_Chop'], bow: ['Ranged_Bow_Release'], magic: ['Ranged_Magic_Shoot'], xbow: ['Ranged_1H_Shoot'] }[st] || ['Melee_1H_Attack_Chop'],
+    death: sk ? 'Skeletons_Death' : 'Death_A',
+  };
+}
+function propClone(name, glow) {
+  const p = PROPS[name]; if (!p) return null; const c = p.clone(true);
+  if (glow) c.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(glow); o.material.emissiveIntensity = .9; } });
+  return c;
+}
+// shadows: body darkened toward violet-black with a violet rim, glowing eyes, weapons tinted the same way
+function shadowRim(mat) {
+  mat.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <output_fragment>',
+      'float rimS = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 2.2);\n  outgoingLight += vec3(0.55, 0.3, 1.0) * rimS * 0.75;\n#include <output_fragment>');
+  };
+  mat.customProgramCacheKey = () => 'shadowrim';
+}
+const SHADOW_BODY = new THREE.Color(0x1a1524), SHADOW_GLOW = new THREE.Color(0x3a1488);
+function makeActor(d, sc = 1) {
+  const hd = MGFX.hd(d.hd), root = new THREE.Group(), m = THREE.SkeletonUtils.clone(hd ? hd.root : MODELS[d.m]);
+  m.scale.setScalar((hd ? 1 : CHAR_SCALE) * (d.s || 1) * sc);
+  const mats = [];
+  m.traverse(n => {
+    if (!n.isMesh) return;
+    n.castShadow = true; n.frustumCulled = false; n.material = n.material.clone(); mats.push(n.material);
+    if (d.shadow) { n.material.color.multiply(SHADOW_BODY); n.material.emissive = SHADOW_GLOW.clone(); n.material.emissiveIntensity = .14; shadowRim(n.material); }
+    else { MGFX.addRim(n.material); if (d.tint && !hd) n.material.color.multiply(new THREE.Color(d.tint)); if (d.glow) { n.material.emissive = new THREE.Color(d.glow); n.material.emissiveIntensity = .2; } }
+    n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity;
+  });
+  root.add(m);
+  const H0 = (hd ? hd.H : 1.05) * (d.s || 1) * sc;
+  const a = { root, m, mats, hd, mixer: new THREE.AnimationMixer(m), acts: {}, cur: null, curName: '', lock: 0, A: styleAnims(d.st, d.sk), h: H0, atkI: 0 };
+  const hr = m.getObjectByName('handslotr'), hl = m.getObjectByName('handslotl');
+  const wglow = d.shadow ? '#7a3cff' : d.wglow;
+  if (d.r && hr) { const w = MGFX.fitProp(propClone(d.r, wglow), hd); if (w) hr.add(w); }
+  if (d.l && hl) { const w = MGFX.fitProp(propClone(d.l, wglow), hd); if (w) hl.add(w); }
+  if (d.shadow) {   // two violet eye-glints at head height
+    for (const sx of [-.07, .07]) { const e = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0xb98cff, blending: THREE.AdditiveBlending, depthWrite: false })); e.scale.setScalar(.16 * (d.s || 1) * sc); e.position.set(sx * (d.s || 1) * sc, H0 * .86, .14 * (d.s || 1) * sc); root.add(e); }
+  }
+  play(a, a.A.idle); a.mixer.update(Math.random() * 2);
+  MGFX.toonObj(a, m);
+  if (d.shadow && LOOK.toon) m.traverse(n => { if (n.isMesh && !n.userData.outline && n.material.isMeshToonMaterial) shadowRim(n.material); });
+  if (LOOK.dot) root.traverse(o => o.layers.set(1));
+  scene.add(root);
+  return a;
+}
+function play(a, name, opt = {}) {
+  const lib = a.hd ? a.hd.clip : n => CLIPS[n];
+  const clip = lib(name) || (/Idle/.test(name) ? lib('Idle_A') : null); if (!clip) return;
+  if (a.curName === name && !opt.once) return;
+  let act = a.acts[name]; if (!act) act = a.acts[name] = a.mixer.clipAction(clip);
+  act.reset(); act.setEffectiveTimeScale(opt.speed || 1); act.setEffectiveWeight(1);
+  act.setLoop(opt.once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity); act.clampWhenFinished = !!opt.once;
+  if (a.cur && a.cur !== act) act.crossFadeFrom(a.cur, .12, false);
+  act.play(); a.cur = act; a.curName = name; a.lock = opt.once ? clip.duration / (opt.speed || 1) * .85 : 0;
+}
+function killActor(a) { if (!a) return; scene.remove(a.root); a.mixer.stopAllAction(); for (const m of a.mats) m.dispose(); for (const m of a.omats || []) m.dispose(); }
+const lerpAng = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; };
+
+let AC = null;
+function audio() { try { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); } catch (e) {} }
+function tone(f, d, type = 'sine', v = .05, delay = 0) { if (!AC) return; try { const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + .02); } catch (e) {} }
+/* ================= KINGDOM CORE =================
+   무과금 왕국: the whole world simulation, without any drawing. The player and every AI lord play by the same rules
+   through the same actions; the AI lords and the player's 재상 (chancellor) all decide with think().
+   Runs in the page and in Node (balance sims: node sim.js). */
+const KC = (() => {
+'use strict';
+
+/* ---------- random ---------- */
+let rng = Math.random;
+const mulberry = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const seed = s => { rng = mulberry(s); };
+const rand = (a, b) => a + rng() * (b - a);
+const pickR = a => a[Math.floor(rng() * a.length)];
+const clampN = (v, a, b) => v < a ? a : v > b ? b : v;
+const jo = (w, a, b) => { w = String(w); const c = w.charCodeAt(w.length - 1); return w + (c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? a : b); };
+
+/* ---------- data ---------- */
+const RES = ['food', 'wood', 'stone', 'iron'];
+const RN = { food: '식량', wood: '목재', stone: '석재', iron: '철', gold: '금화' };
+const BLD = {
+  keep: { n: '본성', cost: { wood: 120, stone: 70 }, t: 40, d: '모든 건물은 본성 레벨까지만 올라가요. 금화 세금을 걷어요.' },
+  farm: { n: '농장', cost: { wood: 50 }, t: 10, res: 'food', prod: 260, d: '식량을 만들어요. 병사들이 먹어요.' },
+  lumber: { n: '벌목장', cost: { food: 50 }, t: 10, res: 'wood', prod: 240, d: '목재를 만들어요.' },
+  quarry: { n: '채석장', cost: { food: 60, wood: 60 }, t: 14, res: 'stone', prod: 200, d: '석재를 만들어요.' },
+  mine: { n: '철광산', cost: { food: 80, wood: 80 }, t: 16, res: 'iron', prod: 110, d: '철을 캐요. 기병과 고급 건물에 들어가요.' },
+  warehouse: { n: '창고', cost: { wood: 90, stone: 40 }, t: 18, d: '약탈당해도 지켜지는 자원 양이 늘어요.' },
+  barracks: { n: '보병 훈련소', cost: { food: 60, wood: 80 }, t: 18, troop: 'inf', d: '보병을 훈련해요. 레벨이 오르면 더 높은 티어와 많은 병사를 한 번에 훈련해요.' },
+  range: { n: '궁병 훈련소', cost: { food: 60, wood: 90 }, t: 18, troop: 'arc', d: '궁병을 훈련해요.' },
+  stable: { n: '기병 훈련소', cost: { food: 80, wood: 80, iron: 20 }, t: 20, troop: 'cav', d: '기병을 훈련해요.' },
+  academy: { n: '학술원', cost: { wood: 120, stone: 60 }, t: 24, d: '연구를 해요. 레벨이 오르면 더 깊은 연구가 열려요.' },
+  hospital: { n: '치료소', cost: { food: 60, wood: 70 }, t: 16, d: '다친 병사를 받아 치료해요. 자리가 없으면 다친 병사는 죽어요.' },
+  wall: { n: '성벽', cost: { wood: 80, stone: 100 }, t: 24, d: '영지를 지킬 때 방어력이 올라가요.' },
+  hall: { n: '영웅의 전당', cost: { wood: 100, stone: 80 }, t: 22, d: '영웅 최대 레벨과 내정관 자리가 늘어요.' },
+  embassy: { n: '동맹관', cost: { wood: 100, stone: 60 }, t: 20, d: '동맹 돕기를 더 많이 받아요.' },
+  rally: { n: '집결지', cost: { food: 80, wood: 80 }, t: 20, d: '한 부대에 데려갈 병사 수와 부대 수가 늘어요.' },
+};
+// building plots: index = plot; need = keep level that opens the plot
+const SLOTS = [
+  { k: 'keep', need: 1 }, { k: 'farm', need: 1 }, { k: 'lumber', need: 1 }, { k: 'barracks', need: 1 }, { k: 'hospital', need: 2 },
+  { k: 'warehouse', need: 2 }, { k: 'range', need: 2 }, { k: 'quarry', need: 3 }, { k: 'academy', need: 3 }, { k: 'rally', need: 3 },
+  { k: 'farm', need: 5 }, { k: 'lumber', need: 5 }, { k: 'hall', need: 4 }, { k: 'stable', need: 4 }, { k: 'mine', need: 6 },
+  { k: 'wall', need: 4 }, { k: 'embassy', need: 5 }, { k: 'farm', need: 10 }, { k: 'lumber', need: 10 }, { k: 'quarry', need: 12 },
+  { k: 'mine', need: 16 }, { k: 'farm', need: 15 }, { k: 'lumber', need: 15 },
+];
+const MAXLV = 30;
+const bCost = (k, L) => { const b = BLD[k].cost, m = Math.pow(1.36, L) * (k === 'keep' ? 2.4 : 1), o = {};
+  for (const r in b) o[r] = Math.round(b[r] * m);
+  if (L >= 8) o.iron = (o.iron || 0) + Math.round(40 * Math.pow(1.36, L - 8) * (k === 'keep' ? 2.4 : 1));   // late levels need iron too
+  return o; };
+// building time: x1.31 a level, and steeper past level 15 so the last levels take days
+const bTime = (k, L) => BLD[k].t * Math.pow(1.31, L) * (1 + Math.max(0, L - 15) * .12) * (k === 'keep' ? 2 : 1);
+const bProd = (k, L) => L > 0 ? BLD[k].prod * Math.pow(1.17, L - 1) : 0;
+const protectOf = L => L > 0 ? 3000 * Math.pow(1.3, L - 1) : 1500;
+const hospCap = L => L > 0 ? Math.round(150 * Math.pow(1.27, L - 1)) : 0;
+const batchOf = L => 20 + 15 * L;
+const marchSize = L => Math.round(150 * Math.pow(1.2, Math.max(0, L - 1)));
+const marchCount = L => 1 + (L >= 4) + (L >= 12) + (L >= 20);
+const helpCap = L => 4 + Math.floor(L / 3);
+const heroCap = L => 10 + L * 3;
+const govSlots = L => L >= 10 ? 2 : L >= 1 ? 1 : 0;
+const builders = keepLv => keepLv >= 5 ? 2 : 1;
+// keep L -> L+1 also needs these buildings
+const keepNeeds = L => { const o = { barracks: Math.max(0, L - 2) }; if (L >= 4) o.wall = L - 3; if (L >= 6) o.academy = L - 4; return o; };
+
+const TT = ['inf', 'arc', 'cav'];
+const TR = {
+  inf: { n: '보병', atk: 10, def: 13, hp: 34, load: 10, cost: { food: 30, wood: 18, stone: 6, iron: 2 }, t: 5 },
+  arc: { n: '궁병', atk: 14, def: 8, hp: 24, load: 7, cost: { food: 30, wood: 30, stone: 4 }, t: 5 },
+  cav: { n: '기병', atk: 12, def: 10, hp: 28, load: 13, cost: { food: 40, wood: 8, iron: 12 }, t: 7 },
+};
+const TIER_M = [1, 1.7, 2.8, 4.4, 6.6], TIER_C = [1, 1.9, 3.4, 5.8, 9.5], TIER_NEED = [1, 5, 10, 16, 22];
+const TIER_N = ['I', 'II', 'III', 'IV', 'V'];
+const BEATS = { inf: 'cav', cav: 'arc', arc: 'inf' };
+const counterMul = (a, d) => BEATS[a] === d ? 1.35 : BEATS[d] === a ? .8 : 1;
+const unitPow = (t, i) => (TR[t].atk + TR[t].def + TR[t].hp / 3) / 10 * TIER_M[i];
+const upkeep = i => .5 * Math.sqrt(TIER_M[i]);   // food per hour per soldier
+
+const TECH = [
+  { id: 'agri', n: '농업', tree: 0, d: '식량 생산 +5%', e: { prod: { food: .05 } } },
+  { id: 'forest', n: '임업', tree: 0, d: '목재 생산 +5%', e: { prod: { wood: .05 } } },
+  { id: 'mason', n: '석공술', tree: 0, d: '석재 생산 +5%', e: { prod: { stone: .05 } } },
+  { id: 'metal', n: '제련', tree: 0, d: '철 생산 +5%', e: { prod: { iron: .05 } } },
+  { id: 'build', n: '건축학', tree: 0, d: '건설 속도 +5%', e: { build: .05 } },
+  { id: 'drill', n: '훈련 교범', tree: 0, d: '훈련 속도 +6%', e: { train: .06 } },
+  { id: 'scholar', n: '학문', tree: 0, d: '연구 속도 +5%', e: { research: .05 } },
+  { id: 'logi', n: '수레와 길', tree: 0, d: '채집 속도 +6%, 운반량 +5%', e: { gather: .06, load: .05 } },
+  { id: 'tax', n: '세법', tree: 0, d: '금화 +8%', e: { gold: .08 } },
+  { id: 'infA', n: '보병 무장', tree: 1, d: '보병 공격 +4%', e: { atk: { inf: .04 } } },
+  { id: 'infD', n: '보병 갑주', tree: 1, d: '보병 방어·체력 +4%', e: { def: { inf: .04 }, hp: { inf: .04 } } },
+  { id: 'arcA', n: '궁병 무장', tree: 1, d: '궁병 공격 +4%', e: { atk: { arc: .04 } } },
+  { id: 'arcD', n: '궁병 갑주', tree: 1, d: '궁병 방어·체력 +4%', e: { def: { arc: .04 }, hp: { arc: .04 } } },
+  { id: 'cavA', n: '기병 무장', tree: 1, d: '기병 공격 +4%', e: { atk: { cav: .04 } } },
+  { id: 'cavD', n: '기병 갑주', tree: 1, d: '기병 방어·체력 +4%', e: { def: { cav: .04 }, hp: { cav: .04 } } },
+  { id: 'march', n: '행군 대형', tree: 1, d: '부대 크기 +6%', e: { march: .06 } },
+  { id: 'medic', n: '의술', tree: 1, d: '치료소 자리 +8%, 치료 비용 -4%', e: { hosp: .08 } },
+  { id: 'fort', n: '축성술', tree: 1, d: '영지 방어 시 방어력 +3%', e: { home: .03 } },
+];
+const TECHM = Object.fromEntries(TECH.map(t => [t.id, t]));
+const TECH_MAX = 10;
+const tCost = lv => ({ food: Math.round(400 * Math.pow(1.62, lv)), wood: Math.round(400 * Math.pow(1.62, lv)), stone: Math.round(150 * Math.pow(1.62, lv)), iron: Math.round(60 * Math.pow(1.62, lv)) });
+const tTime = lv => 60 * Math.pow(1.6, lv);
+const techCap = acad => acad > 0 ? Math.min(TECH_MAX, Math.floor(acad / 3) + 1) : 0;
+
+const RAR = ['일반', '희귀', '영웅', '전설'], RAR_M = [1, 1.25, 1.6, 2.1], RAR_P = [.55, .32, .105, .025];
+const HEROES = [
+  { id: 'dolsoe', n: '돌쇠', r: 0, t: 'inf', look: { m: 'Barbarian', r: 'axe_1handed', l: 'shield_round', st: '1h' }, sk: '보병 방어 +8%', e: { def: { inf: .08 } }, gv: '목재 생산 +6%', ge: { prod: { wood: .06 } } },
+  { id: 'bori', n: '보리', r: 0, t: 'arc', look: { m: 'Ranger', l: 'bow_withString', st: 'bow' }, sk: '궁병 공격 +8%', e: { atk: { arc: .08 } }, gv: '식량 생산 +6%', ge: { prod: { food: .06 } } },
+  { id: 'gaon', n: '가온', r: 0, t: 'cav', look: { m: 'Knight', r: 'sword_1handed', st: '1h', tint: '#c8b090' }, sk: '기병 공격 +8%', e: { atk: { cav: .08 } }, gv: '석재 생산 +6%', ge: { prod: { stone: .06 } } },
+  { id: 'haram', n: '숲지기 하람', r: 1, t: 'arc', look: { m: 'Ranger', l: 'bow_withString', st: 'bow', tint: '#a8d890' }, sk: '궁병 체력 +12%', e: { hp: { arc: .12 } }, gv: '채집 속도 +10%', ge: { gather: .1 } },
+  { id: 'gombau', n: '곰바우', r: 1, t: 'inf', look: { m: 'Barbarian', r: 'axe_2handed', st: '2h', s: 1.15 }, sk: '보병 체력 +12%', e: { hp: { inf: .12 } }, gv: '건설 속도 +6%', ge: { build: .06 } },
+  { id: 'tao', n: '늑대기수 타오', r: 1, t: 'cav', look: { m: 'Rogue', r: 'dagger', l: 'dagger', st: '1h', tint: '#b0b8d0' }, sk: '기병 공격 +6%, 행군 속도 +15%', e: { atk: { cav: .06 }, speed: .15 }, gv: '철 생산 +8%', ge: { prod: { iron: .08 } } },
+  { id: 'mora', n: '상인 모라', r: 1, t: 'inf', look: { m: 'Rogue_Hooded', r: 'dagger', st: '1h', tint: '#e0c080' }, sk: '약탈·전리품 +20%', e: { loot: .2 }, gv: '금화 +15%', ge: { gold: .15 } },
+  { id: 'seoha', n: '바람검 서하', r: 2, t: 'inf', look: { m: 'Rogue_Hooded', r: 'sword_1handed', st: '1h', tint: '#9ad0ff' }, sk: '보병 공격 +18%', e: { atk: { inf: .18 } }, gv: '훈련 속도 +8%', ge: { train: .08 } },
+  { id: 'arin', n: '불꽃궁 아린', r: 2, t: 'arc', look: { m: 'Ranger', l: 'bow_withString', st: 'bow', tint: '#ff9a70', glow: '#ff5a20' }, sk: '궁병 공격 +18%', e: { atk: { arc: .18 } }, gv: '연구 속도 +8%', ge: { research: .08 } },
+  { id: 'durn', n: '천둥망치 두르', r: 2, t: 'cav', look: { m: 'Barbarian', r: 'axe_2handed', st: '2h', tint: '#c0c8ff', glow: '#6080ff' }, sk: '첫 2라운드 피해 +25%', e: { open: .25 }, gv: '건설 속도 +8%', ge: { build: .08 } },
+  { id: 'rina', n: '은월 사제 리나', r: 2, t: 'arc', look: { m: 'Mage', r: 'staff', st: 'magic', tint: '#e0e0ff', glow: '#a0b0ff' }, sk: '전군 방어 +6%, 전사자 일부를 부상으로', e: { def: { inf: .06, arc: .06, cav: .06 }, save: .2 }, gv: '식량 생산 +10%', ge: { prod: { food: .1 } } },
+  { id: 'serin', n: '새벽기사 세린', r: 3, t: 'cav', look: { m: 'Knight', r: 'sword_2handed_color', st: '2h', tint: '#fff0c0', glow: '#ffd060' }, sk: '전군 공격 +12%, 기병 방어 +10%', e: { atk: { inf: .12, arc: .12, cav: .12 }, def: { cav: .1 } }, gv: '모든 자원 +6%', ge: { prod: { food: .06, wood: .06, stone: .06, iron: .06 } } },
+  { id: 'ella', n: '서리마녀 엘라', r: 3, t: 'arc', look: { m: 'Mage', r: 'staff', st: 'magic', tint: '#bfe4ff', glow: '#4aa8ff' }, sk: '적 공격 -12%', e: { curse: .12 }, gv: '연구 속도 +12%', ge: { research: .12 } },
+];
+const HEROM = Object.fromEntries(HEROES.map(h => [h.id, h]));
+const xpNeed = lv => Math.round(60 * lv * Math.pow(1.08, lv));
+const STAR_SHARDS = [10, 20, 30, 50, 80];
+const RECRUIT_GOLD = 400;
+
+const ITEMS = {
+  sp5: { n: '5분 가속', d: '진행 중인 일을 5분 앞당겨요', min: 5 },
+  sp60: { n: '1시간 가속', d: '진행 중인 일을 1시간 앞당겨요', min: 60 },
+  ticket: { n: '영웅 모집권', d: '영웅 한 명을 모집해요' },
+  shield: { n: '평화의 방패', d: '8시간 동안 영지가 공격받지 않아요' },
+  xp: { n: '경험의 서', d: '영웅 경험치 +500' },
+  rbox: { n: '자원 상자', d: '모든 자원 1시간 생산량' },
+};
+const SHOP = [{ id: 'sp5', c: 25 }, { id: 'sp60', c: 250 }, { id: 'ticket', c: 300 }, { id: 'shield', c: 400 }, { id: 'xp', c: 60 }, { id: 'rbox', c: 120 }];
+
+/* ---------- monsters on the map ---------- */
+const CAMP_N = ['도적 소굴', '늑대 굴', '오크 야영지', '해골 무덤', '트롤 동굴', '흑기사 초소'];
+const campArmy = L => { const n = Math.round(40 * Math.pow(1.3, L - 1)), i = Math.min(4, Math.floor((L - 1) / 5)), a = army();
+  a.inf[i] = Math.round(n * .4); a.arc[i] = Math.round(n * .3); a.cav[i] = n - a.inf[i] - a.arc[i]; return a; };
+const campLoot = L => ({ food: Math.round(350 * Math.pow(1.25, L - 1)), wood: Math.round(350 * Math.pow(1.25, L - 1)), stone: Math.round(150 * Math.pow(1.25, L - 1)), iron: Math.round(70 * Math.pow(1.25, L - 1)), gold: Math.round(25 * Math.pow(1.2, L - 1)), xp: Math.round(60 * Math.pow(1.25, L - 1)) });
+const BEAST_N = ['거대 늑대', '바위 거인', '늪의 히드라', '화염 와이번', '고대 용'];
+const beastArmy = L => { const n = Math.round(700 * Math.pow(1.5, L - 1)), i = Math.min(4, L - 1), a = army();
+  a.inf[i] = Math.round(n * .5); a.cav[i] = Math.round(n * .3); a.arc[i] = n - a.inf[i] - a.cav[i]; return a; };
+const resAmt = L => Math.round(8000 * Math.pow(1.75, L - 1));
+const gatherRate = L => 3 * Math.pow(1.3, L - 1);   // per second, before bonuses
+
+/* ---------- armies ---------- */
+function army() { return { inf: [0, 0, 0, 0, 0], arc: [0, 0, 0, 0, 0], cav: [0, 0, 0, 0, 0] }; }
+const armyN = a => TT.reduce((s, t) => s + a[t].reduce((x, y) => x + y, 0), 0);
+const armyPow = a => TT.reduce((s, t) => s + a[t].reduce((x, n, i) => x + n * unitPow(t, i), 0), 0);
+const armyLoad = (a, bonus = 0) => TT.reduce((s, t) => s + a[t].reduce((x, n) => x + n * TR[t].load, 0), 0) * (1 + bonus);
+const addArmy = (a, b, k = 1) => { for (const t of TT) for (let i = 0; i < 5; i++) a[t][i] = Math.max(0, a[t][i] + b[t][i] * k); return a; };
+const cloneArmy = a => ({ inf: a.inf.slice(), arc: a.arc.slice(), cav: a.cav.slice() });
+const roundArmy = a => { for (const t of TT) for (let i = 0; i < 5; i++) a[t][i] = Math.floor(a[t][i] + 1e-6); return a; };
+// take up to n soldiers from a (best tiers first, keeping the type mix)
+function takeArmy(a, n) {
+  const out = army(), total = armyN(a); if (total <= 0) return out;
+  const k = Math.min(1, n / total);
+  for (const t of TT) for (let i = 4; i >= 0; i--) { const m = Math.floor(a[t][i] * k); out[t][i] = m; a[t][i] -= m; }
+  return out;
+}
+
+/* battle: rounds of simultaneous fire, damage spread over the other side's types by head count, counters x1.35.
+   mods: {atk:{t}, def:{t}, hp:{t}, open, curse, save, home} */
+function battle(A, Am, D, Dm, maxR = 10) {
+  const a = cloneArmy(A), d = cloneArmy(D);
+  const fire = (src, sm, dst, dm, r) => {
+    const loss = army(), alive = TT.map(t => dst[t].reduce((x, y) => x + y, 0)), tot = alive[0] + alive[1] + alive[2];
+    if (tot <= 0) return loss;
+    for (const t of TT) {
+      let atk = 0; for (let i = 0; i < 5; i++) atk += src[t][i] * TR[t].atk * TIER_M[i];
+      atk *= (1 + (sm.atk[t] || 0)) * (r < 2 ? 1 + (sm.open || 0) : 1) * (1 - (dm.curse || 0)) * .22;
+      if (atk <= 0) continue;
+      TT.forEach((u, j) => {
+        if (alive[j] <= 0) return;
+        const dmg = atk * alive[j] / tot * counterMul(t, u);
+        let ehp = 0; for (let i = 0; i < 5; i++) ehp += dst[u][i] * TR[u].hp * TIER_M[i];
+        ehp = ehp / alive[j] * (1 + (dm.hp[u] || 0)) * (1 + TR[u].def * (1 + (dm.def[u] || 0) + (dm.home || 0)) / 50);
+        const kill = Math.min(alive[j], dmg / ehp);
+        for (let i = 0; i < 5; i++) loss[u][i] += kill * dst[u][i] / alive[j];
+      });
+    }
+    return loss;
+  };
+  let r = 0;
+  for (; r < maxR; r++) {
+    if (armyN(a) < .5 || armyN(d) < .5) break;
+    const la = fire(d, Dm, a, Am, r), ld = fire(a, Am, d, Dm, r);
+    addArmy(a, la, -1); addArmy(d, ld, -1);
+  }
+  const aLeft = armyN(a), dLeft = armyN(d);
+  const aLoss = addArmy(cloneArmy(A), a, -1), dLoss = addArmy(cloneArmy(D), d, -1);
+  roundArmy(aLoss); roundArmy(dLoss);
+  return { win: dLeft < .5 && aLeft >= .5, rounds: r, aLoss, dLoss, aLeft: roundArmy(a), dLeft: roundArmy(d) };
+}
+const noMods = () => ({ atk: {}, def: {}, hp: {} });
+
+/* ---------- world ---------- */
+const SIZE = 36, CENTER = 18;
+const LORD_NAMES = ['철혈의 바르크', '은빛 여왕 세라', '늑대왕 카르', '상인왕 몬테', '붉은 매 레아', '성기사 오렌', '사막의 칸', '서리공 엘린', '흑철 군주 도르', '초원의 아샤', '노장 헤임'];
+const PERS = {
+  farmer: { n: '농부', econ: 1.4, mil: .7, aggr: .1, gath: 1.4, mix: [.4, .3, .3] },
+  raider: { n: '약탈자', econ: .8, mil: 1.4, aggr: 1, gath: .6, mix: [.3, .25, .45] },
+  balanced: { n: '균형', econ: 1, mil: 1, aggr: .4, gath: 1, mix: [.35, .35, .3] },
+  turtle: { n: '수비', econ: 1.1, mil: 1.1, aggr: .05, gath: .9, mix: [.5, .35, .15] },
+  merchant: { n: '상인', econ: 1.3, mil: .8, aggr: .2, gath: 1.2, mix: [.35, .4, .25] },
+};
+const AI_PERS = ['raider', 'merchant', 'raider', 'merchant', 'raider', 'turtle', 'raider', 'balanced', 'raider', 'farmer', 'turtle'];
+const ALLY_DEF = [{ n: '북방 연합', tag: 'NOR', color: '#6fb3ff' }, { n: '황금 길드', tag: 'GLD', color: '#f1c95a' }, { n: '붉은 서약', tag: 'RED', color: '#ff6a5a' }];
+
+let W = null;   // the world
+const L0 = () => W.lords[0];
+
+function newLord(id, name, x, y, pers) {
+  const L = { id, name, x, y, ai: pers ? { p: pers, nextT: rand(0, 5), boost: 1 } : null, player: !pers,
+    res: { food: 1500, wood: 1500, stone: 600, iron: 200 }, gold: 300, blds: SLOTS.map((s, i) => i === 0 ? 1 : 0), bq: [], rq: null, tech: {},
+    tq: { inf: null, arc: null, cav: null }, troops: army(), wounded: army(), heal: null,
+    heroes: {}, team: [], gov: [], items: { sp5: 3, ticket: 1, shield: 0, xp: 2, sp60: 0, rbox: 0 },
+    alliance: null, shieldT: 0, rel: {}, contrib: 0, quest: 0, power: 0, stats: { camps: 0, kills: 0, plunder: 0, gathered: 0, attacked: 0, wins: 0, rally: 0 },
+    auto: { build: true, research: true, train: true, heal: true, gather: true, hunt: true, hero: true, help: true, quest: true, ally: true }, strat: 'balanced', log: [], helped: {} };
+  L.troops.inf[0] = 60; L.troops.arc[0] = 30;
+  return L;
+}
+
+function newWorld(s = Date.now() % 1e9) {
+  seed(s); tileAt.clear(); tileById.clear(); deferred = [];
+  W = { v: 1, seed: s, t: 0, real: Date.now(), tiles: [], lords: [], alliances: [], marches: [], rallies: [], seq: 1, news: [], throne: { holder: null, since: 0, open: 6 * 3600 }, mail: [] };
+  // lords on a ring around the throne
+  const n = 12, angs = [];
+  for (let i = 0; i < n; i++) angs.push(i / n * Math.PI * 2 + rand(-.15, .15));
+  const pos = angs.map((a, i) => { const r = i === 0 ? 13 : rand(9, 15); return [Math.round(CENTER + Math.cos(a) * r), Math.round(CENTER + Math.sin(a) * r)]; });
+  W.lords.push(newLord(0, '새벽 영주', pos[0][0], pos[0][1], null));
+  for (let i = 1; i < n; i++) {
+    const L = newLord(i, LORD_NAMES[i - 1], pos[i][0], pos[i][1], AI_PERS[i - 1]);
+    L.ai.boost = rand(.9, 1.2);
+    // AI lords start a little ahead or behind
+    const head = Math.floor(rand(0, 3));
+    L.blds[0] = 1 + head; for (let k = 1; k < 4; k++) L.blds[k] = Math.min(L.blds[0], 1 + Math.floor(rand(0, head + 1)));
+    L.troops.inf[0] += head * 40; L.troops.arc[0] += head * 20;
+    W.lords.push(L);
+  }
+  for (const L of W.lords) addTile({ kind: 'town', x: L.x, y: L.y, lv: 0, lord: L.id });
+  addTile({ kind: 'throne', x: CENTER, y: CENTER, lv: 10 });
+  // AI alliances: 3 groups of 3, two lords alone
+  ALLY_DEF.forEach((a, i) => W.alliances.push({ id: i + 1, n: a.n, tag: a.tag, color: a.color, members: [], leader: null }));
+  const order = W.lords.slice(1).map(L => L.id).sort(() => rng() - .5);
+  order.slice(0, 9).forEach((id, i) => joinAlliance(W.lords[id], W.alliances[i % 3].id, true));
+  for (let i = 0; i < 260; i++) spawnRes(); for (let i = 0; i < 90; i++) spawnCamp(); for (let i = 0; i < 6; i++) spawnBeast();
+  for (const L of W.lords) { recalc(L); for (const M of W.lords) if (M !== L) L.rel[M.id] = 0; }
+  const P = L0(); P.shieldT = 24 * 3600;   // beginner protection
+  P.heroes.bori = { lv: 1, xp: 0, star: 0, shard: 0 }; P.team = ['bori'];
+  for (const L of W.lords.slice(1)) { const h = pickR(HEROES.filter(h => h.r <= 1)); L.heroes[h.id] = { lv: 1, xp: 0, star: 0, shard: 0 }; L.team = [h.id]; }
+  news('새 왕국이 열렸어요. 6시간 뒤 왕좌 쟁탈전이 시작돼요.');
+  return W;
+}
+
+/* ---------- tiles ---------- */
+const tileAt = new Map();
+const key = (x, y) => x * 1000 + y;
+const tileById = new Map();
+const tileOf = id => tileById.get(id);
+function addTile(o) { o.id = W.seq++; W.tiles.push(o); tileAt.set(key(o.x, o.y), o); tileById.set(o.id, o); return o; }
+function removeTile(o) { W.tiles.splice(W.tiles.indexOf(o), 1); tileAt.delete(key(o.x, o.y)); tileById.delete(o.id); }
+function freeSpot(rMin, rMax) {
+  for (let k = 0; k < 200; k++) {
+    const a = rand(0, Math.PI * 2), r = rand(rMin, rMax), x = Math.round(CENTER + Math.cos(a) * r), y = Math.round(CENTER + Math.sin(a) * r);
+    if (x < 0 || y < 0 || x >= SIZE || y >= SIZE || tileAt.has(key(x, y))) continue;
+    return [x, y];
+  }
+  return null;
+}
+// level by distance from the throne: low around the lords' ring, climbing steeply toward the centre
+const lvByRing = (r, max) => clampN(Math.round(1 + (max - 1) * Math.pow(clampN((17 - r) / 15, 0, 1), 1.8) + rand(-.6, .6)), 1, max);
+// half of new resource fields appear near a random lord, so every town keeps fields within reach
+function spotNearLord() { const L = pickR(W.lords); for (let k = 0; k < 60; k++) { const x = L.x + Math.round(rand(-6, 6)), y = L.y + Math.round(rand(-6, 6)); if (x < 0 || y < 0 || x >= SIZE || y >= SIZE || tileAt.has(key(x, y))) continue; return [x, y]; } return null; }
+function spawnRes() { const p = (W.lords.length && rng() < .5 && spotNearLord()) || freeSpot(3, 18); if (!p) return; const r = Math.hypot(p[0] - CENTER, p[1] - CENTER), lv = lvByRing(r, 6); addTile({ kind: 'res', x: p[0], y: p[1], lv, res: pickR(['food', 'food', 'food', 'wood', 'wood', 'wood', 'stone', 'iron']), amt: resAmt(lv), max: resAmt(lv) }); }
+function spawnCamp() { const p = freeSpot(2, 18); if (!p) return; const r = Math.hypot(p[0] - CENTER, p[1] - CENTER), lv = lvByRing(r, 25); addTile({ kind: 'camp', x: p[0], y: p[1], lv, n: CAMP_N[Math.min(5, Math.floor((lv - 1) / 4))], army: campArmy(lv) }); }
+function spawnBeast() { const p = freeSpot(3, 14); if (!p) return; const lv = Math.floor(rand(1, 6)); addTile({ kind: 'beast', x: p[0], y: p[1], lv, n: BEAST_N[lv - 1], army: beastArmy(lv) }); }
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+/* ---------- lord stats ---------- */
+const lv = (L, k) => { let m = 0; SLOTS.forEach((s, i) => { if (s.k === k && L.blds[i] > m) m = L.blds[i]; }); return m; };
+const keepLv = L => L.blds[0];
+// all bonuses for a lord: research + governors + team heroes + throne. Cached; BV bumps whenever any of them may change.
+let BV = 0; const BCACHE = new Map();
+function bonus(L) {
+  const c = BCACHE.get(L.id); if (c && c.v === BV && c.w === W) return c.b;
+  const b = bonusRaw(L); BCACHE.set(L.id, { v: BV, w: W, b }); return b;
+}
+function bonusRaw(L) {
+  const b = { prod: { food: 0, wood: 0, stone: 0, iron: 0 }, build: 0, train: 0, research: 0, gather: 0, load: 0, gold: 0, march: 0, hosp: 0, home: 0, atk: {}, def: {}, hp: {}, open: 0, curse: 0, save: 0, loot: 0, speed: 0 };
+  const add = (e, k) => { for (const x in e) { if (typeof e[x] === 'object') { for (const y in e[x]) b[x][y] = (b[x][y] || 0) + e[x][y] * k; } else b[x] = (b[x] || 0) + e[x] * k; } };
+  for (const id in L.tech) add(TECHM[id].e, L.tech[id]);
+  for (const id of L.gov) if (L.heroes[id]) add(HEROM[id].ge, 1 + L.heroes[id].star * .2);
+  for (const id of L.team) {
+    const h = L.heroes[id]; if (!h) continue; const H = HEROM[id], g = (.006 * h.lv + .03 * h.star) * RAR_M[H.r];
+    add(H.e, 1 + h.star * .2); add({ atk: { [H.t]: g }, def: { [H.t]: g }, hp: { [H.t]: g } }, 1);
+  }
+  const A = allianceOf(L);
+  if (A && W.throne.holder === A.id) for (const r of RES) b.prod[r] += .15;
+  b.home += lv(L, 'wall') * .02;
+  return b;
+}
+function mods(L, home) { const b = bonus(L); return { atk: b.atk, def: b.def, hp: b.hp, open: b.open, curse: b.curse, save: b.save, home: home ? b.home : 0 }; }
+function prodPerHour(L, r, b = bonus(L)) {
+  let s = 0; SLOTS.forEach((sl, i) => { if (BLD[sl.k].res === r) s += bProd(sl.k, L.blds[i]); });
+  return s * (1 + b.prod[r]) * (L.ai ? L.ai.boost : 1);
+}
+const goldPerHour = (L, b = bonus(L)) => 60 * Math.pow(1.15, keepLv(L) - 1) * (1 + b.gold);
+function upkeepPerHour(L) { let s = 0; for (const a of [L.troops, ...W.marches.filter(m => m.lord === L.id).map(m => m.army)]) for (const t of TT) for (let i = 0; i < 5; i++) s += a[t][i] * upkeep(i); return s; }
+function recalc(L) {
+  BV++;
+  let p = armyPow(L.troops); for (const m of W.marches) if (m.lord === L.id) p += armyPow(m.army);
+  L.blds.forEach(v => { p += Math.pow(v, 1.6) * 12; });
+  for (const id in L.tech) p += L.tech[id] * 40;
+  for (const id in L.heroes) p += L.heroes[id].lv * 15 * RAR_M[HEROM[id].r] * (1 + L.heroes[id].star * .3);
+  L.power = Math.round(p);
+}
+const allianceOf = L => L.alliance ? W.alliances.find(a => a.id === L.alliance) : null;
+const allied = (A, B) => A.alliance && A.alliance === B.alliance;
+const freeMarches = L => marchCount(lv(L, 'rally')) - W.marches.filter(m => m.lord === L.id).length - W.rallies.filter(r => r.state === 'gather' && r.parts.some(p => p.lord === L.id)).length;
+const maxMarch = L => Math.round(marchSize(lv(L, 'rally')) * (1 + bonus(L).march));
+const hospFree = L => Math.round(hospCap(lv(L, 'hospital')) * (1 + bonus(L).hosp)) - armyN(L.wounded);
+
+function log(L, msg) { L.log.unshift({ t: W.t, m: msg }); if (L.log.length > 60) L.log.length = 60; }
+function news(msg) { W.news.unshift({ t: W.t, m: msg }); if (W.news.length > 60) W.news.length = 60; }
+function mail(L, title, body, kind = 'info') { if (!L.player) return; W.mail.unshift({ t: W.t, title, body, kind, read: false }); if (W.mail.length > 80) W.mail.length = 80; }
+
+/* ---------- actions (validated; return {ok, msg}) ---------- */
+const afford = (L, c) => RES.every(r => (L.res[r] || 0) >= (c[r] || 0)) && (L.gold >= (c.gold || 0));
+const pay = (L, c) => { for (const r of RES) L.res[r] -= c[r] || 0; L.gold -= c.gold || 0; };
+const fail = msg => ({ ok: false, msg });
+function canBuild(L, i) {
+  const s = SLOTS[i], cur = L.blds[i];
+  if (keepLv(L) < s.need) return fail(`본성 ${s.need}레벨에 열려요`);
+  if (cur >= MAXLV) return fail('최고 레벨이에요');
+  if (s.k !== 'keep' && cur + 1 > keepLv(L)) return fail('본성 레벨을 먼저 올려야 해요');
+  if (s.k === 'keep') { const nd = keepNeeds(cur); for (const k in nd) if (lv(L, k) < nd[k]) return fail(`${BLD[k].n} ${nd[k]}레벨이 필요해요`); }
+  if (L.bq.some(q => q.slot === i)) return fail('이미 짓고 있어요');
+  if (L.bq.length >= builders(keepLv(L))) return fail('일꾼이 모두 일하고 있어요');
+  if (!afford(L, bCost(s.k, cur))) return fail('자원이 모자라요');
+  return { ok: true };
+}
+function build(L, i) {
+  const c = canBuild(L, i); if (!c.ok) return c;
+  const s = SLOTS[i], cur = L.blds[i];
+  pay(L, bCost(s.k, cur));
+  const T = bTime(s.k, cur) / (1 + bonus(L).build);
+  L.bq.push({ slot: i, total: T, left: T, helps: 0 });
+  helpRequest(L, 'build', i);
+  return { ok: true, msg: `${BLD[s.k].n} ${cur + 1}레벨 공사 시작` };
+}
+function canResearch(L, id) {
+  const cur = L.tech[id] || 0;
+  if (lv(L, 'academy') < 1) return fail('학술원이 필요해요');
+  if (L.rq) return fail('이미 연구 중이에요');
+  if (cur >= techCap(lv(L, 'academy'))) return fail(`학술원 레벨을 올려야 더 연구할 수 있어요`);
+  if (!afford(L, tCost(cur))) return fail('자원이 모자라요');
+  return { ok: true };
+}
+function research(L, id) {
+  const c = canResearch(L, id); if (!c.ok) return c;
+  const cur = L.tech[id] || 0; pay(L, tCost(cur));
+  const T = tTime(cur) / (1 + bonus(L).research + lv(L, 'academy') * .02);
+  L.rq = { id, total: T, left: T, helps: 0 };
+  helpRequest(L, 'research', id);
+  return { ok: true, msg: `${TECHM[id].n} ${cur + 1}단계 연구 시작` };
+}
+const tierMax = (L, t) => { const b = lv(L, t === 'inf' ? 'barracks' : t === 'arc' ? 'range' : 'stable'); let m = -1; TIER_NEED.forEach((n, i) => { if (b >= n) m = i; }); return m; };
+const trainCost = (t, i, n) => { const o = {}; for (const r in TR[t].cost) o[r] = Math.ceil(TR[t].cost[r] * TIER_C[i] * n); return o; };
+function canTrain(L, t, i, n) {
+  if (tierMax(L, t) < i) return fail('훈련소 레벨이 모자라요');
+  if (L.tq[t]) return fail('이미 훈련 중이에요');
+  if (n < 1) return fail('병사 수를 정해 주세요');
+  const b = lv(L, t === 'inf' ? 'barracks' : t === 'arc' ? 'range' : 'stable');
+  if (n > batchOf(b)) return fail(`한 번에 ${batchOf(b)}명까지예요`);
+  if (!afford(L, trainCost(t, i, n))) return fail('자원이 모자라요');
+  return { ok: true };
+}
+function train(L, t, i, n) {
+  const c = canTrain(L, t, i, n); if (!c.ok) return c;
+  pay(L, trainCost(t, i, n));
+  const b = lv(L, t === 'inf' ? 'barracks' : t === 'arc' ? 'range' : 'stable');
+  const T = TR[t].t * Math.pow(TIER_C[i], .6) * n / (1 + bonus(L).train + b * .03);
+  L.tq[t] = { tier: i, n, total: T, left: T };
+  return { ok: true, msg: `${TR[t].n} ${TIER_N[i]} ${n}명 훈련 시작` };
+}
+const healCost = L => { const c = { food: 0, wood: 0, stone: 0, iron: 0 }, k = .4 * (1 - (L.tech.medic || 0) * .04);
+  for (const t of TT) for (let i = 0; i < 5; i++) { const x = trainCost(t, i, L.wounded[t][i]); for (const r in x) c[r] += Math.ceil(x[r] * k); } return c; };
+// heal as many of the wounded as the stores can pay for right now
+function heal(L, keep = {}, minPart = 1) {   // keep: resources to leave untouched
+  if (L.heal) return fail('이미 치료 중이에요');
+  const n = armyN(L.wounded); if (n < 1) return fail('다친 병사가 없어요');
+  const c = healCost(L); let k = 1; for (const r of RES) if (c[r] > 0) k = Math.min(k, Math.max(0, L.res[r] - (keep[r] || 0)) / c[r]);
+  const part = army(); for (const t of TT) for (let i = 0; i < 5; i++) part[t][i] = Math.floor(L.wounded[t][i] * k);
+  const m = armyN(part); if (m < 1 || m < Math.min(n, minPart)) return fail('자원이 모자라요');
+  const pc = {}; for (const r of RES) pc[r] = Math.ceil(c[r] * m / n); pay(L, pc);
+  const T = m * 1.2 / (1 + lv(L, 'hospital') * .05); L.heal = { army: part, total: T, left: T }; addArmy(L.wounded, part, -1);
+  return { ok: true, msg: `다친 병사 ${m}명 치료 시작${m < n ? ` (남은 ${n - m}명은 자원이 모이면)` : ''}` };
+}
+function speedup(L, what, item, slot) {
+  const it = ITEMS[item]; if (!it || !it.min || !(L.items[item] > 0)) return fail('가속 아이템이 없어요');
+  const q = what === 'build' ? (slot != null ? L.bq.find(b => b.slot === slot) : L.bq[0]) : what === 'research' ? L.rq : what === 'heal' ? L.heal : L.tq[what];
+  if (!q) return fail('진행 중인 일이 없어요');
+  L.items[item]--; q.left -= it.min * 60; return { ok: true, msg: `${it.n} 사용` };
+}
+function useItem(L, id) {
+  if (!(L.items[id] > 0)) return fail('아이템이 없어요');
+  if (id === 'shield') { L.items[id]--; L.shieldT = Math.max(L.shieldT, 8 * 3600); return { ok: true, msg: '평화의 방패가 8시간 동안 영지를 지켜요' }; }
+  if (id === 'rbox') { L.items[id]--; const b = bonus(L); for (const r of RES) L.res[r] += prodPerHour(L, r, b); return { ok: true, msg: '자원 상자를 열었어요' }; }
+  if (id === 'ticket') return recruit(L, true);
+  return fail('여기서는 쓸 수 없어요');
+}
+function recruit(L, ticket) {
+  if (ticket) { if (!(L.items.ticket > 0)) return fail('모집권이 없어요'); L.items.ticket--; }
+  else { if (L.gold < RECRUIT_GOLD) return fail('금화가 모자라요'); L.gold -= RECRUIT_GOLD; }
+  let r = 0, x = rng(); for (let i = 3; i >= 0; i--) { if (x < RAR_P.slice(i).reduce((a, b) => a + b, 0)) { r = i; break; } }
+  const H = pickR(HEROES.filter(h => h.r === r));
+  if (L.heroes[H.id]) { L.heroes[H.id].shard += 10; return { ok: true, msg: `${RAR[r]} ${H.n} — 이미 있어서 조각 10개`, hero: H.id, dup: true }; }
+  L.heroes[H.id] = { lv: 1, xp: 0, star: 0, shard: 0 };
+  if (L.team.length < 3) L.team.push(H.id);
+  return { ok: true, msg: `${RAR[r]} 영웅 ${H.n} 합류!`, hero: H.id };
+}
+function heroXp(L, id, x) {
+  const h = L.heroes[id]; if (!h) return; const cap = heroCap(lv(L, 'hall'));
+  h.xp += x; while (h.lv < cap && h.xp >= xpNeed(h.lv)) { h.xp -= xpNeed(h.lv); h.lv++; BV++; }
+  if (h.lv >= cap) h.xp = Math.min(h.xp, xpNeed(h.lv));
+}
+function useXp(L, id, n = 1) { n = Math.min(n, L.items.xp || 0); if (n < 1) return fail('경험의 서가 없어요'); if (!L.heroes[id]) return fail('없는 영웅이에요');
+  if (L.heroes[id].lv >= heroCap(lv(L, 'hall'))) return fail('영웅의 전당 레벨을 올려야 해요');
+  L.items.xp -= n; heroXp(L, id, 500 * n); return { ok: true, msg: `${HEROM[id].n} 경험치 +${500 * n}` }; }
+function starUp(L, id) { const h = L.heroes[id]; if (!h) return fail('없는 영웅이에요'); if (h.star >= 5) return fail('최고 별이에요');
+  const need = STAR_SHARDS[h.star]; if (h.shard < need) return fail(`조각 ${need}개가 필요해요`); h.shard -= need; h.star++; BV++; return { ok: true, msg: `${HEROM[id].n} ★${h.star}` }; }
+function setTeam(L, ids) { BV++; L.team = ids.filter(id => L.heroes[id]).slice(0, 3); return { ok: true }; }
+function setGov(L, ids) { BV++; L.gov = ids.filter(id => L.heroes[id] && !L.team.includes(id)).slice(0, govSlots(lv(L, 'hall'))); return { ok: true }; }
+
+/* marches: kind gather | attack (camp or town) | rally part handled separately */
+function travelTime(L, tile, speed = 0) { return 20 + dist(L, tile) * 14 / (1 + speed); }
+function sendMarch(L, tileId, kind, n) {
+  const tile = tileOf(tileId); if (!tile) return fail('없는 곳이에요');
+  if (freeMarches(L) < 1) return fail('보낼 수 있는 부대가 없어요 (집결지 레벨)');
+  if (kind === 'gather' && tile.kind !== 'res') return fail('자원지가 아니에요');
+  if (kind === 'gather' && W.marches.some(m => m.tile === tile.id && m.kind === 'gather')) return fail('다른 부대가 채집 중이에요');
+  if (kind === 'attack') {
+    if (tile.kind === 'town') { const T = W.lords[tile.lord]; if (T === L) return fail('내 영지예요'); if (allied(L, T)) return fail('같은 동맹이에요'); if (T.shieldT > 0) return fail('평화의 방패가 지키고 있어요'); }
+    else if (tile.kind !== 'camp') return fail('이곳은 집결로만 공격할 수 있어요');
+  }
+  n = Math.min(n || maxMarch(L), maxMarch(L), armyN(L.troops)); if (n < 1) return fail('병사가 없어요');
+  const a = takeArmy(L.troops, n); if (armyN(a) < 1) return fail('병사가 없어요');
+  const b = bonus(L), T = travelTime(L, tile, b.speed);
+  const m = { id: W.seq++, lord: L.id, kind, tile: tile.id, tx: tile.x, ty: tile.y, army: a, state: 'go', left: T, total: T, carry: {}, work: 0 };
+  W.marches.push(m); recalc(L);
+  if (kind === 'attack' && tile.kind === 'town') { L.shieldT = 0; const T2 = W.lords[tile.lord]; mail(T2, '적 부대 접근!', `${L.name}의 부대(${armyN(a)}명)가 영지로 오고 있어요. ${Math.round(T)}초 뒤 도착.`, 'warn'); }
+  return { ok: true, msg: `${kind === 'gather' ? '채집' : '공격'} 부대 출발 (${armyN(a)}명)`, march: m };
+}
+function recall(L, id) {
+  const m = W.marches.find(m => m.id === id && m.lord === L.id); if (!m) return fail('없는 부대예요');
+  if (m.state === 'back') return fail('이미 돌아오고 있어요');
+  m.left = m.state === 'go' ? m.total - m.left : travelTime(L, { x: m.tx, y: m.ty }); m.total = m.left; m.state = 'back'; return { ok: true, msg: '부대를 불러들여요' };
+}
+
+/* alliances */
+function joinAlliance(L, id, force) {
+  const A = W.alliances.find(a => a.id === id); if (!A) return fail('없는 동맹이에요');
+  if (L.alliance) return fail('이미 동맹에 있어요');
+  if (!force) {
+    const avg = A.members.reduce((s, m) => s + W.lords[m].power, 0) / Math.max(1, A.members.length);
+    const relAvg = A.members.reduce((s, m) => s + (W.lords[m].rel[L.id] || 0), 0) / Math.max(1, A.members.length);
+    if (A.members.length >= 8) return fail('동맹이 꽉 찼어요');
+    if (relAvg < -20) return fail('동맹원들이 당신을 싫어해요');
+    if (L.power < avg * .25 && relAvg < 20) return fail('아직 힘이 약하다며 거절했어요');
+  }
+  A.members.push(L.id); L.alliance = A.id; BV++; if (!A.leader) A.leader = L.id;
+  for (const m of A.members) if (m !== L.id) { bumpRel(W.lords[m], L, 20); bumpRel(L, W.lords[m], 20); }
+  news(`${jo(L.name, '이', '가')} ${A.n}에 가입했어요.`);
+  return { ok: true, msg: `${A.n}에 가입했어요` };
+}
+function leaveAlliance(L) {
+  const A = allianceOf(L); if (!A) return fail('동맹이 없어요');
+  A.members = A.members.filter(m => m !== L.id); L.alliance = null; BV++;
+  if (A.leader === L.id) A.leader = A.members[0] || null;
+  if (!A.members.length && A.id > 3) W.alliances = W.alliances.filter(a => a !== A);
+  return { ok: true, msg: `${A.n}에서 나왔어요` };
+}
+function createAlliance(L, name) {
+  if (L.alliance) return fail('이미 동맹에 있어요'); if (lv(L, 'embassy') < 1) return fail('동맹관이 필요해요'); if (L.gold < 500) return fail('금화 500이 필요해요');
+  L.gold -= 500; const id = Math.max(...W.alliances.map(a => a.id)) + 1;
+  W.alliances.push({ id, n: name || `${L.name}의 동맹`, tag: 'ME', color: '#c9a8ff', members: [], leader: L.id });
+  joinAlliance(L, id, true); return { ok: true, msg: '동맹을 만들었어요' };
+}
+function invite(L, targetId) {
+  const A = allianceOf(L), T = W.lords[targetId]; if (!A) return fail('동맹이 없어요'); if (T.alliance) return fail('이미 다른 동맹에 있어요');
+  if ((T.rel[L.id] || 0) < 10 && T.power > L.power * 1.3) return fail(`${T.name}: "우리와 아직 친하지 않네요"`);
+  return joinAlliance(T, A.id, true);
+}
+function bumpRel(A, B, d) { A.rel[B.id] = clampN((A.rel[B.id] || 0) + d, -100, 100); }
+function gift(L, targetId, r, n) {
+  const T = W.lords[targetId]; if (!T || T === L) return fail('받을 영주가 없어요');
+  n = Math.min(n, Math.floor(L.res[r])); if (n < 1) return fail('자원이 모자라요');
+  L.res[r] -= n; T.res[r] += n; const d = Math.min(25, Math.round(n / Math.max(500, T.power * .3) * 10));
+  bumpRel(T, L, d); return { ok: true, msg: `${T.name}에게 ${RN[r]} ${n}을 보냈어요 (호감 +${d})` };
+}
+// a started build/research asks the alliance for help; helpers each take 1% (at least 60s) off
+function helpRequest(L, kind, ref) { L.helped[kind + ':' + ref] = 0; }
+function helpTarget(helper, L) {
+  let n = 0; const cap = helpCap(lv(L, 'embassy'));
+  for (const q of [...L.bq, L.rq].filter(Boolean)) {
+    if (q.helps >= cap || q.left <= 0) continue;
+    q.helps++; q.left -= Math.max(60, q.total * .01); n++;
+  }
+  if (n) { helper.contrib += 2 * n; bumpRel(L, helper, .5 * n); }
+  return n;
+}
+function helpAll(L) { const A = allianceOf(L); if (!A) return fail('동맹이 없어요'); let n = 0; for (const m of A.members) if (m !== L.id) n += helpTarget(L, W.lords[m]); return n ? { ok: true, msg: `동맹원을 ${n}번 도왔어요 (공헌 +${n * 2})` } : fail('도울 일이 없어요'); }
+// the warehouse's market: give 3, get 1 (a little better with a bigger warehouse)
+const tradeRate = L => Math.min(.5, .33 + lv(L, 'warehouse') * .005);
+function trade(L, from, to, n) {
+  if (lv(L, 'warehouse') < 1) return fail('창고가 있어야 교역할 수 있어요');
+  if (from === to || !RES.includes(from) || !RES.includes(to)) return fail('바꿀 자원을 골라 주세요');
+  n = Math.floor(Math.min(n, L.res[from])); if (n < 100) return fail('100 이상부터 바꿀 수 있어요');
+  const got = Math.floor(n * tradeRate(L)); L.res[from] -= n; L.res[to] += got;
+  return { ok: true, msg: `교역: ${RN[from]} ${n} → ${RN[to]} ${got}`, got };
+}
+function shopBuy(L, id) { const it = SHOP.find(s => s.id === id); if (!it) return fail('없는 물건이에요'); if (L.contrib < it.c) return fail('공헌이 모자라요'); L.contrib -= it.c; L.items[id] = (L.items[id] || 0) + 1; return { ok: true, msg: `${jo(ITEMS[id].n, '을', '를')} 샀어요` }; }
+
+/* rallies: alliance members gather for 2 minutes, then march together on a beast, the throne or a town */
+const RALLY_GATHER = 120;
+function startRally(L, tileId) {
+  const A = allianceOf(L); if (!A) return fail('동맹이 있어야 집결할 수 있어요');
+  const tile = tileOf(tileId); if (!tile) return fail('없는 곳이에요');
+  if (!['beast', 'throne', 'town'].includes(tile.kind)) return fail('집결할 수 없는 곳이에요');
+  if (tile.kind === 'throne' && W.t < W.throne.open) return fail('왕좌 쟁탈전은 아직 시작 전이에요');
+  if (tile.kind === 'throne' && W.throne.holder === A.id) return fail('이미 우리 동맹의 왕좌예요');
+  if (tile.kind === 'town') { const T = W.lords[tile.lord]; if (allied(L, T) || T === L) return fail('공격할 수 없는 영지예요'); if (T.shieldT > 0) return fail('평화의 방패가 지키고 있어요'); }
+  if (W.rallies.some(r => r.tile === tile.id)) return fail('이미 집결 중이에요');
+  if (freeMarches(L) < 1) return fail('보낼 수 있는 부대가 없어요');
+  const a = takeArmy(L.troops, maxMarch(L)); if (armyN(a) < 1) return fail('병사가 없어요');
+  const r = { id: W.seq++, alliance: A.id, leader: L.id, tile: tile.id, left: RALLY_GATHER, state: 'gather', parts: [{ lord: L.id, army: a }] };
+  W.rallies.push(r); L.stats.rally++; recalc(L);
+  for (const m of A.members) if (m !== L.id) mail(W.lords[m], '동맹 집결', `${jo(L.name, '이', '가')} ${tileName(tile)} 집결을 열었어요. 2분 안에 참여할 수 있어요.`, 'rally');
+  return { ok: true, msg: `${tileName(tile)} 집결 시작 (2분 뒤 출발)`, rally: r };
+}
+function joinRally(L, rid, n) {
+  const r = W.rallies.find(r => r.id === rid); if (!r || r.state !== 'gather') return fail('집결이 끝났어요');
+  if (L.alliance !== r.alliance) return fail('다른 동맹의 집결이에요');
+  if (r.parts.some(p => p.lord === L.id)) return fail('이미 참여했어요');
+  if (freeMarches(L) < 1) return fail('보낼 수 있는 부대가 없어요');
+  const a = takeArmy(L.troops, Math.min(n || maxMarch(L), maxMarch(L))); if (armyN(a) < 1) return fail('병사가 없어요');
+  r.parts.push({ lord: L.id, army: a }); L.stats.rally++; recalc(L); return { ok: true, msg: `집결에 ${armyN(a)}명 참여` };
+}
+const tileName = t => t.kind === 'town' ? W.lords[t.lord].name : t.kind === 'throne' ? '왕좌' : t.kind === 'res' ? `${RN[t.res]} 자원지 Lv${t.lv}` : `${t.n} Lv${t.lv}`;
+function throneGuard() {
+  // unclaimed: the royal guard grows a little every day; held: a share of the holding alliance's home troops
+  const H = W.throne.holder;
+  if (!H) { const g = army(), n = Math.round(1500 * (1 + W.t / 86400 * .5)); g.inf[2] = Math.round(n * .45); g.arc[2] = Math.round(n * .3); g.cav[2] = n - g.inf[2] - g.arc[2]; return g; }
+  const A = W.alliances.find(a => a.id === H); const p = A ? A.members.reduce((s, m) => s + armyPow(W.lords[m].troops), 0) : 0;
+  const g = army(); const n = Math.max(2000, p * .35 / unitPow('inf', 2)); g.inf[2] = Math.round(n * .45); g.arc[2] = Math.round(n * .3); g.cav[2] = Math.round(n * .25); return g;
+}
+
+/* ---------- combat resolution ---------- */
+function splitLosses(L, loss, home, woundShare) {
+  // returns {dead, wounded}; wounded go to the hospital while there is room
+  const total = armyN(loss), b = bonus(L), share = clampN(woundShare + b.save, 0, .95);
+  let wn = Math.min(Math.floor(total * share), Math.max(0, hospFree(L)));
+  const k = total ? wn / total : 0, wounded = army();
+  for (const t of TT) for (let i = 0; i < 5; i++) { wounded[t][i] = Math.floor(loss[t][i] * k); }
+  addArmy(L.wounded, wounded); return { dead: total - armyN(wounded), wounded: armyN(wounded) };
+}
+function lootOf(L, cap) {   // what a winner can take from L above the warehouse's protection
+  const p = protectOf(lv(L, 'warehouse')), avail = {}; let s = 0;
+  for (const r of RES) { avail[r] = Math.max(0, L.res[r] - p) * .5; s += avail[r]; }
+  const k = s > cap ? cap / s : 1, out = {}; for (const r of RES) out[r] = Math.floor(avail[r] * k); return out;
+}
+function arrive(m) {
+  const L = W.lords[m.lord], tile = tileOf(m.tile);
+  if (!tile || (m.kind === 'gather' && tile.kind !== 'res')) { m.state = 'back'; m.left = m.total; return; }
+  if (m.kind === 'gather') {
+    if (W.marches.some(o => o !== m && o.tile === tile.id && o.state === 'work')) { m.state = 'back'; m.left = m.total; return; }
+    const b = bonus(L), load = armyLoad(m.army, b.load), amt = Math.min(load, tile.amt);
+    m.state = 'work'; m.work = amt / (gatherRate(tile.lv) * (1 + b.gather)); m.gain = amt; return;
+  }
+  // attack: a camp or a town
+  if (tile.kind === 'camp') {
+    const r = battle(m.army, mods(L), tile.army, noMods());
+    addArmy(m.army, r.aLoss, -1); addArmy(tile.army, r.dLoss, -1);
+    const lost = splitLosses(L, r.aLoss, false, .8);
+    if (r.win) {
+      const lt = campLoot(tile.lv), b = bonus(L), k = 1 + b.loot;
+      for (const x of RES) m.carry[x] = (m.carry[x] || 0) + Math.round(lt[x] * k);
+      L.gold += Math.round(lt.gold * k); for (const id of L.team) heroXp(L, id, lt.xp);
+      const drop = rng(); let item = null;
+      if (drop < .02) item = 'ticket'; else if (drop < .08) item = 'sp5'; else if (drop < .16) item = 'xp'; else if (drop < .165) item = 'sp60';
+      if (item) L.items[item] = (L.items[item] || 0) + 1;
+      L.stats.camps++; L.stats.kills += armyN(r.dLoss);
+      removeTile(tile); setTimeout0(spawnCamp);
+      if (L.player) mail(L, `${tile.n} Lv${tile.lv} 토벌 성공`, `잃은 병사 ${lost.dead}명(부상 ${lost.wounded}). 전리품: 식량 ${m.carry.food}, 목재 ${m.carry.wood}, 금화 ${Math.round(lt.gold * k)}${item ? ', ' + ITEMS[item].n : ''}, 영웅 경험치 ${lt.xp}`, 'win');
+    } else if (L.player) mail(L, `${tile.n} Lv${tile.lv} 토벌 실패`, `잃은 병사 ${lost.dead}명(부상 ${lost.wounded}). 소굴의 남은 적 ${armyN(tile.army)}명.`, 'lose');
+  } else if (tile.kind === 'town') {
+    const T = W.lords[tile.lord]; town(L, T, m.army, m.carry, [m]);
+  }
+  m.state = 'back'; m.left = m.total;
+}
+// L attacks T's town with army a (already off L's troops); loot goes to carry
+// a town's defenders: its own home troops, plus 15% of each ally's home troops (virtual reinforcement)
+function defArmy(T) {
+  const def = cloneArmy(T.troops), A = allianceOf(T);
+  if (A) for (const id of A.members) if (id !== T.id) { const help = cloneArmy(W.lords[id].troops); for (const t of TT) for (let i = 0; i < 5; i++) help[t][i] = Math.floor(help[t][i] * .15); addArmy(def, help); }
+  return def;
+}
+function town(L, T, a, carry, marches) {
+  const def = defArmy(T);
+  const r = battle(a, mods(L), def, mods(T, true));
+  addArmy(a, r.aLoss, -1);
+  // the defender's own losses are its share of the defence
+  const own = armyN(T.troops), all = armyN(def), k = all ? own / all : 0, tl = army();
+  for (const t of TT) for (let i = 0; i < 5; i++) tl[t][i] = Math.min(T.troops[t][i], Math.floor(r.dLoss[t][i] * k));
+  addArmy(T.troops, tl, -1);
+  const la = splitLosses(L, r.aLoss, false, .4), ld = splitLosses(T, tl, true, .7);
+  bumpRel(T, L, -40); W.lords.forEach(o => { if (o !== L && o !== T && allied(o, T)) bumpRel(o, L, -15); });
+  L.stats.attacked++; L.stats.kills += armyN(r.dLoss);
+  if (r.win) {
+    const b = bonus(L), lt = lootOf(T, armyLoad(a, b.load) * (1 + b.loot));
+    for (const x of RES) { T.res[x] -= lt[x]; carry[x] = (carry[x] || 0) + lt[x]; }
+    const tot = RES.reduce((s, x) => s + lt[x], 0); L.stats.plunder += tot; L.stats.wins++;
+    T.shieldT = Math.max(T.shieldT, 1800);   // a short truce after being sacked
+    news(`${jo(L.name, '이', '가')} ${T.name}의 영지를 약탈했어요 (${Math.round(tot)} 자원).`);
+    mail(T, '영지가 약탈당했어요', `${L.name}의 공격. 잃은 병사 ${ld.dead}명(부상 ${ld.wounded}), 빼앗긴 자원 ${Math.round(tot)}. 30분 동안 보호막이 생겼어요.`, 'lose');
+    mail(L, `${T.name} 약탈 성공`, `잃은 병사 ${la.dead}명(부상 ${la.wounded}), 약탈 자원 ${Math.round(tot)}.`, 'win');
+  } else {
+    if (L.ai) L.ai.cool = Object.assign(L.ai.cool || {}, { [T.id]: W.t + 6 * 3600 });   // a beaten raider leaves this town alone for a while
+    news(`${jo(T.name, '이', '가')} ${L.name}의 공격을 막아 냈어요.`);
+    mail(T, '공격을 막아 냈어요', `${L.name}의 부대를 물리쳤어요. 잃은 병사 ${ld.dead}명(부상 ${ld.wounded}).`, 'win');
+    mail(L, `${T.name} 공격 실패`, `잃은 병사 ${la.dead}명(부상 ${la.wounded}).`, 'lose');
+  }
+  recalc(T); return r.win;
+}
+function launchRally(r) {
+  const tile = tileOf(r.tile), leader = W.lords[r.leader];
+  if (!tile) { for (const p of r.parts) addArmy(W.lords[p.lord].troops, p.army); W.rallies.splice(W.rallies.indexOf(r), 1); return; }
+  r.state = 'march'; r.left = r.total = travelTime(leader, tile);
+}
+function rallyHit(r) {
+  const tile = tileOf(r.tile), leader = W.lords[r.leader], A = W.alliances.find(a => a.id === r.alliance);
+  const all = army(); for (const p of r.parts) addArmy(all, p.army);
+  const back = () => { const T = travelTime(leader, tile || { x: leader.x, y: leader.y }); for (const p of r.parts) if (armyN(p.army) > 0) W.marches.push({ id: W.seq++, lord: p.lord, kind: 'rally', tile: r.tile, tx: tile ? tile.x : leader.x, ty: tile ? tile.y : leader.y, army: p.army, state: 'back', left: T, total: T, carry: p.carry || {}, work: 0 }); };
+  if (!tile) { back(); return; }
+  let win = false;
+  if (tile.kind === 'town') {
+    const T = W.lords[tile.lord], carry = {}; win = town(leader, T, all, carry, []);   // town() takes the losses off all
+    const n0 = r.parts.reduce((s, p) => s + armyN(p.army), 0);
+    for (const p of r.parts) { const k = n0 ? armyN(p.army) / n0 : 0; for (const t of TT) for (let i = 0; i < 5; i++) p.army[t][i] = Math.floor(all[t][i] * k); p.carry = {}; for (const x of RES) p.carry[x] = Math.floor((carry[x] || 0) * k); }
+    back(); return;
+  }
+  const guard = tile.kind === 'throne' ? throneGuard() : tile.army;
+  const res = battle(all, mods(leader), guard, tile.kind === 'throne' ? { atk: {}, def: { inf: .3, arc: .3, cav: .3 }, hp: {} } : noMods());
+  const n0 = armyN(all);
+  for (const p of r.parts) {
+    const L = W.lords[p.lord], k = n0 ? armyN(p.army) / n0 : 0, l = army();
+    for (const t of TT) for (let i = 0; i < 5; i++) l[t][i] = Math.min(p.army[t][i], Math.round(res.aLoss[t][i] * k));
+    addArmy(p.army, l, -1); splitLosses(L, l, false, .7);
+    if (res.win && tile.kind === 'beast') {
+      const lt = campLoot(tile.lv * 4 + 4); p.carry = {}; for (const x of RES) p.carry[x] = Math.round(lt[x] * (.5 + k));
+      L.gold += Math.round(lt.gold * (.5 + k)); L.items.ticket = (L.items.ticket || 0) + (rng() < .5 + k ? 1 : 0); L.items.xp = (L.items.xp || 0) + 2;
+      for (const id of L.team) heroXp(L, id, lt.xp);
+      if (rng() < .08 * tile.lv) { const H = pickR(HEROES.filter(h => h.r >= 2)); if (L.heroes[H.id]) L.heroes[H.id].shard += 5; }
+      mail(L, `${tile.n} 토벌 성공!`, `동맹 집결로 ${tile.n}(Lv${tile.lv}) 토벌에 성공했어요. 모집권과 경험의 서를 얻었어요.`, 'win');
+    } else if (!res.win) mail(L, `${tileName(tile)} 집결 실패`, `집결 부대가 물러났어요.`, 'lose');
+  }
+  if (res.win && tile.kind === 'beast') { removeTile(tile); setTimeout0(spawnBeast); news(`${jo(A.n, '이', '가')} ${jo(tile.n, '을', '를')} 쓰러뜨렸어요.`); }
+  else if (!res.win && tile.kind === 'beast') addArmy(tile.army, res.dLoss, -1);
+  if (res.win && tile.kind === 'throne') {
+    W.throne.holder = A.id; W.throne.since = W.t; BV++;
+    news(`👑 ${jo(A.n, '이', '가')} 왕좌를 차지했어요! 동맹원 모두 자원 생산 +15%.`);
+    for (const m of A.members) mail(W.lords[m], '왕좌 점령!', `${jo(A.n, '이', '가')} 왕좌를 차지했어요. 동맹원 모두 자원 생산 +15%.`, 'win');
+  }
+  back();
+}
+// deferred spawns so tile lists are not changed while iterating
+let deferred = [];
+const setTimeout0 = fn => deferred.push([300 + rng() * 600, fn]);
+
+/* ---------- time ---------- */
+function tick(dt) {
+  W.t += dt;
+  for (let i = deferred.length - 1; i >= 0; i--) { deferred[i][0] -= dt; if (deferred[i][0] <= 0) { const f = deferred[i][1]; deferred.splice(i, 1); f(); } }
+  for (const L of W.lords) tickLord(L, dt);
+  for (let i = W.marches.length - 1; i >= 0; i--) {
+    const m = W.marches[i], L = W.lords[m.lord];
+    if (m.state === 'work') {
+      m.work -= dt;
+      const tile = tileOf(m.tile);
+      if (m.work <= 0 || !tile) {
+        if (tile) { const g = Math.min(m.gain, tile.amt); tile.amt -= g; m.carry[tile.res] = (m.carry[tile.res] || 0) + g; L.stats.gathered += g; if (tile.amt < 50) { removeTile(tile); setTimeout0(spawnRes); } }
+        m.state = 'back'; m.left = m.total;
+      }
+      continue;
+    }
+    m.left -= dt;
+    if (m.left > 0) continue;
+    if (m.state === 'go') arrive(m);
+    else {
+      addArmy(L.troops, m.army); for (const x of RES) L.res[x] += m.carry[x] || 0;
+      W.marches.splice(i, 1); recalc(L);
+    }
+  }
+  for (let i = W.rallies.length - 1; i >= 0; i--) {
+    const r = W.rallies[i]; r.left -= dt;
+    if (r.left > 0) continue;
+    if (r.state === 'gather') launchRally(r);
+    else { W.rallies.splice(i, 1); rallyHit(r); }
+  }
+}
+function tickLord(L, dt) {
+  const b = bonus(L);
+  for (const r of RES) L.res[r] += prodPerHour(L, r, b) * dt / 3600;
+  L.res.food -= upkeepPerHour(L) * dt / 3600;
+  if (L.res.food < 0) { L.res.food = 0; const k = .004 * dt / 60; for (const t of TT) for (let i = 0; i < 5; i++) L.troops[t][i] = Math.floor(L.troops[t][i] * (1 - k)); }
+  L.gold += goldPerHour(L, b) * dt / 3600;
+  if (L.shieldT > 0) L.shieldT = Math.max(0, L.shieldT - dt);
+  for (let i = L.bq.length - 1; i >= 0; i--) {
+    const q = L.bq[i]; q.left -= dt;
+    if (q.left <= 0) { L.blds[q.slot]++; L.bq.splice(i, 1); recalc(L);
+      if (L.player) mail(L, `${BLD[SLOTS[q.slot].k].n} ${L.blds[q.slot]}레벨 완성`, '', 'done');
+      if (q.slot === 0 && keepLv(L) % 5 === 0) news(`${L.name}의 본성이 ${keepLv(L)}레벨이 됐어요.`); }
+  }
+  if (L.rq) { L.rq.left -= dt; if (L.rq.left <= 0) { L.tech[L.rq.id] = (L.tech[L.rq.id] || 0) + 1; if (L.player) mail(L, `${TECHM[L.rq.id].n} ${L.tech[L.rq.id]}단계 연구 완료`, '', 'done'); L.rq = null; recalc(L); } }
+  for (const t of TT) { const q = L.tq[t]; if (!q) continue; q.left -= dt; if (q.left <= 0) { L.troops[t][q.tier] += q.n; L.tq[t] = null; recalc(L); } }
+  if (L.heal) { L.heal.left -= dt; if (L.heal.left <= 0) { addArmy(L.troops, L.heal.army); L.heal = null; recalc(L); } }
+  if (L.ai) { L.ai.nextT -= dt; if (L.ai.nextT <= 0) { L.ai.nextT = 10; think(L); } }
+  else if (L.player && L.chanc !== false) { L.thinkT = (L.thinkT || 0) - dt; if (L.thinkT <= 0) { L.thinkT = 5; think(L); } }
+}
+
+/* ---------- the brain: AI lords and the player's chancellor ----------
+   A utility planner: every 5 seconds it looks at idle builders, the academy, the barracks, the hospital and free
+   marches, scores what it could do, and does the best affordable thing. Personality weights tilt the scores. */
+const PLAYER_STRAT = { balanced: PERS.balanced, econ: { n: '경제', econ: 1.4, mil: .7, aggr: 0, gath: 1.4, mix: [.35, .35, .3] }, mil: { n: '군사', econ: .8, mil: 1.4, aggr: 0, gath: .8, mix: [.35, .3, .35] } };
+function think(L) {
+  const P = L.ai ? PERS[L.ai.p] : PLAYER_STRAT[L.strat] || PERS.balanced, A = L.ai ? null : L.auto, say = m => { if (!L.ai) log(L, m); };
+  const on = k => !A || A[k];
+  // demand = the next keep level plus half of every other upgrade we could start; short = hours of production missing
+  const kNeed = bCost('keep', keepLv(L)), b = bonus(L), dem = { food: 0, wood: 0, stone: 0, iron: 0 };
+  SLOTS.forEach((s, i) => { if (keepLv(L) < s.need || L.blds[i] >= MAXLV || (s.k !== 'keep' && L.blds[i] + 1 > keepLv(L))) return;
+    const c = bCost(s.k, L.blds[i]); for (const r of RES) dem[r] += (c[r] || 0) * (s.k === 'keep' ? 1 : .5); });
+  // and the army: a full batch of each type at the best tier, plus 8 hours of upkeep
+  for (const t of TT) { const tm = tierMax(L, t); if (tm < 0) continue; const c = trainCost(t, tm, batchOf(lv(L, t === 'inf' ? 'barracks' : t === 'arc' ? 'range' : 'stable'))); for (const r of RES) dem[r] += c[r] || 0; }
+  dem.food += upkeepPerHour(L) * 8;
+  const shortOf = r => Math.max(0, dem[r] - L.res[r]) / Math.max(1, prodPerHour(L, r, b));
+  // quests
+  if (L.player && on('quest')) { const c = claimQuest(L); if (c.ok) say(`📜 ${c.msg}`); }
+  // sacked within the last hour and a shield in the bag: raise it
+  if (L.player && on('build') && L.shieldT <= 0 && L.items.shield > 0 && W.mail.some(m => m.kind === 'lose' && m.title.startsWith('영지가') && W.t - m.t < 3600)) { const r = useItem(L, 'shield'); if (r.ok) say(`🛡 ${r.msg} — 방금 약탈을 당했어요`); }
+  // heroes: recruit with tickets, use books, set the team and governors
+  if (on('hero')) {
+    if (L.items.ticket > 0) { const r = recruit(L, true); if (r.ok) say(`🎖 ${r.msg}`); }
+    else if (L.gold > RECRUIT_GOLD * 3 && L.ai == null) { const r = recruit(L, false); if (r.ok) say(`🎖 금화로 모집 — ${r.msg}`); }
+    else if (L.ai && L.gold > RECRUIT_GOLD * 2) recruit(L, false);
+    const ids = Object.keys(L.heroes).sort((a, b2) => heroScore(L, b2) - heroScore(L, a));
+    const team = ids.slice(0, 3); if (team.join() !== L.team.join()) { setTeam(L, team); say(`🛡 지휘 영웅: ${team.map(i => HEROM[i].n).join(', ')}`); }
+    setGov(L, ids.slice(3));
+    for (const id of L.team) { const h = L.heroes[id]; if (h.shard >= STAR_SHARDS[Math.min(4, h.star)] && h.star < 5) { const r = starUp(L, id); if (r.ok) say(`⭐ ${r.msg}`); } }
+    if (L.items.xp > 0 && L.team[0] && L.heroes[L.team[0]].lv < heroCap(lv(L, 'hall'))) useXp(L, L.team[0], L.items.xp);
+  }
+  // alliance help
+  if (L.alliance && on('help')) { const A2 = allianceOf(L); for (const m of A2.members) if (m !== L.id) helpTarget(L, W.lords[m]); }
+  if (L.player && !L.alliance && on('ally') && rng() < .1) {
+    const best = W.alliances.filter(a => a.members.length).map(a => ({ a, rel: a.members.reduce((s, m) => s + (W.lords[m].rel[L.id] || 0), 0) / a.members.length })).sort((x, y) => y.rel - x.rel)[0];
+    if (best) { const r = joinAlliance(L, best.a.id); if (r.ok) say(`🤝 ${r.msg} — 우리를 가장 좋게 보는 동맹이에요`); }
+  }
+  if (L.ai && !L.alliance && rng() < .01) { const cands = W.alliances.filter(a => a.members.length < 6 && a.members.length); if (cands.length) joinAlliance(L, pickR(cands).id); }
+  if (L.ai && L.contrib >= 25 && L.bq.length) { shopBuy(L, 'sp5'); speedup(L, 'build', 'sp5'); }
+  // training: an army that fits the keep level; when it is short, soldiers come before buildings
+  const doTrain = relaxed => {
+    if (!on('train')) return;
+    // upkeep may use part of the food income, plus whatever stock lasts 12 hours beyond what building needs
+    const food = prodPerHour(L, 'food', b), up = upkeepPerHour(L), room = food * (.25 + .25 * P.mil) - up + Math.max(0, L.res.food - dem.food) / 12;
+    for (const [j, t] of TT.entries()) {
+      if (L.tq[t]) continue; const tm = tierMax(L, t); if (tm < 0) continue;
+      const have = L.troops[t].reduce((a, c) => a + c, 0), tot = Math.max(1, armyN(L.troops));
+      if (have / tot > P.mix[j] + .1 && tot > 50) continue;
+      const bl = lv(L, t === 'inf' ? 'barracks' : t === 'arc' ? 'range' : 'stable');
+      let n = Math.floor(Math.min(batchOf(bl), Math.max(relaxed ? batchOf(bl) * .5 : 0, room / upkeep(tm))));
+      const min = Math.min(20, batchOf(bl));
+      while (n >= min && !(afford(L, trainCost(t, tm, n)) && (relaxed || okSpend(trainCost(t, tm, n))))) n = Math.floor(n * .7);
+      if (n >= min) { const r = train(L, t, tm, n); if (r.ok) say(`⚔ ${r.msg}${relaxed ? ' — 군대가 영지 크기에 비해 작아요' : ''}`); }
+    }
+  };
+  // reserve: what spending on soldiers, research and healing must leave behind (30% of the next keep; all of it while saving)
+  const reserve = {}; for (const r of RES) reserve[r] = (kNeed[r] || 0) * .3;
+  const okSpend = c => RES.every(r => !(c[r] > 0) || L.res[r] - c[r] >= reserve[r]);
+  let total = armyN(L.troops) + armyN(L.wounded); for (const m of W.marches) if (m.lord === L.id) total += armyN(m.army);
+  const target = 40 * Math.pow(keepLv(L), 1.5) * P.mil, short = total < target;
+  if (short) doTrain(total < target * .7);
+  // building
+  if (on('build')) for (let guard = 0; guard < 2 && L.bq.length < builders(keepLv(L)); guard++) {
+    let best = -1, bs = -1e9, bestOk = false;
+    SLOTS.forEach((s, i) => {
+      if (keepLv(L) < s.need || L.blds[i] >= MAXLV || L.bq.some(q => q.slot === i)) return;
+      if (s.k !== 'keep' && L.blds[i] + 1 > keepLv(L)) return;
+      let sc = buildScore(L, i, P, shortOf);
+      if (s.k === 'keep') { const nd = keepNeeds(L.blds[0]); let ok = true; for (const k in nd) if (lv(L, k) < nd[k]) ok = false; if (!ok) return; }
+      else { const nd = keepNeeds(keepLv(L)); if (nd[s.k] && lv(L, s.k) < nd[s.k]) sc += 60; }
+      const c = bCost(s.k, L.blds[i]); const ok = afford(L, c);
+      // cheaper upgrades first among similar scores; wait for a clearly better one if it is close to affordable
+      const wait = RES.reduce((m, r) => Math.max(m, Math.max(0, (c[r] || 0) - L.res[r]) / Math.max(1, prodPerHour(L, r, b)) * 60), 0);   // minutes
+      sc -= wait * 2;
+      if (sc > bs) { bs = sc; best = i; bestOk = ok; }
+    });
+    if (best >= 0 && !bestOk) { const c = bCost(SLOTS[best].k, L.blds[best]); for (const r of RES) reserve[r] = Math.max(reserve[r], (c[r] || 0) * .6); }   // saving up for it
+    if (best < 0 || !bestOk) break;
+    const r = build(L, best); if (r.ok) say(`🏗 ${r.msg} — ${buildWhy(L, best, shortOf)}`); else break;
+  }
+  // market: when one resource piles far past its demand and another holds up the next build, trade the surplus
+  if ((L.ai || on('build')) && lv(L, 'warehouse') > 0) {
+    const need = RES.filter(r => reserve[r] > L.res[r] || shortOf(r) > 2).sort((x, y) => shortOf(y) - shortOf(x))[0];
+    const rich = RES.filter(r => L.res[r] > dem[r] * 2 + 20000).sort((x, y) => (L.res[y] - dem[y]) - (L.res[x] - dem[x]))[0];
+    if (need && rich && need !== rich) { const n = Math.floor((L.res[rich] - dem[rich] * 2) * .5), r = trade(L, rich, need, n); if (r.ok) say(`⚖ ${r.msg} — ${jo(RN[rich], '이', '가')} 넘치고 ${jo(RN[need], '이', '가')} 모자라요`); }
+  }
+  // research
+  if (on('research') && !L.rq && lv(L, 'academy') > 0) {
+    let best = null, bs = -1e9;
+    for (const T of TECH) { const cur = L.tech[T.id] || 0; if (cur >= techCap(lv(L, 'academy'))) continue;
+      let sc = (T.tree === 0 ? 10 * P.econ : 10 * P.mil) - cur * 4;
+      if (T.id === 'build' || T.id === 'scholar') sc += 6;
+      if (T.e.prod) { const r = Object.keys(T.e.prod)[0]; sc += Math.min(12, shortOf(r)); }
+      if (sc > bs && afford(L, tCost(cur))) { bs = sc; best = T.id; } }
+    if (best && okSpend(tCost(L.tech[best] || 0))) { const r = research(L, best); if (r.ok) say(`📚 ${r.msg}`); }
+  }
+  // healing: worth starting only for a real share of the wounded
+  if (on('heal') && !L.heal && armyN(L.wounded) > 0) { const n = armyN(L.wounded), r = heal(L, reserve, Math.min(300, Math.max(50, n * .3))); if (r.ok) say(`⛑ ${r.msg}`); }
+  if (!short) doTrain(false);
+  // marches: hunt camps we can beat, gather what we lack, raid the weak (raiders only)
+  let free = freeMarches(L);
+  const home = armyN(L.troops), m0 = mods(L);
+  // hunting rests while the hospital is nearly full (the wounded would die)
+  // at most half of the march slots hunt, so gathering always has room
+  const hunting = W.marches.filter(m => m.lord === L.id && m.kind === 'attack').length, huntCap = Math.max(1, Math.floor(marchCount(lv(L, 'rally')) / 2));
+  if (free > 0 && home > 20 && on('hunt') && hunting < huntCap && hospFree(L) > hospCap(lv(L, 'hospital')) * .3) {
+    const send = Math.min(maxMarch(L), home), a = takeArmy(cloneArmy(L.troops), send), ap = armyPow(a);
+    // only camps clearly weaker on paper get a full battle preview, strongest first, at most 4
+    const camps = W.tiles.filter(t => t.kind === 'camp' && armyPow(t.army) < ap * .9 && dist(L, t) < 14 && !W.marches.some(m => m.tile === t.id)).sort((x, y) => y.lv - x.lv).slice(0, 4);
+    for (const c of camps) {
+      const r = battle(a, m0, c.army, noMods());
+      if (r.win && armyN(r.aLoss) < armyN(a) * .2) { const s = sendMarch(L, c.id, 'attack', send); if (s.ok) { say(`🏹 ${c.n} Lv${c.lv} 토벌 출발 — 예상 피해 ${armyN(r.aLoss)}명`); free--; } break; }
+    }
+  }
+  if (free > 0 && home > 20 && L.ai && P.aggr > .3 && rng() < P.aggr * .05) {
+    const cool = (L.ai.cool || {});
+    const targets = W.lords.filter(T => T !== L && !allied(L, T) && T.shieldT <= 0 && dist(L, T) < 16 && (L.rel[T.id] || 0) < 30 && !(cool[T.id] > W.t));
+    for (const T of targets.sort((x, y) => x.power - y.power)) {
+      const send = Math.min(maxMarch(L), home), a = takeArmy(cloneArmy(L.troops), send), r = battle(a, m0, defArmy(T), mods(T, true));
+      const loot = lootOf(T, armyLoad(a)); const gain = RES.reduce((s, x) => s + loot[x], 0);
+      if (r.win && gain > 2000 && armyN(r.aLoss) < armyN(a) * .35) { sendMarch(L, W.tiles.find(t => t.kind === 'town' && t.lord === T.id).id, 'attack', send); free--; break; }
+    }
+  }
+  if (free > 0 && home > 10 && on('gather')) {
+    const want = RES.slice().sort((x, y) => shortOf(y) - shortOf(x));
+    for (const r of want) {
+      if (L.res[r] > dem[r] * 1.5 + 5000) continue;   // enough of this one already (and a big pile only invites raiders)
+      const tiles = W.tiles.filter(t => t.kind === 'res' && t.res === r && dist(L, t) < 16 && !W.marches.some(m => m.tile === t.id)).sort((a, c) => (c.lv * 3 - dist(L, c)) - (a.lv * 3 - dist(L, a)));
+      if (!tiles.length) continue;
+      const n = Math.min(maxMarch(L), Math.max(10, Math.floor(home * (.25 + .15 * P.gath))));
+      const s = sendMarch(L, tiles[0].id, 'gather', n); if (s.ok) { say(`🧺 ${RN[r]} 자원지 Lv${tiles[0].lv} 채집 출발 (${armyN(s.march.army)}명) — ${jo(RN[r], '이', '가')} 가장 모자라요`); free--; }
+      break;
+    }
+  }
+  // AI rallies: beasts when strong enough, the throne for the strongest alliance
+  if (L.ai && L.alliance && free > 0 && rng() < .03) {
+    const A2 = allianceOf(L), mine = A2.members.reduce((s, m) => s + armyPow(W.lords[m].troops) * .5, 0);
+    // the throne first when the alliance can take it, otherwise a beast
+    const throne = W.tiles.find(t => t.kind === 'throne');
+    if (W.t >= W.throne.open && W.throne.holder !== A2.id && armyPow(throneGuard()) * 1.4 < mine && !W.rallies.some(r => r.tile === throne.id)) startRally(L, throne.id);
+    else {
+      const beasts = W.tiles.filter(t => t.kind === 'beast' && !W.rallies.some(r => r.tile === t.id) && dist(L, t) < 14 && armyPow(t.army) * 1.3 < mine);
+      if (beasts.length) startRally(L, beasts[0].id);
+    }
+  }
+  // AI joins its alliance's open rallies
+  if (L.ai && L.alliance && free > 0) for (const r of W.rallies) if (r.state === 'gather' && r.alliance === L.alliance && !r.parts.some(p => p.lord === L.id) && rng() < .5) { joinRally(L, r.id, Math.floor(armyN(L.troops) * .6)); break; }
+}
+const keepReserveOk = (L, c, kNeed) => RES.every(r => L.res[r] - (c[r] || 0) >= (kNeed[r] || 0) * .3 || (c[r] || 0) === 0);
+function heroScore(L, id) { const h = L.heroes[id], H = HEROM[id]; return RAR_M[H.r] * 10 + h.lv * .5 + h.star * 4; }
+function buildScore(L, i, P, shortOf) {
+  const k = SLOTS[i].k, cur = L.blds[i], B = BLD[k];
+  let s = 20 - cur * 1.2;
+  if (k === 'keep') s += 35;
+  if (B.res) s += 10 * P.econ + Math.min(25, shortOf(B.res) * 1.5) + (cur === 0 ? 25 : 0);
+  if (B.troop) s += 8 * P.mil + (cur === 0 ? 20 : 0);
+  if (k === 'academy') s += 10 + (cur === 0 ? 20 : 0);
+  if (k === 'rally') s += 6 * P.mil + (cur === 0 ? 15 : 0);
+  if (k === 'hospital') s += 3 + (armyN(L.wounded) > hospCap(cur) * .8 ? 15 : 0);
+  if (k === 'warehouse') s += 2 + (L.ai && P.aggr < .2 ? 4 : 0);
+  if (k === 'wall') s += P.aggr < .2 ? 6 : 2;
+  if (k === 'hall') s += Object.keys(L.heroes).length * 2;
+  if (k === 'embassy') s += L.alliance ? 6 : 0;
+  return s;
+}
+function buildWhy(L, i, shortOf) {
+  const k = SLOTS[i].k, B = BLD[k];
+  if (k === 'keep') return '다음 단계를 열려면 본성이 먼저예요';
+  const nd = keepNeeds(keepLv(L)); if (nd[k] && lv(L, k) < nd[k]) return '본성을 올리는 데 필요해요';
+  if (B.res) return `${jo(RN[B.res], '이', '가')} 다음 본성에 ${Math.round(shortOf(B.res) * 60)}분치 모자라요`;
+  if (B.troop) return '군대를 키울 때예요';
+  if (L.blds[i] === 0) return '새 건물이 열렸어요';
+  return '가장 싸고 쓸모 있는 공사예요';
+}
+
+/* ---------- quests (the chapter guide) ---------- */
+const Q = (d, ok, r) => ({ d, ok, r });
+const QUESTS = [
+  Q('농장을 2레벨로', L => lv(L, 'farm') >= 2, { wood: 300, food: 300 }),
+  Q('벌목장을 2레벨로', L => lv(L, 'lumber') >= 2, { food: 300, wood: 300 }),
+  Q('보병 20명 훈련', L => armyN(L.troops) >= 110, { food: 500, sp5: 1 }),
+  Q('본성 2레벨', L => keepLv(L) >= 2, { wood: 600, stone: 300 }),
+  Q('야수 소굴 1곳 토벌', L => L.stats.camps >= 1, { ticket: 1 }),
+  Q('치료소 짓기', L => lv(L, 'hospital') >= 1, { food: 800, sp5: 1 }),
+  Q('본성 3레벨', L => keepLv(L) >= 3, { wood: 1200, stone: 600, xp: 1 }),
+  Q('학술원 짓기', L => lv(L, 'academy') >= 1, { food: 1000, wood: 1000 }),
+  Q('자원 2,000 채집', L => L.stats.gathered >= 2000, { sp5: 2 }),
+  Q('연구 1번 끝내기', L => Object.values(L.tech).reduce((a, b) => a + b, 0) >= 1, { stone: 800, iron: 200 }),
+  Q('영웅 2명 모으기', L => Object.keys(L.heroes).length >= 2, { xp: 2 }),
+  Q('본성 4레벨', L => keepLv(L) >= 4, { ticket: 1, sp60: 1 }),
+  Q('동맹 가입', L => !!L.alliance, { gold: 300, sp5: 3 }),
+  Q('본성 5레벨 (일꾼 +1)', L => keepLv(L) >= 5, { food: 4000, wood: 4000, stone: 2000 }),
+  Q('소굴 10곳 토벌', L => L.stats.camps >= 10, { ticket: 1, xp: 3 }),
+  Q('전투력 10,000', L => L.power >= 10000, { sp60: 2 }),
+  Q('본성 7레벨', L => keepLv(L) >= 7, { iron: 2000, ticket: 1 }),
+  Q('동맹 집결 참여', L => L.stats.rally >= 1, { ticket: 1 }),
+  Q('본성 10레벨', L => keepLv(L) >= 10, { sp60: 3, ticket: 2 }),
+  Q('전투력 50,000', L => L.power >= 50000, { ticket: 2, xp: 5 }),
+  Q('본성 15레벨', L => keepLv(L) >= 15, { sp60: 5, ticket: 3 }),
+  Q('소굴 100곳 토벌', L => L.stats.camps >= 100, { ticket: 3, shield: 1 }),
+  Q('본성 20레벨', L => keepLv(L) >= 20, { sp60: 8, ticket: 5 }),
+  Q('왕좌를 차지한 동맹에 있기', L => L.alliance && W.throne.holder === L.alliance, { ticket: 5, sp60: 5 }),
+  Q('본성 25레벨', L => keepLv(L) >= 25, { ticket: 8 }),
+  Q('본성 30레벨', L => keepLv(L) >= 30, { ticket: 10 }),
+];
+function claimQuest(L) {
+  const q = QUESTS[L.quest]; if (!q) return fail('모든 임무를 끝냈어요');
+  if (!q.ok(L)) return fail('아직이에요');
+  for (const k in q.r) { if (RES.includes(k)) L.res[k] += q.r[k]; else if (k === 'gold') L.gold += q.r[k]; else L.items[k] = (L.items[k] || 0) + q.r[k]; }
+  L.quest++; return { ok: true, msg: `임무 완료: ${q.d}` };
+}
+
+/* ---------- save / offline ---------- */
+function serialize() { return JSON.stringify({ W, deferred: deferred.map(d => d[0]) }); }
+function restore(json) {
+  const o = JSON.parse(json); W = o.W; tileAt.clear(); tileById.clear(); for (const t of W.tiles) { tileAt.set(key(t.x, t.y), t); tileById.set(t.id, t); }
+  deferred = []; seed((W.seed + Math.floor(W.t)) | 0);
+  // respawns pending at save time: refill to the usual counts
+  const want = { res: 260, camp: 90, beast: 6 }, fn = { res: spawnRes, camp: spawnCamp, beast: spawnBeast };
+  for (const k in want) { const n = W.tiles.filter(t => t.kind === k).length; for (let i = n; i < want[k]; i++) setTimeout0(fn[k]); }
+  for (const L of W.lords) { L.stats.rally = L.stats.rally || 0; }
+  return W;
+}
+// advance the world by sec seconds in coarse steps (offline time)
+function advance(sec, step = 15) { let left = sec; while (left > 0) { const d = Math.min(step, left); tick(d); left -= d; } }
+
+return {
+  // data
+  RES, RN, BLD, SLOTS, MAXLV, TT, TR, TIER_M, TIER_N, TIER_NEED, TECH, TECHM, TECH_MAX, HEROES, HEROM, RAR, RAR_M, ITEMS, SHOP, PERS, BEATS, QUESTS, SIZE, CENTER, RALLY_GATHER,
+  // formulas
+  bCost, bTime, bProd, protectOf, hospCap, batchOf, marchSize, marchCount, helpCap, heroCap, govSlots, builders, keepNeeds, tCost, tTime, techCap, xpNeed, STAR_SHARDS, RECRUIT_GOLD,
+  trainCost, tierMax, healCost, unitPow, upkeep, campArmy, beastArmy, gatherRate,
+  // world
+  newWorld, get W() { return W; }, tick, advance, serialize, restore, seed,
+  lv, keepLv, bonus, mods, prodPerHour, goldPerHour, upkeepPerHour, recalc, allianceOf, allied, freeMarches, maxMarch, hospFree, tileName, throneGuard, travelTime, lootOf,
+  army, armyN, armyPow, armyLoad, battle, noMods, dist, takeArmy, cloneArmy, PLAYER_STRAT,
+  // actions
+  canBuild, build, canResearch, research, canTrain, train, heal, speedup, useItem, recruit, useXp, starUp, setTeam, setGov,
+  trade, tradeRate, questOk: L => !!(QUESTS[L.quest] && QUESTS[L.quest].ok(L)), defArmy,
+  sendMarch, recall, joinAlliance, leaveAlliance, createAlliance, invite, gift, helpAll, shopBuy, startRally, joinRally, claimQuest, think,
+};
+})();
+if (typeof module !== 'undefined') module.exports = KC;
+/* ================= KINGDOM VIEW =================
+   The 3D town (procedural buildings, villagers, soldiers, heroes), the 2D world map, and every panel.
+   All game rules live in KC (kingdom_core.js); this file only shows the world and calls KC actions. */
+LOOK.dot = false;
+const KEY = 'mug-kingdom-v1';
+const P = () => KC.W.lords[0];
+const RICON = { food: '🌾', wood: '🪵', stone: '🪨', iron: '⛓', gold: '🪙' };
+const tfmt = s => { s = Math.max(0, Math.ceil(s)); if (s < 60) return s + '초'; if (s < 3600) return Math.floor(s / 60) + '분 ' + String(s % 60).padStart(2, '0') + '초'; const h = Math.floor(s / 3600); return h < 48 ? h + '시간 ' + Math.floor(s % 3600 / 60) + '분' : Math.floor(h / 24) + '일 ' + (h % 24) + '시간'; };
+const agoFmt = t => { const d = KC.W.t - t; return d < 60 ? '방금' : d < 3600 ? Math.floor(d / 60) + '분 전' : d < 86400 ? Math.floor(d / 3600) + '시간 전' : Math.floor(d / 86400) + '일 전'; };
+const costHtml = (c, L = P()) => Object.entries(c).filter(([, v]) => v > 0).map(([r, v]) => `<span class="${(r === 'gold' ? L.gold : L.res[r]) < v ? 'no' : ''}">${RICON[r]} ${fmt(v)}</span>`).join('');
+const relName = v => v >= 50 ? '❤ 친밀' : v >= 20 ? '🙂 우호' : v > -20 ? '😐 보통' : v > -60 ? '😠 적대' : '💢 원수';
+const slotKind = i => KC.SLOTS[i].k;
+function toast(t, bad) { const e = el('toast'); e.textContent = t; e.classList.toggle('bad', !!bad); e.classList.add('show'); clearTimeout(toast.tm); toast.tm = setTimeout(() => e.classList.remove('show'), 2000); }
+function act(r, okSound = 'ok') { if (r && r.msg) toast(r.msg, !r.ok); if (r && r.ok) sfx(okSound); save(); renderSheet(); hud(); return r; }
+
+/* ================= 3D TOWN ================= */
+// plot positions (x, z) for KC.SLOTS; the keep sits in the middle, fields outside the wall
+const PLOT = [[0, -1], [-12.5, 3], [12.5, 3], [-6, 2.5], [6, 2.5], [6.5, -3.5], [-6.5, -3.5], [-5.5, -14.5], [3.5, -8], [0, 6],
+  [-13, -3.5], [13, -3.5], [-3.8, 6.5], [-3.5, -8], [5.5, -14.5], [0, 10.5], [3.8, 6.5], [-11.5, -9.5], [11.5, -9.5], [-9.5, -16], [9.5, -16], [-14, 9], [14, 9]];
+const WALL_R = 10.5;
+const MATS = new Map();
+function mat(col, opt = {}) {
+  const k = col + JSON.stringify(opt); if (MATS.has(k)) return MATS.get(k);
+  const m = LOOK.toon ? new THREE.MeshToonMaterial({ color: lin(col), ...opt }) : new THREE.MeshStandardMaterial({ color: lin(col), roughness: .85, ...opt });
+  MATS.set(k, m); return m;
+}
+const G3 = { box: (w, h, d) => new THREE.BoxGeometry(w, h, d), cyl: (a, b, h, s = 10) => new THREE.CylinderGeometry(a, b, h, s), cone: (r, h, s = 10) => new THREE.ConeGeometry(r, h, s), sph: (r) => new THREE.SphereGeometry(r, 12, 8) };
+function mesh(geo, col, x = 0, y = 0, z = 0, opt) { const m = new THREE.Mesh(geo, mat(col, opt)); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; return m; }
+function prism(w, h, d, col, x, y, z) { const m = mesh(new THREE.CylinderGeometry(h, h, w, 3), col, x, y, z); m.rotation.z = Math.PI / 2; m.rotation.x = Math.PI / 6; m.scale.set(1, 1, d / h * .58); return m; }
+function flag(g, x, y, z, col, h = 1.6) { g.add(mesh(G3.cyl(.04, .04, h, 5), '#5a4a3a', x, y + h / 2, z)); const f = mesh(G3.box(.6, .36, .03), col, x + .3, y + h - .2, z); g.add(f); return f; }
+const ROOF = '#5a4a9a', STONE = '#9a96a8', STONE2 = '#7a7688', WOOD = '#8a6a48', WOOD2 = '#6a4a30', RED = '#a8443a', GOLDC = '#d8b050';
+// one procedural building; detail grows with level
+function makeBuilding(k, L) {
+  const g = new THREE.Group(), t = Math.min(L, 30), s = .82 + t * .012;
+  switch (k) {
+    case 'keep': {
+      g.add(mesh(G3.cyl(2.5, 2.8, .8, 8), STONE2, 0, .4, 0));
+      const h = 2.2 + t * .07; g.add(mesh(G3.box(2.4, h, 2.4), STONE, 0, .8 + h / 2, 0));
+      g.add(mesh(G3.cone(2, 1.7, 4), ROOF, 0, .8 + h + .85, 0)).rotation.y = Math.PI / 4;
+      if (t >= 3) for (const [x, z] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]) { const th = 1.8 + t * .05; g.add(mesh(G3.cyl(.48, .55, th, 8), STONE, x, .8 + th / 2, z)); g.add(mesh(G3.cone(.62, .9, 8), ROOF, x, .8 + th + .45, z)); }
+      if (t >= 5) flag(g, 0, .8 + h + 1.5, 0, '#a77bff', 1.4);
+      if (t >= 10) g.add(mesh(G3.box(1, 1.1, .3), '#3a2a20', 0, 1.35, 1.25));
+      if (t >= 15) { const c = mesh(new THREE.TorusGeometry(.5, .1, 6, 12), GOLDC, 0, .8 + h + 2.2, 0, { emissive: lin('#806020') }); c.rotation.x = Math.PI / 2; g.add(c); }
+      if (t >= 20) for (const a of [0, 1, 2, 3]) { const x = Math.cos(a * Math.PI / 2 + .78) * 2.6, z = Math.sin(a * Math.PI / 2 + .78) * 2.6; flag(g, x, .8, z, '#ffd060', 1.6); }
+      break; }
+    case 'farm': {
+      for (let i = 0; i < 6; i++) g.add(mesh(G3.box(3.4, .12, .5), i % 2 ? '#c8a848' : '#7a9a48', 0, .06, -1.35 + i * .54));
+      g.add(mesh(G3.box(1, .8, .9), RED, 1.6, .4, 1.8)); g.add(prism(1.1, .5, 1, '#6a3a2a', 1.6, 1.05, 1.8));
+      for (let i = 0; i < Math.min(4, 1 + Math.floor(t / 6)); i++) g.add(mesh(G3.cyl(.28, .32, .45, 8), '#e0c060', -1.4 + i * .5, .23, 1.9));
+      break; }
+    case 'lumber': {
+      for (let i = 0; i < Math.min(6, 2 + Math.floor(t / 5)); i++) { const l = mesh(G3.cyl(.18, .18, 2, 7), i % 2 ? WOOD : WOOD2, -.6, .2 + Math.floor(i / 3) * .34, -.9 + (i % 3) * .38); l.rotation.z = Math.PI / 2; g.add(l); }
+      g.add(mesh(G3.box(1.2, .9, 1), WOOD2, 1.1, .45, .8)); g.add(prism(1.3, .5, 1.1, '#4a5a3a', 1.1, 1.15, .8));
+      g.add(mesh(G3.cyl(.3, .35, .35, 8), WOOD, -1.1, .18, 1.2));
+      break; }
+    case 'quarry': {
+      g.add(mesh(G3.cyl(1.6, 1.3, .1, 12), '#4a4650', 0, .05, 0));
+      for (let i = 0; i < Math.min(7, 3 + Math.floor(t / 5)); i++) { const r = mesh(new THREE.DodecahedronGeometry(.35 + (i % 3) * .12), i % 2 ? STONE : STONE2, Math.cos(i * 2.1) * 1.1, .3, Math.sin(i * 2.1) * 1.1); g.add(r); }
+      g.add(mesh(G3.box(.14, 2.2, .14), WOOD2, 1.4, 1.1, -1)); const arm = mesh(G3.box(1.6, .1, .1), WOOD2, .7, 2.1, -1); g.add(arm);
+      break; }
+    case 'mine': {
+      g.add(mesh(G3.cone(1.8, 1.8, 9), '#5a4a40', 0, .9, -.4));
+      g.add(mesh(G3.box(.8, .8, .5), '#141014', 0, .45, 1.2)); g.add(mesh(G3.box(1.1, .14, .6), WOOD2, 0, .95, 1.2));
+      g.add(mesh(G3.box(.7, .4, .5), '#6a6a78', 1.4, .3, 1.5));
+      if (t >= 5) g.add(mesh(G3.box(.12, .02, 2), '#4a4a50', -.3, .02, 2)), g.add(mesh(G3.box(.12, .02, 2), '#4a4a50', .3, .02, 2));
+      break; }
+    case 'warehouse': {
+      g.add(mesh(G3.box(2.4, 1.2, 1.7), WOOD, 0, .6, 0)); g.add(prism(2.6, .7, 1.9, '#6a3a2a', 0, 1.55, 0));
+      for (let i = 0; i < Math.min(5, 1 + Math.floor(t / 5)); i++) g.add(mesh(G3.box(.45, .45, .45), '#b08a50', -1 + i * .5, .23, 1.2));
+      break; }
+    case 'barracks': {
+      g.add(mesh(G3.box(2.6, 1.1, 1.5), '#8a5a4a', 0, .55, -.4)); g.add(prism(2.8, .6, 1.7, RED, 0, 1.4, -.4));
+      for (let i = 0; i < 3; i++) { g.add(mesh(G3.cyl(.08, .08, .9, 6), WOOD2, -1 + i, .45, 1.1)); g.add(mesh(G3.box(.5, .1, .1), WOOD2, -1 + i, .75, 1.1)); }
+      if (t >= 5) flag(g, 1.5, 0, .8, '#c84a3a');
+      break; }
+    case 'range': {
+      g.add(mesh(G3.box(1.8, 1, 1.4), '#7a6a4a', -.6, .5, -.5)); g.add(prism(2, .55, 1.6, '#3a5a3a', -.6, 1.3, -.5));
+      for (let i = 0; i < 3; i++) { const d = mesh(G3.cyl(.38, .38, .08, 14), i % 2 ? '#e8e0d0' : '#c84a3a', .6 + i * .5, .55, 1.1); d.rotation.x = Math.PI / 2; g.add(d); g.add(mesh(G3.cyl(.05, .05, .5, 5), WOOD2, .6 + i * .5, .25, 1.15)); }
+      if (t >= 5) flag(g, 1.4, 0, -.9, '#4a9a5a');
+      break; }
+    case 'stable': {
+      g.add(mesh(G3.box(2.6, 1, 1.4), WOOD, 0, .5, -.6)); g.add(prism(2.8, .55, 1.6, '#5a4a30', 0, 1.3, -.6));
+      for (let i = 0; i < 5; i++) g.add(mesh(G3.box(.08, .5, .08), WOOD2, -1.2 + i * .6, .25, 1.2));
+      g.add(mesh(G3.box(2.5, .06, .06), WOOD2, 0, .42, 1.2));
+      g.add(mesh(G3.cyl(.3, .32, .4, 8), '#e0c060', 1.1, .2, .5));
+      if (t >= 5) flag(g, -1.4, 0, .6, '#4a6ac8');
+      break; }
+    case 'academy': {
+      const h = 2.6 + t * .05; g.add(mesh(G3.cyl(.95, 1.1, h, 12), '#c8c0d8', 0, h / 2, 0));
+      const d = mesh(new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), '#4a6ac8', 0, h, 0); g.add(d);
+      const orb = mesh(G3.sph(.22), '#9ad0ff', 0, h + 1.2, 0, { emissive: lin('#4a8aff'), emissiveIntensity: 1.2 }); g.add(orb); g.userData.orb = orb;
+      g.add(mesh(G3.box(1.6, .5, 1), '#a8a0b8', 1.1, .25, .4));
+      break; }
+    case 'hospital': {
+      g.add(mesh(G3.box(2.2, 1.1, 1.6), '#e8e4ee', 0, .55, 0)); g.add(prism(2.4, .5, 1.8, '#8a8aa8', 0, 1.35, 0));
+      g.add(mesh(G3.box(.6, .16, .16), '#d03a3a', 0, 1.9, .2)); g.add(mesh(G3.box(.16, .6, .16), '#d03a3a', 0, 1.9, .2));
+      if (t >= 5) g.add(mesh(G3.cone(.8, 1, 6), '#f0ece0', 1.6, .5, 1));
+      break; }
+    case 'wall': break;   // drawn as the ring around the town
+    case 'hall': {
+      g.add(mesh(G3.box(2.6, .3, 1.8), STONE, 0, .15, 0));
+      for (let i = 0; i < 4; i++) for (const z of [-.6, .6]) g.add(mesh(G3.cyl(.12, .14, 1.3, 8), '#e8e0c8', -.9 + i * .6, .95, z));
+      g.add(prism(2.7, .55, 1.9, GOLDC, 0, 1.85, 0));
+      break; }
+    case 'embassy': {
+      g.add(mesh(G3.box(2, 1.2, 1.4), '#b8a888', 0, .6, -.3)); g.add(prism(2.2, .55, 1.6, '#4a6a8a', 0, 1.45, -.3));
+      const A = KC.allianceOf(P()); for (let i = 0; i < 3; i++) flag(g, -.8 + i * .8, 0, 1, A ? A.color : '#888', 1.5);
+      break; }
+    case 'rally': {
+      g.add(mesh(G3.cyl(1.7, 1.7, .06, 16), '#8a7350', 0, .03, 0));
+      g.add(mesh(G3.cone(.7, 1.1, 6), '#c84a3a', -1, .55, -.6));
+      flag(g, 1.2, 0, -.8, '#a77bff', 2); if (t >= 5) flag(g, -1.4, 0, .9, '#a77bff', 2);
+      break; }
+  }
+  g.scale.setScalar(k === 'farm' || k === 'quarry' || k === 'mine' ? 1 : s);
+  return g;
+}
+// the town wall: segments on a ring with a gate to the south; taller with level
+function makeWall(L) {
+  const g = new THREE.Group(); if (L < 1) return g;
+  const n = 28, h = .8 + Math.min(L, 30) * .05, col = L >= 15 ? '#b8b4c8' : STONE2;
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2; if (Math.abs(a - Math.PI / 2) < .2) continue;   // gate gap
+    const x = Math.cos(a) * WALL_R, z = Math.sin(a) * WALL_R, seg = mesh(G3.box(2.4, h, .5), col, x, h / 2, z); seg.rotation.y = -a + Math.PI / 2; g.add(seg);
+    if (i % 4 === 0) { g.add(mesh(G3.cyl(.45, .55, h + .7, 8), col, x, (h + .7) / 2, z)); g.add(mesh(G3.cone(.6, .7, 8), ROOF, x, h + 1.05, z)); }
+  }
+  for (const sx of [-1, 1]) { g.add(mesh(G3.box(.7, h + 1, .7), col, sx * 1.1, (h + 1) / 2, WALL_R)); g.add(mesh(G3.cone(.6, .7, 4), ROOF, sx * 1.1, h + 1.35, WALL_R)); }
+  return g;
+}
+const town = { blds: [], plots: [], wall: null, wallLv: -1, scaff: [], ready: false };
+function buildTown() {
+  ground.material.map = groundTex(0x4a6a34); ground.material.color.set(0xffffff); ground.material.needsUpdate = true;
+  scene.background = lin(0x3e5a46); scene.fog = new THREE.Fog(lin(0x3e5a46), 40, 80);
+  hemi.color.set(0xfff4e0); hemi.groundColor.set(0x2a3020); hemi.intensity = .85; sun.intensity = 1.15;
+  Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22 }); sun.shadow.camera.updateProjectionMatrix(); sun.shadow.mapSize.set(2048, 2048);
+  const plaza = new THREE.Mesh(new THREE.CircleGeometry(WALL_R - .3, 40), new THREE.MeshStandardMaterial({ color: lin('#8a7a5a'), roughness: 1, transparent: true, opacity: .55, depthWrite: false }));
+  plaza.rotation.x = -Math.PI / 2; plaza.position.y = .015; plaza.receiveShadow = true; scene.add(plaza);
+  // roads out of the gate and toward the fields
+  for (const [x, z, w, d] of [[0, 14, 1.6, 8], [-9, -4, 1.2, 8], [9, -4, 1.2, 8]]) { const r = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color: lin('#8a7a5a'), transparent: true, opacity: .45, depthWrite: false })); r.rotation.x = -Math.PI / 2; r.position.set(x, .016, z); if (x) r.rotation.z = Math.PI / 2; scene.add(r); }
+  // forest all around, kept off the plots
+  const trees = ['Tree_1_A', 'Tree_2_A', 'Tree_3_A', 'Tree_4_A'], rocks = ['Rock_1_A', 'Rock_2_A', 'Rock_3_A'], tint = new THREE.Color(0xb8c0a8);
+  for (let i = 0; i < 170; i++) {
+    const a = rnd(0, Math.PI * 2), r = rnd(17.5, 40), x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (z > 12 && Math.abs(x) < 3) continue;
+    const isRock = Math.random() < .2, p = PROPS[pick(isRock ? rocks : trees)]; if (!p) continue;
+    const o = p.clone(true), sz = new THREE.Box3().setFromObject(p).getSize(new THREE.Vector3()).y || 1;
+    o.scale.setScalar((isRock ? rnd(.6, 1.4) : rnd(2.4, 3.8)) / sz);
+    o.traverse(n => { if (n.isMesh) { n.material = n.material.clone(); if (n.material.map) n.material.map = muted(n.material.map); n.material.color.multiply(tint); n.castShadow = true; } });
+    o.position.set(x, 0, z); o.rotation.y = rnd(0, 6.28); scene.add(o);
+  }
+  // plot markers
+  KC.SLOTS.forEach((s, i) => {
+    if (s.k === 'wall') { town.plots.push(null); return; }
+    const big = ['farm', 'quarry', 'mine'].includes(s.k) ? 2.1 : 1.7;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(big - .12, big, 32), new THREE.MeshBasicMaterial({ color: 0xf1d58c, transparent: true, opacity: .55, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(PLOT[i][0], .03, PLOT[i][1]); ring.userData.slot = i; scene.add(ring); town.plots.push(ring);
+  });
+  town.ready = true; syncTown(true);
+}
+function scaffold(i) {
+  const g = new THREE.Group(), [x, z] = PLOT[i], r = 1.3;
+  for (const [a, b] of [[-r, -r], [r, -r], [-r, r], [r, r]]) g.add(mesh(G3.cyl(.05, .05, 2.6, 5), '#c8a070', x + a, 1.3, z + b));
+  for (const y of [.9, 1.9]) { g.add(mesh(G3.box(2.7, .06, .06), '#c8a070', x, y, z - r)); g.add(mesh(G3.box(2.7, .06, .06), '#c8a070', x, y, z + r)); }
+  scene.add(g); return g;
+}
+// bring the 3D town in line with the player's buildings
+function syncTown(force) {
+  if (!town.ready) return; const L = P();
+  KC.SLOTS.forEach((s, i) => {
+    const lv = L.blds[i], cur = town.blds[i];
+    if (s.k === 'wall') { if (town.wallLv !== lv) { if (town.wall) scene.remove(town.wall); town.wall = makeWall(lv); scene.add(town.wall); town.wallLv = lv; } }
+    else if (force || !cur || cur.lv !== lv || (s.k === 'embassy' && cur.ally !== L.alliance)) {
+      if (cur && cur.g) scene.remove(cur.g);
+      let g = null; if (lv > 0) { g = makeBuilding(s.k, lv); g.position.set(PLOT[i][0], 0, PLOT[i][1]); g.rotation.y = Math.atan2(-PLOT[i][0], -PLOT[i][1] + 30) * .15; g.traverse(o => { o.userData.slot = i; }); scene.add(g); if (cur && !force) VX.pillar(PLOT[i][0], PLOT[i][1], 0xf1d58c, 5); }
+      town.blds[i] = { g, lv, ally: L.alliance };
+    }
+    const ring = town.plots[i];
+    if (ring) { const open = KC.keepLv(L) >= s.need; ring.visible = lv === 0 && (open || s.need === nextUnlock(L)); ring.material.color.set(open ? 0xf1d58c : 0x777788); ring.material.opacity = open ? .55 + Math.sin(performance.now() / 300) * .2 : .25; }
+    const building = L.bq.some(q => q.slot === i);
+    if (building && !town.scaff[i]) town.scaff[i] = scaffold(i);
+    if (!building && town.scaff[i]) { scene.remove(town.scaff[i]); town.scaff[i] = null; }
+  });
+}
+
+/* ---------- life in town: villagers walk, soldiers drill, team heroes wait by the hall ---------- */
+const life = [];
+const VILLAGER = [{ m: 'Rogue', tint: '#c8b8a0', st: '1h' }, { m: 'Ranger', tint: '#a8c090', st: '1h' }, { m: 'Barbarian', tint: '#d0a888', st: '1h' }, { m: 'Mage', tint: '#b0a8d0', st: '1h' }];
+function syncLife() {
+  if (!town.ready) return; const L = P();
+  const want = { v: Math.min(9, 2 + Math.floor(KC.keepLv(L) / 3)), s: Math.min(8, Math.ceil(KC.armyN(L.troops) / 250)), h: L.team.slice() };
+  const have = { v: life.filter(a => a.kind === 'v'), s: life.filter(a => a.kind === 's'), h: life.filter(a => a.kind === 'h') };
+  const drop = a => { killActor(a.act); life.splice(life.indexOf(a), 1); };
+  while (have.v.length < want.v) { const a = { kind: 'v', act: makeActor(pick(VILLAGER), .95), x: rnd(-5, 5), z: rnd(-2, 6), tx: 0, tz: 0, wait: rnd(0, 3) }; a.act.root.position.set(a.x, 0, a.z); life.push(a); have.v.push(a); }
+  while (have.v.length > want.v) drop(have.v.pop());
+  while (have.s.length < want.s) { const k = have.s.length, a = { kind: 's', act: makeActor({ m: 'Knight', r: 'sword_1handed', l: 'shield_round', st: '1h', tint: '#c8c0e0' }), x: -6 + (k % 4) * .8 - 1.2, z: 4.6 + Math.floor(k / 4) * .9, drill: rnd(0, 2) }; a.act.root.position.set(a.x, 0, a.z); a.act.root.rotation.y = Math.PI; life.push(a); have.s.push(a); }
+  while (have.s.length > want.s) drop(have.s.pop());
+  for (const a of have.h) if (!want.h.includes(a.id)) drop(a);
+  want.h.forEach((id, k) => { if (have.h.some(a => a.id === id)) return; const H = KC.HEROM[id], a = { kind: 'h', id, act: makeActor({ ...H.look, wglow: H.look.glow }, 1.15), x: -4.6 + k * .9, z: 8.3 }; a.act.root.position.set(a.x, 0, a.z); life.push(a); });
+}
+function updateLife(dt) {
+  for (const a of life) {
+    const r = a.act.root;
+    if (a.kind === 'v') {
+      if (a.wait > 0) { a.wait -= dt; play(a.act, a.act.A.idle); if (a.wait <= 0) { const t = pick(PLOT.slice(0, 17).filter((p, i) => P().blds[i] > 0 || i === 0)); a.tx = t[0] + rnd(-1.8, 1.8); a.tz = t[1] + 1.8 + rnd(-.5, .8); } }
+      else { const dx = a.tx - a.x, dz = a.tz - a.z, d = Math.hypot(dx, dz); if (d < .2) a.wait = rnd(1.5, 5); else { const sp = Math.min(d, 1.3 * dt); a.x += dx / d * sp; a.z += dz / d * sp; r.rotation.y = lerpAng(r.rotation.y, Math.atan2(dx, dz), Math.min(1, dt * 8)); play(a.act, a.act.A.run); } }
+      r.position.set(a.x, 0, a.z);
+    } else if (a.kind === 's') {
+      a.drill -= dt; if (a.drill <= 0) { a.drill = rnd(1.4, 2.4); const nm = a.act.A.atk[0]; play(a.act, nm, { once: true }); }
+      else if (a.act.lock <= 0) play(a.act, a.act.A.idle); a.act.lock -= dt;
+    } else { r.rotation.y = Math.PI; play(a.act, a.act.A.idle); }
+    a.act.mixer.update(dt);
+  }
+}
+
+/* ---------- camera: drag to pan, pinch or wheel to zoom ---------- */
+CAM.zoom = 1.05; CAM.z = -1.5;
+function resize() {
+  W = view.clientWidth; H = view.clientHeight; dpr = Math.min(devicePixelRatio || 1, 2);
+  if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); MGFX.resize(W, H, dpr); }
+  ovc.width = W * dpr; ovc.height = H * dpr;
+  const mc = el('mapc'); mc.width = W * dpr; mc.height = H * dpr;
+  if (!camera) return;
+  const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(13 / (half * camera.aspect), 11 / half), tilt = .9;
+  CAM.h = Math.cos(tilt) * need; CAM.back = Math.sin(tilt) * need; camDist = need; camera.far = need * 3 + 60; camera.updateProjectionMatrix();
+  camFollow(true); if (tab === 'map') drawMap();
+}
+function camFollow() {
+  if (!camera) return; const z = CAM.zoom;
+  camera.position.set(CAM.x, CAM.h * z, CAM.z + CAM.back * z); camera.lookAt(CAM.x, 0, CAM.z);
+  if (scene && scene.fog) { scene.fog.near = camDist * z * 1.8; scene.fog.far = camDist * z * 4; }
+}
+const ptrs = new Map(); let drag = null;
+function townPointer(e) {
+  if (tab !== 'town') return;
+  if (e.type === 'pointerdown') { glc.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); drag = { x: e.clientX, y: e.clientY, moved: 0, pinch: ptrs.size === 2 ? pinchD() : 0, z0: CAM.zoom }; return; }
+  if (!ptrs.has(e.pointerId)) return;
+  if (e.type === 'pointermove') {
+    const p = ptrs.get(e.pointerId), dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+    if (ptrs.size === 2 && drag && drag.pinch) { CAM.zoom = clamp(drag.z0 * drag.pinch / pinchD(), .5, 1.7); drag.moved = 99; }
+    else { const k = camDist * CAM.zoom * 1.7 / H; CAM.x = clamp(CAM.x - dx * k, -16, 16); CAM.z = clamp(CAM.z - dy * k * 1.4, -17, 12); if (drag) drag.moved += Math.abs(dx) + Math.abs(dy); }
+    camFollow(); return;
+  }
+  ptrs.delete(e.pointerId);
+  if (e.type === 'pointerup' && drag && drag.moved < 8 && ptrs.size === 0) tapTown(e);
+  if (!ptrs.size) drag = null;
+}
+const pinchD = () => { const a = [...ptrs.values()]; return Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) || 1; };
+for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) glc.addEventListener(ev, townPointer);
+glc.addEventListener('wheel', e => { if (tab !== 'town') return; CAM.zoom = clamp(CAM.zoom * (e.deltaY > 0 ? 1.1 : .9), .5, 1.7); camFollow(); e.preventDefault(); }, { passive: false });
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), gplane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ghit = new THREE.Vector3();
+function tapTown(e) {
+  audio();
+  const r = glc.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const objs = []; for (const b of town.blds) if (b && b.g) objs.push(b.g); if (town.wall) objs.push(town.wall);
+  const hits = ray.intersectObjects(objs, true);
+  if (hits.length) { let o = hits[0].object; while (o && o.userData.slot == null && o.parent) o = o.parent; if (o && o.userData.slot != null) return openBuilding(o.userData.slot); if (town.wall && hits[0].object.parent === town.wall) return openBuilding(15); }
+  if (!ray.ray.intersectPlane(gplane, ghit)) return;
+  let best = -1, bd = 2.6; PLOT.forEach(([x, z], i) => { if (i === 15) return; const d = Math.hypot(ghit.x - x, ghit.z - z); if (d < bd) { bd = d; best = i; } });
+  if (best >= 0) openBuilding(best);
+  else if (Math.abs(Math.hypot(ghit.x, ghit.z) - WALL_R) < 1.2 && P().blds[15] > 0) openBuilding(15);
+}
+
+/* ---------- labels over the town ---------- */
+const V3 = new THREE.Vector3();
+const scr = (x, y, z) => { V3.set(x, y, z).project(camera); return V3.z > 1 ? null : [(V3.x + 1) / 2 * W, (1 - V3.y) / 2 * H]; };
+function pill(c, x, y, txt, bg, fg = '#fff') {
+  c.font = `700 10.5px 'Noto Sans KR', sans-serif`; const w = c.measureText(txt).width + 12;
+  c.fillStyle = bg; c.beginPath(); c.roundRect ? c.roundRect(x - w / 2, y - 9, w, 18, 9) : c.rect(x - w / 2, y - 9, w, 18); c.fill();
+  c.fillStyle = fg; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, x, y + .5);
+}
+const nextUnlock = L => { let m = 99; for (const s of KC.SLOTS) if (s.need > KC.keepLv(L) && s.need < m) m = s.need; return m; };
+function drawOverlay() {
+  const c = octx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+  if (tab !== 'town') return; const L = P();
+  KC.SLOTS.forEach((s, i) => {
+    const lv = L.blds[i], [x, z] = i === 15 ? [0, WALL_R] : PLOT[i];
+    const q = L.bq.find(b => b.slot === i);
+    const p = scr(x, i === 0 ? 5.5 + Math.min(lv, 30) * .07 : lv > 0 ? 2.6 : .4, z); if (!p) return;
+    if (q) {
+      pill(c, p[0], p[1] - 12, `${KC.BLD[s.k].n} → ${lv + 1}`, 'rgba(20,14,34,.85)');
+      c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(p[0] - 30, p[1] + 1, 60, 6); c.fillStyle = '#c9a8ff'; c.fillRect(p[0] - 30, p[1] + 1, 60 * (1 - q.left / q.total), 6);
+      c.font = `600 9.5px 'Noto Sans KR', sans-serif`; c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText(tfmt(q.left), p[0], p[1] + 15);
+    } else if (lv > 0) {
+      // zoomed out: just the level (green dot = can upgrade now); zoomed in: the name too
+      const ok = KC.canBuild(L, i).ok, txt = CAM.zoom < .85 || i === 0 ? `${KC.BLD[s.k].n} ${lv}` : `${lv}`;
+      pill(c, p[0], p[1], txt, ok ? 'rgba(60,40,110,.85)' : 'rgba(20,14,34,.6)', ok ? '#fff' : '#d6d0e4');
+      if (ok) { c.fillStyle = '#8fe0a0'; c.beginPath(); c.arc(p[0] + c.measureText(txt).width / 2 + 9, p[1] - 6, 4, 0, 7); c.fill(); }
+    } else if (KC.keepLv(L) >= s.need) pill(c, p[0], p[1], `+ ${KC.BLD[s.k].n}`, 'rgba(168,130,42,.9)');
+    else if (s.need === nextUnlock(L)) pill(c, p[0], p[1], `🔒 본성 ${s.need}`, 'rgba(20,14,34,.55)', '#a8a0b8');
+  });
+}
+
+/* ================= WORLD MAP (2D) ================= */
+const MAP = { cx: 0, cy: 0, z: 26, sel: null };
+const mc = el('mapc'), mctx = mc.getContext('2d');
+const TOWNC = id => { const L = KC.W.lords[id], A = KC.allianceOf(L); return L.player ? '#c9a8ff' : A ? A.color : '#c8c8c8'; };
+const RCOL = { food: '#d8c050', wood: '#5a9a48', stone: '#9a9aa8', iron: '#6a8ab0' };
+function mapToScr(x, y) { return [W / 2 + (x - MAP.cx) * MAP.z, H / 2 + (y - MAP.cy) * MAP.z]; }
+function drawMap() {
+  const c = mctx, Z = MAP.z; c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.fillStyle = '#1c2a1c'; c.fillRect(0, 0, W, H);
+  const [ox, oy] = mapToScr(0, 0), S = KC.SIZE;
+  c.fillStyle = '#26361f'; c.fillRect(ox - Z / 2, oy - Z / 2, S * Z, S * Z);
+  const [cx0, cy0] = mapToScr(KC.CENTER, KC.CENTER), g = c.createRadialGradient(cx0, cy0, 0, cx0, cy0, Z * 12);
+  g.addColorStop(0, 'rgba(240,200,90,.22)'); g.addColorStop(1, 'rgba(240,200,90,0)'); c.fillStyle = g; c.fillRect(ox - Z / 2, oy - Z / 2, S * Z, S * Z);
+  if (Z >= 14) { c.strokeStyle = 'rgba(255,255,255,.04)'; c.lineWidth = 1; c.beginPath(); for (let i = 0; i <= S; i++) { c.moveTo(ox - Z / 2 + i * Z, oy - Z / 2); c.lineTo(ox - Z / 2 + i * Z, oy - Z / 2 + S * Z); c.moveTo(ox - Z / 2, oy - Z / 2 + i * Z); c.lineTo(ox - Z / 2 + S * Z, oy - Z / 2 + i * Z); } c.stroke(); }
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (const t of KC.W.tiles) {
+    const [x, y] = mapToScr(t.x, t.y); if (x < -Z || y < -Z || x > W + Z || y > H + Z) continue;
+    if (t.kind === 'res') { c.fillStyle = RCOL[t.res]; c.globalAlpha = .35 + .65 * t.amt / t.max; c.beginPath(); c.arc(x, y, Z * .32, 0, 7); c.fill(); c.globalAlpha = 1; if (Z >= 18) { c.fillStyle = '#0c0c10'; c.font = `700 ${Z * .32}px sans-serif`; c.fillText(t.lv, x, y + 1); } }
+    else if (t.kind === 'camp') { c.fillStyle = '#b84a3a'; c.beginPath(); c.moveTo(x, y - Z * .36); c.lineTo(x + Z * .32, y); c.lineTo(x, y + Z * .36); c.lineTo(x - Z * .32, y); c.closePath(); c.fill(); if (Z >= 18) { c.fillStyle = '#fff'; c.font = `700 ${Z * .3}px sans-serif`; c.fillText(t.lv, x, y + 1); } }
+    else if (t.kind === 'beast') { c.fillStyle = '#8a3ad0'; c.beginPath(); c.arc(x, y, Z * .45, 0, 7); c.fill(); c.font = `${Z * .55}px sans-serif`; c.fillText('🐉', x, y + 1); }
+    else if (t.kind === 'throne') { const A = KC.W.throne.holder && KC.W.alliances.find(a => a.id === KC.W.throne.holder); c.fillStyle = A ? A.color : '#e0b040'; c.beginPath(); c.arc(x, y, Z * .7, 0, 7); c.fill(); c.font = `${Z * .8}px sans-serif`; c.fillText('👑', x, y + 1); }
+    else if (t.kind === 'town') {
+      const L = KC.W.lords[t.lord], col = TOWNC(t.lord), s = Z * (.42 + Math.min(KC.keepLv(L), 30) * .006);
+      c.fillStyle = col; c.fillRect(x - s, y - s * .6, s * 2, s * 1.3); for (const k of [-1, 0, 1]) c.fillRect(x + k * s * .7 - s * .22, y - s * 1.05, s * .44, s * .5);
+      if (L.shieldT > 0) { c.strokeStyle = 'rgba(140,200,255,.8)'; c.lineWidth = 2; c.beginPath(); c.arc(x, y, s * 1.5, 0, 7); c.stroke(); }
+      if (L.player) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.strokeRect(x - s - 2, y - s * 1.1 - 2, s * 2 + 4, s * 2 + 4); }
+      if (Z >= 16) { c.font = `700 ${Math.max(9, Z * .34)}px 'Noto Sans KR', sans-serif`; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.7)'; const nm = `${KC.keepLv(L)} ${L.name}`; c.strokeText(nm, x, y + s * 1.25 + 7); c.fillStyle = '#fff'; c.fillText(nm, x, y + s * 1.25 + 7); }
+    }
+  }
+  // marches
+  for (const m of KC.W.marches) {
+    const L = KC.W.lords[m.lord], [ax, ay] = mapToScr(L.x, L.y), [bx, by] = mapToScr(m.tx, m.ty);
+    const p = m.state === 'work' ? 1 : m.state === 'go' ? 1 - m.left / m.total : m.left / m.total;
+    const col = L.player ? '#c9a8ff' : KC.allied(P(), L) ? '#6fb3ff' : m.kind === 'attack' && KC.W.tiles.find(t => t.id === m.tile && t.kind === 'town' && t.lord === 0) ? '#ff4030' : 'rgba(255,255,255,.35)';
+    c.strokeStyle = col; c.globalAlpha = L.player || col === '#ff4030' ? .8 : .35; c.lineWidth = L.player ? 2 : 1; c.setLineDash([4, 4]); c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke(); c.setLineDash([]); c.globalAlpha = 1;
+    c.fillStyle = col; c.beginPath(); c.arc(ax + (bx - ax) * p, ay + (by - ay) * p, L.player ? 4.5 : 3, 0, 7); c.fill();
+  }
+  for (const r of KC.W.rallies) { const L = KC.W.lords[r.leader], t = KC.W.tiles.find(t => t.id === r.tile); if (!t) continue; const [ax, ay] = mapToScr(L.x, L.y), [bx, by] = mapToScr(t.x, t.y);
+    c.strokeStyle = '#ffcf70'; c.lineWidth = 2; c.globalAlpha = .5 + .3 * Math.sin(performance.now() / 200); c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke(); c.globalAlpha = 1;
+    if (r.state === 'march') { const p = 1 - r.left / r.total; c.font = '16px sans-serif'; c.fillText('⚔', ax + (bx - ax) * p, ay + (by - ay) * p); } }
+  if (MAP.sel) { const [x, y] = mapToScr(MAP.sel.x, MAP.sel.y); c.strokeStyle = '#fff'; c.lineWidth = 2; c.strokeRect(x - Z / 2, y - Z / 2, Z, Z); }
+  // legend
+  c.font = `600 10.5px 'Noto Sans KR', sans-serif`; c.textAlign = 'left'; c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(8, H - 128, 150, 52);
+  c.fillStyle = '#ddd'; c.fillText('◆ 야수 소굴  ● 자원지(레벨)', 14, H - 112); c.fillText('🐉 거대 야수  👑 왕좌', 14, H - 96); c.fillText('■ 영지(동맹 색) □ 나', 14, H - 82);
+}
+const mptrs = new Map(); let mdrag = null;
+function mapPointer(e) {
+  if (e.type === 'pointerdown') { mc.setPointerCapture(e.pointerId); mptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); mdrag = { moved: 0, pinch: mptrs.size === 2 ? mPinch() : 0, z0: MAP.z }; return; }
+  if (!mptrs.has(e.pointerId)) return;
+  if (e.type === 'pointermove') {
+    const p = mptrs.get(e.pointerId), dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+    if (mptrs.size === 2 && mdrag && mdrag.pinch) { MAP.z = clamp(mdrag.z0 * mPinch() / mdrag.pinch, 8, 48); mdrag.moved = 99; }
+    else { MAP.cx = clamp(MAP.cx - dx / MAP.z, 0, KC.SIZE); MAP.cy = clamp(MAP.cy - dy / MAP.z, 0, KC.SIZE); if (mdrag) mdrag.moved += Math.abs(dx) + Math.abs(dy); }
+    drawMap(); return;
+  }
+  mptrs.delete(e.pointerId);
+  if (e.type === 'pointerup' && mdrag && mdrag.moved < 8 && !mptrs.size) {
+    const r = mc.getBoundingClientRect(), x = Math.round(MAP.cx + (e.clientX - r.left - W / 2) / MAP.z), y = Math.round(MAP.cy + (e.clientY - r.top - H / 2) / MAP.z);
+    let t = KC.W.tiles.find(t => t.x === x && t.y === y);
+    if (!t) t = KC.W.tiles.find(t => t.kind === 'throne' && Math.hypot(t.x - x, t.y - y) <= 1);
+    audio(); if (t) { MAP.sel = t; openTile(t.id); } else { MAP.sel = null; closeSheet(); } drawMap();
+  }
+  if (!mptrs.size) mdrag = null;
+}
+const mPinch = () => { const a = [...mptrs.values()]; return Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) || 1; };
+for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) mc.addEventListener(ev, mapPointer);
+mc.addEventListener('wheel', e => { MAP.z = clamp(MAP.z * (e.deltaY > 0 ? .9 : 1.1), 8, 48); drawMap(); e.preventDefault(); }, { passive: false });
+
+/* ================= HUD ================= */
+function hud() {
+  const L = P(), b = KC.bonus(L);
+  el('top').innerHTML = KC.RES.map(r => { const net = KC.prodPerHour(L, r, b) - (r === 'food' ? KC.upkeepPerHour(L) : 0);
+    return `<div class="glass rc${net < 0 ? ' low' : ''}" title="${KC.RN[r]} 시간당 ${fmt(net)}"><i>${RICON[r]}</i>${fmt(L.res[r])}</div>`; }).join('') +
+    `<div class="glass rc"><i>🪙</i>${fmt(L.gold)}</div><div class="glass rc pow">⚔ ${fmt(L.power)}${L.shieldT > 0 ? ' 🛡' : ''}</div>`;
+  const rows = [];
+  const nb = KC.builders(KC.keepLv(L));
+  for (let k = 0; k < nb; k++) { const q = L.bq[k]; rows.push(q ? qrow('🏗', `${KC.BLD[slotKind(q.slot)].n} ${L.blds[q.slot] + 1}`, q, `b${q.slot}`) : `<div class="glass qrow idle" data-q="idle"><b>🏗 일꾼 쉬는 중</b></div>`); }
+  if (L.rq) rows.push(qrow('📚', `${KC.TECHM[L.rq.id].n} ${(L.tech[L.rq.id] || 0) + 1}`, L.rq, 'r'));
+  for (const t of KC.TT) if (L.tq[t]) rows.push(qrow('⚔', `${KC.TR[t].n} ${KC.TIER_N[L.tq[t].tier]} ×${L.tq[t].n}`, L.tq[t], 't' + t));
+  if (L.heal) rows.push(qrow('⛑', `치료 ${KC.armyN(L.heal.army)}명`, L.heal, 'h'));
+  const away = KC.W.marches.filter(m => m.lord === 0);
+  if (away.length) rows.push(`<div class="glass qrow" data-q="army"><b>🚩 부대 ${away.length}/${KC.marchCount(KC.lv(L, 'rally'))}</b><span>${away.map(m => m.state === 'work' ? '채집' : m.state === 'go' ? '가는 중' : '귀환').join('·')}</span></div>`);
+  el('queues').innerHTML = rows.join('');
+  const q = KC.QUESTS[L.quest];
+  el('questTxt').textContent = q ? q.d + ' — 보상 ' + Object.entries(q.r).map(([k, v]) => (RICON[k] || '') + (KC.ITEMS[k] ? KC.ITEMS[k].n : '') + ' ' + fmt(v)).join(' ') : '모든 임무 완료!';
+  el('questBtn').disabled = !KC.questOk(L); el('questbar').hidden = !q || tab !== 'town';
+  el('bChanc').textContent = L.chanc === false ? '🧠 재상 끔' : '🧠 재상 켬'; el('bChanc').classList.toggle('on', L.chanc !== false);
+  const last = L.log[0]; el('think').hidden = !(last && L.chanc !== false && KC.W.t - last.t < 20 && tab === 'town'); if (last) el('think').textContent = '재상: ' + last.m;
+  const unread = KC.W.mail.filter(m => !m.read).length; el('mailBadge').hidden = !unread; el('mailBadge').textContent = unread > 99 ? '99+' : unread;
+}
+const qrow = (ic, nm, q, key) => `<div class="glass qrow" data-q="${key}"><b>${ic} ${nm}</b><div class="qb"><i style="width:${(1 - q.left / q.total) * 100}%"></i></div><span>${tfmt(q.left)}</span></div>`;
+el('queues').addEventListener('click', e => { const r = e.target.closest('[data-q]'); if (!r) return; audio(); const k = r.dataset.q;
+  if (k === 'idle') { const i = bestIdleSlot(); if (i >= 0) openBuilding(i); else toast('지금 지을 수 있는 건물이 없어요'); }
+  else if (k[0] === 'b') openBuilding(+k.slice(1)); else if (k === 'r') openTab('tech'); else if (k === 'army' || k === 'h' || k[0] === 't') openTab('army'); });
+const bestIdleSlot = () => { const L = P(); let best = -1; KC.SLOTS.forEach((s, i) => { if (best < 0 && KC.canBuild(L, i).ok) best = i; }); return best; };
+el('questBtn').onclick = () => { audio(); act(KC.claimQuest(P()), 'win'); };
+el('bChanc').onclick = () => { audio(); const L = P(); L.chanc = L.chanc === false; toast(L.chanc ? '재상이 영지를 맡아요' : '재상이 쉬어요. 직접 운영해 보세요'); save(); hud(); renderSheet(); };
+const fxBtn = () => { el('bFx').textContent = FXOPT.on ? '효과 켬' : '효과 끔'; el('bFx').classList.toggle('on', FXOPT.on); };
+el('bFx').onclick = () => { FXOPT.on = !FXOPT.on; try { localStorage.setItem('mug-fx', FXOPT.on ? 'on' : 'off'); } catch (e) {} fxBtn(); };
+fxBtn();
+
+/* ================= TABS & SHEETS ================= */
+let tab = 'town', sheet = null;   // sheet: {kind, ref}
+function openTab(t) {
+  tab = t === 'town' || t === 'map' ? t : tab;
+  for (const b of el('nav').children) b.classList.toggle('on', b.dataset.tab === t);
+  el('mapc').hidden = tab !== 'map';
+  if (t === 'map') { if (!openTab.centered) { const L = P(); MAP.cx = L.x; MAP.cy = L.y; openTab.centered = true; } closeSheet(); drawMap(); }
+  else if (t === 'town') closeSheet();
+  else openSheet(t);
+  hud();
+}
+el('nav').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (!b) return; audio(); sfx('click'); openTab(b.dataset.tab); });
+function openSheet(kind, ref) { sheet = { kind, ref }; el('sheet').hidden = false; renderSheet(); el('sheetBody').scrollTop = 0; }
+function closeSheet() { sheet = null; el('sheet').hidden = true; for (const b of el('nav').children) b.classList.toggle('on', b.dataset.tab === tab); }
+el('sheetX').onclick = () => { audio(); closeSheet(); };
+const openBuilding = i => { sfx('click'); openSheet('bld', i); };
+const openTile = id => openSheet('tile', id);
+let sheetLive = true;
+function renderSheet() {
+  if (!sheet) return; const L = P(); let title = '', html = '';
+  sheetLive = true;
+  switch (sheet.kind) {
+    case 'bld': [title, html] = bldSheet(L, sheet.ref); break;
+    case 'tile': [title, html] = tileSheet(L, sheet.ref); break;
+    case 'heroes': [title, html] = ['영웅', heroSheet(L)]; break;
+    case 'army': [title, html] = ['군대', armySheet(L)]; break;
+    case 'tech': [title, html] = ['연구', techSheet(L)]; break;
+    case 'ally': [title, html] = ['동맹과 영주들', allySheet(L)]; break;
+    case 'chanc': [title, html] = ['재상', chancSheet(L)]; break;
+    case 'mail': [title, html] = ['소식', mailSheet(L)]; break;
+  }
+  el('sheetTitle').textContent = title;
+  const body = el('sheetBody'), st = body.scrollTop; body.innerHTML = html; body.scrollTop = st;
+}
+const btn = (label, a, cls = '', dis = false) => `<button class="btn ${cls}" data-a="${a}"${dis ? ' disabled' : ''}>${label}</button>`;
+const spd = (what, slot) => { const L = P(); return ['sp5', 'sp60'].map(id => btn(`${KC.ITEMS[id].n} (${L.items[id] || 0})`, `speed:${what}:${id}:${slot ?? ''}`, 'sm', !(L.items[id] > 0))).join(''); };
+function effectLines(k, lv, L) {
+  const B = KC.BLD[k], o = [];
+  if (B.res) o.push(`시간당 ${KC.RN[B.res]} ${fmt(KC.bProd(k, lv))} → <b>${fmt(KC.bProd(k, lv + 1))}</b> (보너스 전)`);
+  if (k === 'keep') o.push(`일꾼 ${KC.builders(lv)}명 · 금화 시간당 ${fmt(KC.goldPerHour(L))}`, '본성 5레벨에 일꾼이 한 명 늘어요');
+  if (k === 'warehouse') o.push(`약탈에서 지키는 자원 ${fmt(KC.protectOf(lv))} → <b>${fmt(KC.protectOf(lv + 1))}</b>`);
+  if (k === 'hospital') o.push(`치료소 자리 ${fmt(KC.hospCap(lv))} → <b>${fmt(KC.hospCap(lv + 1))}</b>`);
+  if (B.troop) o.push(lv ? `한 번에 ${KC.batchOf(lv)}명 → <b>${KC.batchOf(lv + 1)}명</b> · 다음 티어: ${KC.TIER_NEED.map((n, i) => n > lv ? `${KC.TIER_N[i]}은 ${n}레벨` : null).filter(Boolean)[0] || '모두 열림'}` : `지으면 ${KC.TR[B.troop].n} I을 한 번에 ${KC.batchOf(1)}명씩 훈련해요`);
+  if (k === 'academy') o.push(`연구 단계 상한 ${KC.techCap(lv)} → <b>${KC.techCap(lv + 1)}</b> · 연구 속도 +${lv * 2}%`);
+  if (k === 'wall') o.push(`영지 방어 +${lv * 2}% → <b>+${(lv + 1) * 2}%</b>`);
+  if (k === 'hall') o.push(`영웅 최대 레벨 ${KC.heroCap(lv)} → <b>${KC.heroCap(lv + 1)}</b> · 내정관 ${KC.govSlots(lv)}자리`);
+  if (k === 'embassy') o.push(`동맹 도움 ${KC.helpCap(lv)}번 → <b>${KC.helpCap(lv + 1)}번</b>`);
+  if (k === 'rally') o.push(`부대 크기 ${fmt(KC.marchSize(lv))} → <b>${fmt(KC.marchSize(lv + 1))}</b> · 부대 ${KC.marchCount(lv)}개`);
+  return o;
+}
+function bldSheet(L, i) {
+  const s = KC.SLOTS[i], k = s.k, B = KC.BLD[k], lv = L.blds[i], q = L.bq.find(b => b.slot === i);
+  let h = `<div class="t2" style="margin-bottom:8px">${B.d}</div>`;
+  if (KC.keepLv(L) < s.need) return [`${B.n} (잠김)`, h + `<div class="card2">본성 ${s.need}레벨이 되면 이 자리가 열려요.</div>`];
+  h += `<div class="card2">${effectLines(k, lv, L).map(x => `<div class="t2">${x}</div>`).join('')}</div>`;
+  if (q) h += `<div class="card2"><div class="t1">${lv + 1}레벨 공사 중 · ${tfmt(q.left)}</div><div class="bar2"><i style="width:${(1 - q.left / q.total) * 100}%"></i></div><div class="t2">동맹 도움 ${q.helps}/${KC.helpCap(KC.lv(L, 'embassy'))}</div><div class="btns">${spd('build', i)}</div></div>`;
+  else if (lv < KC.MAXLV) {
+    const c = KC.bCost(k, lv), ok = KC.canBuild(L, i), T = KC.bTime(k, lv) / (1 + KC.bonus(L).build);
+    let need = ''; if (k === 'keep') { const nd = KC.keepNeeds(lv); need = Object.entries(nd).filter(([, v]) => v > 0).map(([kk, v]) => `<span class="${KC.lv(L, kk) < v ? 'no' : ''}">${KC.BLD[kk].n} ${v}</span>`).join(' · '); }
+    h += `<div class="card2"><div class="t1">${lv ? `${lv + 1}레벨로 올리기` : '짓기'}</div><div class="cost">${costHtml(c)}<span>⏱ ${tfmt(T)}</span></div>${need ? `<div class="t2 cost">필요: ${need}</div>` : ''}
+      <div class="btns">${btn(lv ? '업그레이드' : '건설', `build:${i}`, 'pri', !ok.ok)}</div>${ok.ok ? '' : `<div class="t2" style="color:#ffb0a0">${ok.msg}</div>`}</div>`;
+  } else h += `<div class="card2 t1">최고 레벨이에요</div>`;
+  if (B.troop && lv > 0) h += trainBox(L, B.troop);
+  if (k === 'hospital') h += healBox(L);
+  if (k === 'warehouse' && lv > 0) h += tradeBox(L);
+  if (k === 'academy' && lv > 0) h += `<div class="btns">${btn('연구 보기', 'tab:tech', 'pri')}</div>`;
+  if (k === 'hall' && lv > 0) h += `<div class="btns">${btn('영웅 보기', 'tab:heroes', 'pri')}</div>`;
+  if (k === 'embassy' && lv > 0) h += `<div class="btns">${btn('동맹 보기', 'tab:ally', 'pri')}</div>`;
+  if (k === 'rally') h += `<div class="btns">${btn('부대 보기', 'tab:army', 'pri')}</div>`;
+  return [`${B.n} ${lv ? lv + '레벨' : ''}`, h];
+}
+const trainSel = { inf: { tier: null, n: null }, arc: { tier: null, n: null }, cav: { tier: null, n: null } };
+function trainBox(L, t) {
+  const tm = KC.tierMax(L, t), q = L.tq[t], bl = KC.lv(L, t === 'inf' ? 'barracks' : t === 'arc' ? 'range' : 'stable'), max = KC.batchOf(bl);
+  if (q) return `<div class="sec">훈련 중</div><div class="card2"><div class="t1">${KC.TR[t].n} ${KC.TIER_N[q.tier]} ×${q.n} · ${tfmt(q.left)}</div><div class="bar2"><i style="width:${(1 - q.left / q.total) * 100}%"></i></div><div class="btns">${spd(t)}</div></div>`;
+  sheetLive = false;
+  const S0 = trainSel[t]; if (S0.tier == null || S0.tier > tm) S0.tier = tm; if (S0.n == null || S0.n > max) S0.n = max;
+  const c = KC.trainCost(t, S0.tier, S0.n), T = KC.TR[t].t * Math.pow([1, 1.9, 3.4, 5.8, 9.5][S0.tier], .6) * S0.n / (1 + KC.bonus(L).train + bl * .03);
+  const st = KC.TR[t], m = KC.TIER_M[S0.tier];
+  return `<div class="sec">${st.n} 훈련</div><div class="card2"><div class="seg">${KC.TIER_N.map((n, i) => `<button class="btn sm${i === S0.tier ? ' on' : ''}" data-a="tier:${t}:${i}"${i > tm ? ' disabled' : ''}>${n}</button>`).join('')}</div>
+    <div class="t2" style="margin-top:6px">공격 ${Math.round(st.atk * m)} · 방어 ${Math.round(st.def * m)} · 체력 ${Math.round(st.hp * m)} · 운반 ${st.load} · ${KC.TR[KC.BEATS[t]].n}에 강해요</div>
+    <div class="row2" style="margin-top:6px"><input type="range" min="1" max="${max}" value="${S0.n}" data-a="cnt:${t}"><b style="min-width:44px;text-align:right" id="cnt_${t}">${S0.n}명</b></div>
+    <div class="cost" id="tc_${t}">${costHtml(c)}<span>⏱ ${tfmt(T)}</span></div><div class="btns">${btn('훈련', `train:${t}`, 'pri')}</div></div>`;
+}
+function healBox(L) {
+  const n = KC.armyN(L.wounded);
+  if (L.heal) return `<div class="sec">치료 중</div><div class="card2"><div class="t1">${KC.armyN(L.heal.army)}명 · ${tfmt(L.heal.left)}</div><div class="bar2"><i style="width:${(1 - L.heal.left / L.heal.total) * 100}%"></i></div><div class="btns">${spd('heal')}</div></div>`;
+  return `<div class="sec">다친 병사</div><div class="card2"><div class="t1">${fmt(n)}명 / 자리 ${fmt(KC.hospCap(KC.lv(L, 'hospital')))}</div>${n ? `<div class="cost">${costHtml(KC.healCost(L))}</div>` : ''}<div class="btns">${btn('치료 (가진 자원만큼)', 'heal', 'pri', !n)}</div></div>`;
+}
+const tradeSel = { from: 'wood', to: 'stone' };
+function tradeBox(L) {
+  const rate = KC.tradeRate(L), have = Math.floor(L.res[tradeSel.from]);
+  const pickRow = (which) => `<div class="seg">${KC.RES.map(r => `<button class="btn sm${tradeSel[which] === r ? ' on' : ''}" data-a="tsel:${which}:${r}">${RICON[r]} ${KC.RN[r]}</button>`).join('')}</div>`;
+  return `<div class="sec">교역소 (${Math.round(1 / rate * 10) / 10} : 1)</div><div class="card2"><div class="t2">넘치는 자원을 모자란 자원으로 바꿔요. 창고 레벨이 오르면 조금 유리해져요.</div>
+    <div class="t2" style="margin-top:6px">내줄 자원</div>${pickRow('from')}<div class="t2" style="margin-top:6px">받을 자원</div>${pickRow('to')}
+    <div class="btns">${[.1, .25, .5].map(k => btn(`${Math.round(k * 100)}% (${fmt(have * k)} → ${fmt(have * k * rate)})`, `trade:${k}`, 'sm', have * k < 100 || tradeSel.from === tradeSel.to)).join('')}</div></div>`;
+}
+const marchSel = { n: null, tile: null };
+function tileSheet(L, id) {
+  const t = KC.W.tiles.find(x => x.id === id); if (!t) { closeSheet(); return ['', '']; }
+  const d = KC.dist(L, t), tt = KC.travelTime(L, t, KC.bonus(L).speed);
+  let h = `<div class="t2">좌표 ${t.x}, ${t.y} · 거리 ${d.toFixed(1)} · 가는 데 ${tfmt(tt)}</div>`;
+  const marchPick = () => { sheetLive = false; if (marchSel.tile !== id) { marchSel.tile = id; marchSel.n = Math.min(KC.maxMarch(L), KC.armyN(L.troops)); } const mx = Math.max(1, Math.min(KC.maxMarch(L), KC.armyN(L.troops)));
+    marchSel.n = Math.min(marchSel.n, mx); return `<div class="row2" style="margin-top:6px"><input type="range" min="1" max="${mx}" value="${marchSel.n}" data-a="mcnt"><b style="min-width:54px;text-align:right" id="mcnt">${fmt(marchSel.n)}명</b></div><div class="t2">집 병사 ${fmt(KC.armyN(L.troops))} · 부대 ${KC.freeMarches(L)}개 보낼 수 있어요</div>`; };
+  const preview = enemy => { const a = KC.takeArmy(KC.cloneArmy(L.troops), marchSel.n || 1), r = KC.battle(a, KC.mods(L), enemy, enemy === t.army ? KC.noMods() : KC.mods(KC.W.lords[t.lord], true));
+    return `<div class="t2" id="prev" style="color:${r.win ? '#8fe0a0' : '#ff9a8a'}">예상: ${r.win ? '승리' : '패배'} · 우리 피해 약 ${fmt(KC.armyN(r.aLoss))}명</div>`; };
+  if (t.kind === 'res') {
+    const busy = KC.W.marches.find(m => m.tile === t.id && m.kind === 'gather');
+    h += `<div class="card2"><div class="t1">${RICON[t.res]} 남은 ${fmt(t.amt)} / ${fmt(t.max)}</div><div class="t2">채집 속도 초당 ${(KC.gatherRate(t.lv) * (1 + KC.bonus(L).gather)).toFixed(1)} · 병사마다 운반량만큼 가져와요</div>
+      ${busy ? `<div class="t2" style="color:#ffcf70">${KC.W.lords[busy.lord].name}의 부대가 채집 중</div>` : marchPick() + `<div class="btns">${btn('채집 보내기', `march:${t.id}:gather`, 'pri')}</div>`}</div>`;
+    return [`${KC.RN[t.res]} 자원지 Lv${t.lv}`, h];
+  }
+  if (t.kind === 'camp') {
+    h += `<div class="card2"><div class="t1">적 ${fmt(KC.armyN(t.army))}명 · 전투력 ${fmt(KC.armyPow(t.army))}</div><div class="t2">전리품: 자원·금화·영웅 경험치, 가끔 아이템</div>${marchPick()}${preview(t.army)}<div class="btns">${btn('토벌 출발', `march:${t.id}:attack`, 'pri')}</div></div>`;
+    return [`${t.n} Lv${t.lv}`, h];
+  }
+  if (t.kind === 'beast' || t.kind === 'throne') {
+    const guard = t.kind === 'throne' ? KC.throneGuard() : t.army, A = t.kind === 'throne' && KC.W.throne.holder && KC.W.alliances.find(a => a.id === KC.W.throne.holder);
+    h += `<div class="card2"><div class="t1">${t.kind === 'throne' ? (A ? `👑 ${A.n} 소유 · ${agoFmt(KC.W.throne.since)}부터` : '👑 주인 없는 왕좌') : `수비 ${fmt(KC.armyN(guard))}명`}</div>
+      <div class="t2">수비 전투력 ${fmt(KC.armyPow(guard))}. ${t.kind === 'throne' ? (KC.W.t < KC.W.throne.open ? `쟁탈전까지 ${tfmt(KC.W.throne.open - KC.W.t)}` : '동맹 집결로만 공격해요. 차지하면 동맹원 모두 자원 +15%') : '동맹 집결로만 쓰러뜨릴 수 있어요. 모집권·경험의 서·전설 영웅 조각'}</div>`;
+    const open = KC.W.rallies.find(r => r.tile === t.id);
+    if (open && open.alliance === L.alliance && !open.parts.some(p => p.lord === 0) && open.state === 'gather') h += marchPick() + `<div class="btns">${btn(`집결 참여 (${tfmt(open.left)} 뒤 출발)`, `joinr:${open.id}`, 'pri')}</div>`;
+    else if (open) h += `<div class="t2" style="color:#ffcf70">${KC.W.alliances.find(a => a.id === open.alliance).n} 집결 ${open.state === 'gather' ? `모으는 중 (${tfmt(open.left)})` : '진군 중'} · ${open.parts.length}명 참여</div>`;
+    else h += `<div class="btns">${btn('집결 열기 (2분 모집)', `rally:${t.id}`, 'pri', !L.alliance)}</div>${L.alliance ? '' : '<div class="t2">동맹에 들어가야 집결할 수 있어요</div>'}`;
+    return [t.kind === 'throne' ? '왕좌' : `${t.n} Lv${t.lv}`, h + '</div>'];
+  }
+  if (t.kind === 'town') {
+    const T = KC.W.lords[t.lord];
+    if (T.player) return ['나의 영지', h + `<div class="btns">${btn('영지로 가기', 'tab:town', 'pri')}</div>`];
+    const A = KC.allianceOf(T), rel = T.rel[0] || 0;
+    h += `<div class="card2"><div class="t1">본성 ${KC.keepLv(T)} · 전투력 ${fmt(T.power)}</div><div class="t2">${A ? `동맹 ${A.n}` : '동맹 없음'} · 성향 ${KC.PERS[T.ai.p].n} · 나에 대한 마음 ${relName(rel)} (${Math.round(rel)})${T.shieldT > 0 ? ` · 🛡 ${tfmt(T.shieldT)}` : ''}</div></div>`;
+    h += `<div class="sec">선물 (호감을 얻어요)</div><div class="btns">${KC.RES.map(r => btn(`${RICON[r]} ${fmt(Math.max(1000, Math.round(T.power * .05)))}`, `gift:${T.id}:${r}`, 'sm')).join('')}</div>`;
+    if (L.alliance && !T.alliance) h += `<div class="btns">${btn('우리 동맹에 초대', `invite:${T.id}`, 'gold')}</div>`;
+    if (!KC.allied(L, T)) h += `<div class="sec">공격</div><div class="card2">${T.shieldT > 0 ? '<div class="t2">평화의 방패가 지키고 있어요</div>' : marchPick() + preview(KC.defArmy(T)) + `<div class="t2">이기면 창고가 지키지 못한 자원의 절반까지 빼앗아요. 그 영주와 동맹이 나를 미워하게 돼요. 내 초보자 보호막은 사라져요.</div><div class="btns">${btn('공격 출발', `march:${t.id}:attack`, 'pri')}${L.alliance ? btn('동맹 집결 공격', `rally:${t.id}`) : ''}</div>`}</div>`;
+    return [T.name, h];
+  }
+  return ['', h];
+}
+function heroSheet(L) {
+  let h = `<div class="btns">${btn(`모집권으로 모집 (${L.items.ticket || 0})`, 'recruit:1', 'gold', !(L.items.ticket > 0))}${btn(`금화 ${KC.RECRUIT_GOLD}개로 모집`, 'recruit:0', 'pri', L.gold < KC.RECRUIT_GOLD)}</div>
+    <div class="t2" style="margin:6px 0">확률: 일반 55% · 희귀 32% · 영웅 10.5% · 전설 2.5%. 같은 영웅이 또 나오면 조각 10개.</div>
+    <div class="t2">지휘 영웅(최대 3)은 모든 전투에 힘을 보태고, 내정관(${KC.govSlots(KC.lv(L, 'hall'))}자리)은 영지를 돌봐요. 경험의 서 ${L.items.xp || 0}권 · 최대 레벨 ${KC.heroCap(KC.lv(L, 'hall'))}</div>`;
+  const ids = Object.keys(L.heroes).sort((a, b) => KC.HEROM[b].r - KC.HEROM[a].r || L.heroes[b].lv - L.heroes[a].lv);
+  for (const id of ids) {
+    const H = KC.HEROM[id], s = L.heroes[id], role = L.team.includes(id) ? '⚔ 지휘' : L.gov.includes(id) ? '🏛 내정' : '';
+    const need = KC.STAR_SHARDS[s.star];
+    h += `<div class="card2"><div class="row2"><div class="grow"><div class="t1"><span class="tag r${H.r}">${KC.RAR[H.r]}</span>${H.n} <span style="color:var(--gold)">${'★'.repeat(s.star)}</span> ${role ? `<span class="tag" style="background:#3a2a5a">${role}</span>` : ''}</div>
+      <div class="t2">Lv${s.lv} · ${KC.TR[H.t].n} 지휘 · 전투: ${H.sk} · 내정: ${H.gv}</div><div class="bar2"><i style="width:${s.xp / KC.xpNeed(s.lv) * 100}%"></i></div></div></div>
+      <div class="btns">${btn('경험의 서', `xp:${id}`, 'sm', !(L.items.xp > 0))}${btn(s.star < 5 ? `별 올리기 (${s.shard}/${need})` : '별 최대', `star:${id}`, 'sm', s.star >= 5 || s.shard < need)}${btn(L.team.includes(id) ? '지휘 빼기' : '지휘', `team:${id}`, 'sm')}${btn(L.gov.includes(id) ? '내정 빼기' : '내정', `gov:${id}`, 'sm', L.team.includes(id))}</div></div>`;
+  }
+  return h;
+}
+function armySheet(L) {
+  const row = a => KC.TT.map(t => `<div><b>${KC.TR[t].n}</b><br>${a[t].map((n, i) => n ? `${KC.TIER_N[i]} ${fmt(n)}` : '').filter(Boolean).join('<br>') || '-'}</div>`).join('');
+  let h = `<div class="sec">영지의 병사 ${fmt(KC.armyN(L.troops))}명</div><div class="grid3">${row(L.troops)}</div>
+    <div class="t2" style="margin-top:6px">식량 유지비 시간당 ${fmt(KC.upkeepPerHour(L))} · 부대 최대 ${fmt(KC.maxMarch(L))}명 × ${KC.marchCount(KC.lv(L, 'rally'))}개 · 상성: 보병 › 기병 › 궁병 › 보병</div>
+    <div class="btns">${btn('보병 훈련소', 'bld:3', 'sm')}${btn('궁병 훈련소', 'bld:6', 'sm')}${btn('기병 훈련소', 'bld:13', 'sm')}${btn('치료소', 'bld:4', 'sm')}</div>`;
+  h += healBox(L);
+  const ms = KC.W.marches.filter(m => m.lord === 0);
+  h += `<div class="sec">나간 부대 ${ms.length}</div>` + (ms.map(m => { const t = KC.W.tiles.find(x => x.id === m.tile);
+    const st = m.state === 'go' ? `가는 중 ${tfmt(m.left)}` : m.state === 'work' ? `채집 중 ${tfmt(m.work)}` : `돌아오는 중 ${tfmt(m.left)}`;
+    return `<div class="card2"><div class="row2"><div class="grow"><div class="t1">${m.kind === 'gather' ? '🧺 채집' : m.kind === 'rally' ? '⚔ 집결' : '🏹 공격'} · ${t ? KC.tileName(t) : '…'}</div><div class="t2">${fmt(KC.armyN(m.army))}명 · ${st}${Object.values(m.carry).some(v => v > 0) ? ' · 가져오는 것 ' + Object.entries(m.carry).filter(([, v]) => v > 0).map(([r, v]) => RICON[r] + fmt(v)).join(' ') : ''}</div></div>${m.state !== 'back' ? btn('불러들이기', `recall:${m.id}`, 'sm') : ''}</div></div>`; }).join('') || '<div class="t2">없어요. 지도에서 자원지나 소굴을 눌러 보내 보세요.</div>');
+  return h;
+}
+function techSheet(L) {
+  const ac = KC.lv(L, 'academy'); if (!ac) return '<div class="card2">학술원을 지으면 연구할 수 있어요.</div>';
+  let h = '';
+  if (L.rq) h += `<div class="card2"><div class="t1">📚 ${KC.TECHM[L.rq.id].n} ${(L.tech[L.rq.id] || 0) + 1}단계 · ${tfmt(L.rq.left)}</div><div class="bar2"><i style="width:${(1 - L.rq.left / L.rq.total) * 100}%"></i></div><div class="btns">${spd('research')}</div></div>`;
+  h += `<div class="t2">학술원 ${ac}레벨: 연구마다 ${KC.techCap(ac)}단계까지</div>`;
+  for (const tree of [0, 1]) {
+    h += `<div class="sec">${tree ? '군사' : '내정'}</div>`;
+    for (const T of KC.TECH.filter(x => x.tree === tree)) {
+      const cur = L.tech[T.id] || 0, ok = KC.canResearch(L, T.id);
+      h += `<div class="card2"><div class="row2"><div class="grow"><div class="t1">${T.n} <span style="color:var(--dim);font-weight:500">${cur}/${KC.TECH_MAX}</span></div><div class="t2">${T.d} (단계마다)</div>
+        ${cur < KC.TECH_MAX ? `<div class="cost">${costHtml(KC.tCost(cur))}<span>⏱ ${tfmt(KC.tTime(cur) / (1 + KC.bonus(L).research + ac * .02))}</span></div>` : ''}</div>${cur < KC.TECH_MAX ? btn('연구', `research:${T.id}`, 'sm pri', !ok.ok) : ''}</div></div>`;
+    }
+  }
+  return h;
+}
+function allySheet(L) {
+  const A = KC.allianceOf(L); let h = '';
+  if (A) {
+    h += `<div class="card2"><div class="t1" style="color:${A.color}">${A.n} [${A.tag}]${KC.W.throne.holder === A.id ? ' 👑' : ''}</div><div class="t2">동맹원 ${A.members.length} · 공헌 ${fmt(L.contrib)} · 도우면 공헌이 쌓여요</div>
+      <div class="btns">${btn('모두 돕기', 'helpall', 'pri')}${btn('동맹 나가기', 'leave', 'sm')}</div></div>`;
+    const rs = KC.W.rallies.filter(r => r.alliance === A.id);
+    if (rs.length) h += `<div class="sec">동맹 집결</div>` + rs.map(r => { const t = KC.W.tiles.find(x => x.id === r.tile); return `<div class="card2"><div class="row2"><div class="grow"><div class="t1">⚔ ${t ? KC.tileName(t) : '?'}</div><div class="t2">${KC.W.lords[r.leader].name} · ${r.parts.length}명 · ${r.state === 'gather' ? `${tfmt(r.left)} 뒤 출발` : '진군 중'}</div></div>${r.state === 'gather' && !r.parts.some(p => p.lord === 0) ? btn('참여', `tile:${r.tile}`, 'sm pri') : ''}</div></div>`; }).join('');
+    h += `<div class="sec">동맹 상점</div><div class="btns">${KC.SHOP.map(s => btn(`${KC.ITEMS[s.id].n} · ${s.c}`, `shop:${s.id}`, 'sm', L.contrib < s.c)).join('')}</div>`;
+  } else {
+    h += `<div class="card2"><div class="t2">동맹에 들면 건설·연구 시간을 서로 줄여 주고, 같이 집결해 거대 야수와 왕좌를 노릴 수 있어요. 동맹원끼리는 공격하지 않고, 공격받으면 다른 동맹원이 병사 일부를 보내 줘요.</div>
+      <div class="btns">${btn('내 동맹 만들기 (금화 500, 동맹관 필요)', 'create', 'gold', KC.lv(L, 'embassy') < 1 || L.gold < 500)}</div></div>`;
+    h += `<div class="sec">동맹들</div>` + KC.W.alliances.filter(a => a.members.length).map(a => `<div class="card2"><div class="row2"><div class="grow"><div class="t1" style="color:${a.color}">${a.n}${KC.W.throne.holder === a.id ? ' 👑' : ''}</div><div class="t2">동맹원 ${a.members.length} · 전투력 ${fmt(a.members.reduce((s, m) => s + KC.W.lords[m].power, 0))}</div></div>${btn('가입 신청', `join:${a.id}`, 'sm pri')}</div></div>`).join('');
+  }
+  h += `<div class="sec">영주 순위</div>`;
+  const lords = KC.W.lords.slice().sort((a, b) => b.power - a.power);
+  h += lords.map((T, i) => { const a = KC.allianceOf(T); return `<div class="card2"${T.player ? ' style="border-color:rgba(167,123,255,.6)"' : ''}><div class="row2"><b style="width:22px;color:var(--gold)">${i + 1}</b><div class="grow"><div class="t1">${T.name}${a ? ` <span style="color:${a.color};font-size:11px">[${a.tag}]</span>` : ''}</div>
+    <div class="t2">본성 ${KC.keepLv(T)} · 전투력 ${fmt(T.power)}${T.ai ? ` · ${KC.PERS[T.ai.p].n} · ${relName(T.rel[0] || 0)}` : ' · 나'}</div></div>${T.ai ? btn('보기', `town:${T.id}`, 'sm') : ''}</div></div>`; }).join('');
+  return h;
+}
+const AUTO_N = { build: ['건설', '자원과 본성 단계를 보고 다음 건물을 올려요'], research: ['연구', '모자란 자원과 성향에 맞춰 연구해요'], train: ['훈련', '본성 크기에 맞는 군대를 유지해요'], heal: ['치료', '다친 병사를 가진 자원만큼 치료해요'],
+  gather: ['채집', '가장 모자란 자원을 가까운 자원지에서 모아요'], hunt: ['사냥', '이길 수 있는 소굴만 골라 토벌해요(예상 피해 20% 미만)'], hero: ['영웅', '모집권 사용, 지휘·내정 배치, 별 올리기'], help: ['동맹 돕기', '동맹원 공사를 자동으로 도와요'], quest: ['임무', '끝난 임무 보상을 받아요'], ally: ['동맹 가입', '동맹이 없으면 우리를 가장 좋게 보는 동맹에 들어가요'] };
+function chancSheet(L) {
+  let h = `<div class="card2"><div class="row2"><div class="grow"><div class="t1">🧠 재상 ${L.chanc === false ? '쉬는 중' : '일하는 중'}</div><div class="t2">AI 영주들과 똑같은 판단 엔진이 5초마다 영지를 살펴요. 끄면 모두 직접 해야 해요.</div></div><button class="sw${L.chanc === false ? '' : ' on'}" data-a="chanc"></button></div></div>`;
+  h += `<div class="sec">방침</div><div class="seg">${Object.entries(KC.PLAYER_STRAT).map(([k, v]) => `<button class="btn sm${L.strat === k ? ' on' : ''}" data-a="strat:${k}">${v.n}</button>`).join('')}</div>`;
+  h += `<div class="sec">맡길 일</div>` + Object.entries(AUTO_N).map(([k, [n, d]]) => `<div class="tgl"><div><div>${n}</div><div class="t2">${d}</div></div><button class="sw${L.auto[k] ? ' on' : ''}" data-a="auto:${k}"></button></div>`).join('');
+  h += `<div class="sec">재상의 기록</div><div class="log">${L.log.map(x => `<div><time>${agoFmt(x.t)}</time>${x.m}</div>`).join('') || '<div class="t2">아직 기록이 없어요</div>'}</div>`;
+  return h;
+}
+function mailSheet(L) {
+  let h = `<div class="sec">가방</div><div class="btns">${Object.entries(KC.ITEMS).map(([id, it]) => btn(`${it.n} ${L.items[id] || 0}`, `use:${id}`, 'sm', !(L.items[id] > 0) || ['sp5', 'sp60', 'xp'].includes(id))).join('')}</div>
+    <div class="t2" style="margin-top:4px">가속은 진행 중인 일에서, 경험의 서는 영웅에서 써요.</div>`;
+  h += `<div class="sec">우편 <button class="btn sm" data-a="readall" style="margin-left:6px">모두 읽음</button></div>` + (KC.W.mail.slice(0, 50).map(m => `<div class="mail ${m.kind}"><b>${m.read ? '' : '● '}${m.title}</b> <span class="t2">${agoFmt(m.t)}</span>${m.body ? `<p>${m.body}</p>` : ''}</div>`).join('') || '<div class="t2">우편이 없어요</div>');
+  h += `<div class="sec">왕국 소식</div><div class="log">${KC.W.news.slice(0, 30).map(n => `<div><time>${agoFmt(n.t)}</time>${n.m}</div>`).join('')}</div>`;
+  return h;
+}
+// every button in a sheet: data-a="verb:arg:arg"
+el('sheetBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b || b.disabled || b.tagName === 'INPUT') return; audio();
+  const [v, a1, a2, a3, a4] = b.dataset.a.split(':'), L = P();
+  switch (v) {
+    case 'build': act(KC.build(L, +a1), 'build'); syncTown(); break;
+    case 'speed': act(KC.speedup(L, a1, a2, a3 === '' ? undefined : +a3)); break;
+    case 'tier': trainSel[a1].tier = +a2; renderSheet(); break;
+    case 'train': act(KC.train(L, a1, trainSel[a1].tier, trainSel[a1].n)); break;
+    case 'heal': act(KC.heal(L)); break;
+    case 'research': act(KC.research(L, a1)); break;
+    case 'tab': openTab(a1); break;
+    case 'bld': openBuilding(+a1); break;
+    case 'tile': openTile(+a1); break;
+    case 'town': { const t = KC.W.tiles.find(x => x.kind === 'town' && x.lord === +a1); if (t) openTile(t.id); break; }
+    case 'march': { const r = act(KC.sendMarch(L, +a1, a2, marchSel.n), 'march'); if (r.ok) { closeSheet(); if (tab !== 'map') openTab('map'); } break; }
+    case 'recall': act(KC.recall(L, +a1)); break;
+    case 'rally': { const r = act(KC.startRally(L, +a1), 'march'); break; }
+    case 'joinr': act(KC.joinRally(L, +a1, marchSel.n), 'march'); break;
+    case 'gift': { const T = KC.W.lords[+a1]; act(KC.gift(L, T.id, a2, Math.max(1000, Math.round(T.power * .05)))); break; }
+    case 'invite': act(KC.invite(L, +a1)); break;
+    case 'join': act(KC.joinAlliance(L, +a1), 'win'); syncTown(true); break;
+    case 'leave': if (confirm('동맹에서 나갈까요?')) act(KC.leaveAlliance(L)); break;
+    case 'create': { const n = prompt('동맹 이름', '새벽 동맹'); if (n) act(KC.createAlliance(L, n.slice(0, 12)), 'win'); syncTown(true); break; }
+    case 'helpall': act(KC.helpAll(L)); break;
+    case 'shop': act(KC.shopBuy(L, a1)); break;
+    case 'recruit': { const r = act(KC.recruit(L, a1 === '1'), 'win'); if (r.ok && !r.dup) { const H = KC.HEROM[r.hero]; if (H.r >= 2) toast(`✨ ${KC.RAR[H.r]} ${H.n}!`); syncLife(); } break; }
+    case 'xp': act(KC.useXp(L, a1, L.items.xp)); break;
+    case 'star': act(KC.starUp(L, a1), 'win'); break;
+    case 'team': { const t = L.team.includes(a1) ? L.team.filter(x => x !== a1) : [...L.team, a1]; if (t.length > 3) { toast('지휘 영웅은 3명까지예요', true); break; } KC.setTeam(L, t); KC.setGov(L, L.gov.filter(x => x !== a1)); save(); renderSheet(); syncLife(); break; }
+    case 'gov': { const g = L.gov.includes(a1) ? L.gov.filter(x => x !== a1) : [...L.gov, a1]; KC.setGov(L, g); if (g.length > L.gov.length) toast('내정관 자리가 모자라요', true); save(); renderSheet(); break; }
+    case 'chanc': L.chanc = L.chanc === false; save(); renderSheet(); hud(); break;
+    case 'strat': L.strat = a1; save(); renderSheet(); break;
+    case 'auto': L.auto[a1] = !L.auto[a1]; save(); renderSheet(); break;
+    case 'use': act(KC.useItem(L, a1)); break;
+    case 'tsel': tradeSel[a1] = a2; renderSheet(); break;
+    case 'trade': act(KC.trade(L, tradeSel.from, tradeSel.to, Math.floor(L.res[tradeSel.from] * +a1))); break;
+    case 'readall': for (const m of KC.W.mail) m.read = true; save(); renderSheet(); hud(); break;
+  }
+});
+el('sheetBody').addEventListener('input', e => {
+  const a = e.target.dataset.a; if (!a) return; const L = P();
+  if (a.startsWith('cnt:')) { const t = a.slice(4), n = +e.target.value; trainSel[t].n = n; el('cnt_' + t).textContent = n + '명';
+    const bl = KC.lv(L, t === 'inf' ? 'barracks' : t === 'arc' ? 'range' : 'stable'), T = KC.TR[t].t * Math.pow([1, 1.9, 3.4, 5.8, 9.5][trainSel[t].tier], .6) * n / (1 + KC.bonus(L).train + bl * .03);
+    el('tc_' + t).innerHTML = costHtml(KC.trainCost(t, trainSel[t].tier, n)) + `<span>⏱ ${tfmt(T)}</span>`; }
+  if (a === 'mcnt') { marchSel.n = +e.target.value; el('mcnt').textContent = fmt(marchSel.n) + '명'; clearTimeout(marchSel.tm); marchSel.tm = setTimeout(() => { if (sheet && sheet.kind === 'tile') renderSheet(); }, 250); }
+});
+
+/* ================= SOUND ================= */
+const sfx = k => ({
+  click: () => tone(660, .04, 'triangle', .025),
+  ok: () => tone(880, .07, 'triangle', .04),
+  build: () => { tone(220, .12, 'square', .03); tone(330, .12, 'square', .025, .1); },
+  march: () => [262, 330, 392].forEach((f, i) => tone(f, .18, 'sawtooth', .025, i * .07)),
+  win: () => [392, 494, 587, 784].forEach((f, i) => tone(f, .3, 'triangle', .05, i * .08)),
+  lose: () => tone(160, .6, 'sawtooth', .04),
+}[k] || (() => {}))();
+
+/* ================= SAVE / OFFLINE ================= */
+function save() { if (!KC.W) return; try { localStorage.setItem(KEY, JSON.stringify({ s: KC.serialize(), real: Date.now() })); } catch (e) {} }
+function load() { try { const o = JSON.parse(localStorage.getItem(KEY)); if (o && o.s) { KC.restore(o.s); return o.real; } } catch (e) { console.warn(e); } return null; }
+const OFFLINE_MAX = 12 * 3600;
+function catchUp(real) {
+  const sec = Math.min(OFFLINE_MAX, Math.max(0, (Date.now() - real) / 1000)); if (sec < 60) return;
+  const L = P(), before = { keep: KC.keepLv(L), power: L.power, res: { ...L.res }, gold: L.gold, camps: L.stats.camps, logs: L.log.length ? L.log[0].t : 0, mail: KC.W.mail.length };
+  KC.advance(sec, 15);
+  const acts = L.log.filter(x => x.t > before.logs).length, sacked = KC.W.mail.filter(m => m.t > KC.W.t - sec && m.title.startsWith('영지가')).length;
+  el('awayMsg').innerHTML = `${tfmt(sec)} 동안 영지가 돌아갔어요${sec >= OFFLINE_MAX ? ' (최대 12시간)' : ''}.${L.chanc !== false ? `<br>재상이 ${acts}가지 일을 처리했어요.` : ''}${sacked ? `<br><b style="color:#ff9a8a">그동안 ${sacked}번 약탈당했어요.</b>` : ''}`;
+  el('awayStats').innerHTML = [['본성', `${before.keep} → ${KC.keepLv(L)}`], ['전투력', `${fmt(before.power)} → ${fmt(L.power)}`], ...KC.RES.map(r => [KC.RN[r], `${L.res[r] >= before.res[r] ? '+' : ''}${fmt(L.res[r] - before.res[r])}`]), ['토벌한 소굴', `+${L.stats.camps - before.camps}`]]
+    .map(([a, b]) => `<div>${a}<b>${b}</b></div>`).join('');
+  el('away').hidden = false;
+}
+el('awayOk').onclick = () => { audio(); el('away').hidden = true; };
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else { const o = JSON.parse(localStorage.getItem(KEY) || 'null'); if (o && o.real && Date.now() - o.real > 60000) { catchUp(o.real); syncTown(); syncLife(); } } });
+
+/* ================= LOOP ================= */
+let last = performance.now(), running = false, uiT = 0, saveT = 0, lifeT = 0, mailSeen = 0;
+function frame(now) {
+  const dt = Math.min(.1, (now - last) / 1000); last = now;
+  if (running) {
+    KC.tick(dt);
+    uiT -= dt; if (uiT <= 0) { uiT = .25; hud(); syncTown(); notify(); }
+    lifeT -= dt; if (lifeT <= 0) { lifeT = 3; syncLife(); }
+    saveT -= dt; if (saveT <= 0) { saveT = 10; save(); }
+    if (sheet && sheetLive && !(now - (frame.sheetT || 0) < 1000)) { frame.sheetT = now; renderSheet(); }
+    if (tab === 'map' && !(now - (frame.mapT || 0) < 100)) { frame.mapT = now; drawMap(); }
+  }
+  if (renderer && tab === 'town') {
+    updateLife(dt);
+    for (const b of town.blds) if (b && b.g && b.g.userData.orb) b.g.userData.orb.position.y += Math.sin(now / 400) * .002;
+    const tm = FXOPT.on && MGFX.hasPost ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping; if (renderer.toneMapping !== tm) renderer.toneMapping = tm;
+    VX.update(dt); MGFX.render(); drawOverlay();
+    for (const [i, s] of town.scaff.entries()) if (s && Math.random() < dt * 1.5) VX.burst(PLOT[i][0] + rnd(-1, 1), PLOT[i][1] + rnd(-1, 1), .4, 3, { color: [0xc8b090, 0x8a7a60], speed: .8, up: 1, life: .6, size: .25, grav: -1, drag: 2 });
+  }
+  requestAnimationFrame(frame);
+}
+function notify() {
+  const n = KC.W.mail.length; if (!mailSeen) { mailSeen = n; return; }
+  if (n > mailSeen) { const fresh = KC.W.mail.slice(0, Math.min(3, n - mailSeen)); mailSeen = n;
+    const m = fresh.find(x => ['warn', 'lose', 'rally', 'win'].includes(x.kind)) || fresh[0];
+    if (m.kind !== 'done' || !sheet) toast(m.title, m.kind === 'warn' || m.kind === 'lose'); if (m.kind === 'lose') sfx('lose'); if (m.kind === 'win') sfx('win'); }
+  mailSeen = KC.W.mail.length;
+}
+function begin(fresh) {
+  el('title').hidden = true;
+  if (fresh) { KC.newWorld(Date.now() % 1e9); save(); }
+  buildTown(); syncLife(); running = true; hud();
+}
+el('startBtn').onclick = () => { audio(); begin(true); };
+async function start() {
+  initGL();
+  try { await loadAssets(); } catch (e) { el('loadMsg').textContent = '그래픽 파일을 불러오지 못했어요. 새로고침해 주세요.'; return; }
+  el('loading').hidden = true;
+  const real = load();
+  if (real) { catchUp(real); begin(false); } else el('title').hidden = false;
+  resize();
+}
+start();
+requestAnimationFrame(frame);
+window.__K = { KC, P, save, openTab, openTile, openBuilding, drawMap, syncTown, MAP };
+})();
+</script>
+</body>
+</html>
