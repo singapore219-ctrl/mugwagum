@@ -1739,6 +1739,9 @@ function hud() {
   el('top').innerHTML = KC.RES.map(r => { const net = KC.prodPerHour(L, r, b) - (r === 'food' ? KC.upkeepPerHour(L) : 0);
     return `<div class="glass rc${net < 0 ? ' low' : ''}" title="${KC.RN[r]} 시간당 ${fmt(net)}"><i>${RICON[r]}</i>${fmt(L.res[r])}</div>`; }).join('') +
     `<div class="glass rc"><i>🪙</i>${fmt(L.gold)}</div><div class="glass rc pow">⚔ ${fmt(L.power)}${L.shieldT > 0 ? ' 🛡' : ''} <small style="opacity:.45;font-weight:500">${VERSION}</small></div>`;
+  // the resource bar wraps to two lines on narrow phones: keep the queues and side buttons below it
+  const tb = el('top'), below = tb.offsetTop + tb.offsetHeight + 6 + 'px';
+  if (el('side').style.top !== below) { el('side').style.top = below; el('queues').style.top = below; }
   const rows = [];
   const nb = KC.builders(KC.keepLv(L));
   for (let k = 0; k < nb; k++) { const q = L.bq[k]; rows.push(q ? qrow('🏗', `${KC.BLD[slotKind(q.slot)].n} ${L.blds[q.slot] + 1}`, q, `b${q.slot}`) : `<div class="glass qrow idle" data-q="idle"><b>🏗 일꾼 쉬는 중</b></div>`); }
@@ -2058,7 +2061,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) save(
 /* ================= LOOP ================= */
 let last = performance.now(), running = false, uiT = 0, saveT = 0, lifeT = 0, mailSeen = 0;
 // errors show on screen (phones have no console at hand) and never stop the loop
-const VERSION = 'v1.3';
+const VERSION = 'v1.4';
 function showErr(e) { const m = (e && (e.stack || e.message)) || String(e); console.error(e); if (showErr.n++ > 3) return; let d = el('errbox'); if (!d) { d = document.createElement('div'); d.id = 'errbox'; d.style.cssText = 'position:absolute;left:8px;right:8px;top:40%;z-index:20;background:rgba(80,10,10,.92);color:#fff;font:11px monospace;padding:8px;border-radius:8px;white-space:pre-wrap;max-height:40%;overflow:auto'; d.onclick = () => d.remove(); document.body.appendChild(d); } d.textContent = `[${VERSION}] 오류 (눌러서 닫기)\n` + m.slice(0, 600); }
 showErr.n = 0;
 addEventListener('error', e => showErr(e.error || e.message));
