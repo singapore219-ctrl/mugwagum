@@ -1738,7 +1738,7 @@ function hud() {
   const L = P(), b = KC.bonus(L);
   el('top').innerHTML = KC.RES.map(r => { const net = KC.prodPerHour(L, r, b) - (r === 'food' ? KC.upkeepPerHour(L) : 0);
     return `<div class="glass rc${net < 0 ? ' low' : ''}" title="${KC.RN[r]} 시간당 ${fmt(net)}"><i>${RICON[r]}</i>${fmt(L.res[r])}</div>`; }).join('') +
-    `<div class="glass rc"><i>🪙</i>${fmt(L.gold)}</div><div class="glass rc pow">⚔ ${fmt(L.power)}${L.shieldT > 0 ? ' 🛡' : ''}</div>`;
+    `<div class="glass rc"><i>🪙</i>${fmt(L.gold)}</div><div class="glass rc pow">⚔ ${fmt(L.power)}${L.shieldT > 0 ? ' 🛡' : ''} <small style="opacity:.45;font-weight:500">${VERSION}</small></div>`;
   const rows = [];
   const nb = KC.builders(KC.keepLv(L));
   for (let k = 0; k < nb; k++) { const q = L.bq[k]; rows.push(q ? qrow('🏗', `${KC.BLD[slotKind(q.slot)].n} ${L.blds[q.slot] + 1}`, q, `b${q.slot}`) : `<div class="glass qrow idle" data-q="idle"><b>🏗 일꾼 쉬는 중</b></div>`); }
@@ -2057,7 +2057,17 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) save(
 
 /* ================= LOOP ================= */
 let last = performance.now(), running = false, uiT = 0, saveT = 0, lifeT = 0, mailSeen = 0;
+// errors show on screen (phones have no console at hand) and never stop the loop
+const VERSION = 'v1.2';
+function showErr(e) { const m = (e && (e.stack || e.message)) || String(e); console.error(e); if (showErr.n++ > 3) return; let d = el('errbox'); if (!d) { d = document.createElement('div'); d.id = 'errbox'; d.style.cssText = 'position:absolute;left:8px;right:8px;top:40%;z-index:20;background:rgba(80,10,10,.92);color:#fff;font:11px monospace;padding:8px;border-radius:8px;white-space:pre-wrap;max-height:40%;overflow:auto'; d.onclick = () => d.remove(); document.body.appendChild(d); } d.textContent = `[${VERSION}] 오류 (눌러서 닫기)\n` + m.slice(0, 600); }
+showErr.n = 0;
+addEventListener('error', e => showErr(e.error || e.message));
+addEventListener('unhandledrejection', e => showErr(e.reason));
 function frame(now) {
+  requestAnimationFrame(frame);
+  try { frameBody(now); } catch (e) { showErr(e); }
+}
+function frameBody(now) {
   const dt = Math.min(.1, (now - last) / 1000); last = now;
   if (running) {
     KC.tick(dt);
@@ -2074,7 +2084,6 @@ function frame(now) {
     VX.update(dt); MGFX.render(); drawOverlay();
     for (const [i, s] of town.scaff.entries()) if (s && Math.random() < dt * 1.5) VX.burst(PLOT[i][0] + rnd(-1, 1), PLOT[i][1] + rnd(-1, 1), .4, 3, { color: [0xc8b090, 0x8a7a60], speed: .8, up: 1, life: .6, size: .25, grav: -1, drag: 2 });
   }
-  requestAnimationFrame(frame);
 }
 function notify() {
   const n = KC.W.mail.length; if (!mailSeen) { mailSeen = n; return; }
@@ -2086,18 +2095,19 @@ function notify() {
 function begin(fresh) {
   el('title').hidden = true;
   if (fresh) { KC.newWorld(Date.now() % 1e9); save(); }
-  buildTown(); syncLife(); running = true; resize(); hud();   // resize also fits the fog to the camera
+  try { buildTown(); syncLife(); } catch (e) { showErr(e); }
+  running = true; resize(); hud();   // resize also fits the fog to the camera
 }
-el('startBtn').onclick = () => { audio(); begin(true); };
+el('startBtn').onclick = () => { audio(); try { begin(true); } catch (e) { showErr(e); } };
 async function start() {
   initGL();
   try { await loadAssets(); } catch (e) { el('loadMsg').textContent = '그래픽 파일을 불러오지 못했어요. 새로고침해 주세요.'; return; }
   el('loading').hidden = true;
   const real = load();
-  if (real) { catchUp(real); begin(false); } else el('title').hidden = false;
+  if (real) { try { catchUp(real); } catch (e) { showErr(e); } begin(false); } else el('title').hidden = false;
   resize();
 }
-start();
+start().catch(showErr);
 requestAnimationFrame(frame);
 window.__K = { KC, P, save, openTab, openTile, openBuilding, drawMap, syncTown, MAP };
 })();
