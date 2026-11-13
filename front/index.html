@@ -93,6 +93,11 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
 .stats div{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--dim)}
 .stats b{display:block;color:#fff;font-size:15px;margin-top:2px}
 .row3{display:flex;gap:6px}.row3>*{flex:1}
+/* a portrait game: on a phone held (or locked) sideways, ask to turn it */
+#rotate{display:none;position:absolute;inset:0;z-index:30;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(8,6,14,.96);text-align:center;padding:20px}
+#rotate .ic{font-size:44px;animation:rot 1.6s ease-in-out infinite}
+@keyframes rot{0%,30%{transform:rotate(90deg)}60%,100%{transform:rotate(0)}}
+@media (orientation:landscape) and (max-height:520px){#rotate{display:flex}}
 </style>
 </head>
 <body>
@@ -127,6 +132,7 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
       <button class="btn pri wide" id="goBtn">출격</button>
     </div>
   </div>
+  <div id="rotate"><div class="ic">📱</div><b style="font-size:16px">세로 화면 게임이에요</b><div style="color:var(--dim);font-size:13px">폰을 세로로 들어 주세요</div><button class="btn pri" id="rotBtn">세로로 보기</button></div>
   <div class="ovl" id="end" hidden>
     <div class="card">
       <div class="logo" style="font-size:34px" id="endTitle">승리</div>
@@ -662,7 +668,7 @@ const FRONT_BRAIN = {"H":24,"IN":35,"OUT":7,"intents":["save","barracks","range"
    3D field (procedural buildings, KayKit soldiers), HUD, build sheet, lobby with permanent upgrades.
    Rules live in FC (front_core.js). The trained build brain arrives as FRONT_BRAIN (from brain.json at build time). */
 LOOK.dot = false;
-const VERSION = 'v1.0';
+const VERSION = 'v1.1';
 const KEY = 'mug-front-v1';
 let S = null, M = null;
 const NET = typeof FRONT_BRAIN !== 'undefined' && FRONT_BRAIN ? (() => { const th = FRONT_BRAIN.theta, H = FRONT_BRAIN.H, I = FRONT_BRAIN.IN, O = FRONT_BRAIN.OUT;
@@ -931,6 +937,16 @@ function frameBody(now) {
     VX.update(dt * (running ? S.speed : 1)); MGFX.render(); drawOverlay();
   }
 }
+// phones: full screen and lock to portrait where the browser allows it (the main page and the installed app lock landscape)
+function lockPortrait() {
+  const so = screen.orientation; if (!so || !so.lock) return;
+  const go = () => so.lock('portrait').catch(() => {});
+  if (document.fullscreenElement || matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) go();
+  else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(go).catch(() => {});
+}
+el('rotBtn').addEventListener('click', lockPortrait);
+if (MOBILE) document.addEventListener('pointerdown', lockPortrait, { once: true });
+if (MOBILE && matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) lockPortrait();
 let glLost = false;
 glc.addEventListener('webglcontextlost', e => { e.preventDefault(); if (glLost) return; glLost = true; save(); setTimeout(() => location.reload(), 500); });
 async function start() {
