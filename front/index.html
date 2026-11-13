@@ -1,0 +1,947 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0a10">
+<title>그림자 전선</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@700;800&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="../lib/three.min.js"></script>
+<script src="../lib/GLTFLoader.js"></script>
+<script src="../lib/SkeletonUtils.js"></script>
+<script src="../lib/CopyShader.js"></script>
+<script src="../lib/LuminosityHighPassShader.js"></script>
+<script src="../lib/EffectComposer.js"></script>
+<script src="../lib/RenderPass.js"></script>
+<script src="../lib/ShaderPass.js"></script>
+<script src="../lib/UnrealBloomPass.js"></script>
+<script src="../lib/mgfx.js"></script>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0b0a10; --acc:#a77bff; --acc2:#d6c2ff; --text:#ece8f4; --dim:rgba(236,232,244,.56); --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.16);
+  --gold:#f1d58c; --good:#8fe0a0; --bad:#ff8a78;
+  --serif:'Nanum Myeongjo', 'Batang', serif;
+  --sans:'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+#game{position:relative;width:100%;height:100%;overflow:hidden;display:flex;flex-direction:column}
+#view{position:relative;flex:1;min-height:0;touch-action:none}
+#gl,#ov{position:absolute;inset:0;width:100%;height:100%;display:block}
+#ov{pointer-events:none}
+button{font-family:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
+
+/* ===== 그림자 전선 UI ===== */
+.glass{background:rgba(10,8,16,.6);border:1px solid rgba(255,255,255,.1);border-radius:10px}
+#hudTop{position:absolute;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + 6px);display:flex;align-items:center;gap:6px;z-index:3}
+#cr{font-weight:800;font-size:15px;padding:4px 10px;color:#9ae8ff;font-variant-numeric:tabular-nums;white-space:nowrap}
+#cr small{font-size:10.5px;color:var(--dim);font-weight:500;margin-left:3px}
+#mid{flex:1;min-width:0;text-align:center;padding:3px 8px}
+#clock{font-weight:800;font-size:13px;font-variant-numeric:tabular-nums}
+#tide{position:relative;height:9px;border-radius:5px;overflow:hidden;background:#c84a3a;margin-top:3px}
+#tide i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#6a3cd8,#a77bff);transition:width .4s}
+#tideTxt{display:flex;justify-content:space-between;font-size:9.5px;font-weight:700;margin-top:1px;font-variant-numeric:tabular-nums}
+#tideTxt span:first-child{color:#c9a8ff}#tideTxt span:last-child{color:#ff9a8a}
+.chip{background:rgba(10,8,16,.6);border:1px solid rgba(255,255,255,.16);color:#efe8ff;border-radius:14px;padding:5px 9px;font-size:11px;font-weight:700;white-space:nowrap}
+.chip.on{border-color:rgba(167,123,255,.85);background:rgba(98,56,190,.55)}
+#chips{display:flex;flex-direction:column;gap:4px}
+#stageTag{position:absolute;left:8px;top:calc(env(safe-area-inset-top,0px) + 50px);font-size:11px;color:var(--dim);z-index:3;pointer-events:none}
+#skills{position:absolute;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;gap:8px;z-index:3}
+.sk{position:relative;width:58px;height:58px;border-radius:50%;border:1.5px solid rgba(255,255,255,.25);background:radial-gradient(circle at 50% 40%,rgba(70,44,120,.8),rgba(14,9,26,.85) 75%);color:#efe8ff;font-size:10.5px;font-weight:800;display:grid;place-items:center;line-height:1.15;text-align:center}
+.sk b{display:block;font-size:20px}
+.sk .cd{position:absolute;inset:0;border-radius:50%;background:conic-gradient(rgba(0,0,0,.65) var(--p,0%),transparent 0);pointer-events:none}
+.sk.ready{border-color:#c9a8ff;box-shadow:0 0 12px rgba(167,123,255,.6)}
+.sk.aim{border-color:#ffd070;box-shadow:0 0 14px rgba(255,208,112,.8)}
+#hint{position:absolute;left:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);right:150px;font-size:11.5px;color:#e8e0f8;z-index:3;padding:6px 10px;pointer-events:none}
+#sheet{position:absolute;left:0;right:0;bottom:0;z-index:6;max-height:62%;display:flex;flex-direction:column;background:rgba(16,13,24,.97);border-top:1px solid rgba(167,123,255,.45);border-radius:14px 14px 0 0}
+#sheetHead{display:flex;align-items:center;gap:8px;padding:12px 14px 6px}
+#sheetHead b{font-size:15.5px;flex:1;font-family:var(--serif)}
+#sheetBody{overflow-y:auto;padding:0 14px calc(env(safe-area-inset-bottom,0px) + 14px)}
+.x{background:rgba(255,255,255,.08);border:0;border-radius:50%;width:30px;height:30px;font-size:15px;color:#fff}
+.opt{display:flex;align-items:center;gap:10px;padding:9px 10px;margin-bottom:6px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--line);width:100%;text-align:left;color:inherit}
+.opt:disabled{opacity:.4}
+.opt .ic{font-size:22px;width:30px;text-align:center}
+.opt .grow{flex:1;min-width:0}
+.opt b{font-size:13.5px}
+.opt .t2{font-size:11.5px;color:var(--dim);margin-top:1px}
+.opt .c{font-weight:800;color:#9ae8ff;white-space:nowrap}
+.btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);color:#efe8ff;border-radius:8px;padding:8px 12px;font-size:12.5px;font-weight:500;white-space:nowrap}
+.btn:disabled{opacity:.38}
+.btn.pri{background:#8a5cf0;border-color:#8a5cf0;color:#fff;font-weight:700}
+.btn.gold{background:#a8822a;border-color:#c9a040;color:#fff;font-weight:700}
+.wide{width:100%;padding:13px;font-size:15px}
+#toast{position:absolute;left:50%;top:26%;transform:translateX(-50%);font-weight:800;font-size:15px;color:#fff;background:rgba(20,14,34,.88);border:1px solid rgba(167,123,255,.5);padding:8px 14px;border-radius:12px;pointer-events:none;opacity:0;transition:opacity .35s;z-index:9;max-width:88%;text-align:center}
+#toast.show{opacity:1;transition:none}#toast.bad{border-color:rgba(255,90,70,.7);color:#ffd0c8}
+.ovl{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:20px 16px;background:radial-gradient(ellipse at 50% 40%,rgba(36,22,64,.95),rgba(6,5,10,.98))}
+.card{width:min(460px,100%);text-align:center;max-height:100%;overflow-y:auto}
+.logo{font-family:var(--serif);font-weight:800;font-size:clamp(30px,9vw,42px);color:var(--acc2);line-height:1.15;text-shadow:0 0 30px rgba(167,123,255,.55),0 2px 0 #1a0f33}
+.sub{color:var(--dim);font-size:13px;line-height:1.6;margin:8px 0 14px}
+.rules{text-align:left;font-size:12.5px;line-height:1.7;background:rgba(255,255,255,.04);border:1px solid var(--line2);border-radius:10px;padding:10px 14px;margin-bottom:12px}
+.rules b{color:var(--acc2)}
+.ups{text-align:left;margin-bottom:12px}
+.up{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.up .grow{flex:1;min-width:0}.up .t2{font-size:11px;color:var(--dim)}
+.loadbar{height:5px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:16px}
+.loadbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#6a3cd8,#d6c2ff)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0 14px;text-align:left}
+.stats div{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--dim)}
+.stats b{display:block;color:#fff;font-size:15px;margin-top:2px}
+.row3{display:flex;gap:6px}.row3>*{flex:1}
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="view">
+    <canvas id="gl"></canvas>
+    <canvas id="ov"></canvas>
+    <div id="hudTop">
+      <div class="glass" id="cr">💎 0</div>
+      <div class="glass" id="mid"><div id="clock">6:00</div><div id="tide"><i style="width:50%"></i></div><div id="tideTxt"><span>50%</span><span>50%</span></div></div>
+      <div id="chips"><button class="chip" id="bSpeed">×1</button><button class="chip" id="bAuto">🧠 자동</button></div>
+    </div>
+    <div id="stageTag"></div>
+    <div class="glass" id="hint">빈 자리(+)를 눌러 건물을 지으세요</div>
+    <div id="skills"><button class="sk" id="sk_bolt"><span><b>⚡</b>낙뢰</span><i class="cd"></i></button><button class="sk" id="sk_rally"><span><b>📯</b>함성</span><i class="cd"></i></button></div>
+    <div id="sheet" hidden><div id="sheetHead"><b id="sheetTitle"></b><button class="x" id="sheetX" aria-label="닫기">✕</button></div><div id="sheetBody"></div></div>
+    <div id="toast"></div>
+  </div>
+  <div class="ovl" id="loading"><div class="card"><div class="logo">그림자 전선</div><p class="sub" id="loadMsg">전장을 준비하고 있어요…</p><div class="loadbar"><i id="loadBar"></i></div></div></div>
+  <div class="ovl" id="lobby" hidden>
+    <div class="card">
+      <div class="logo">그림자 전선</div>
+      <p class="sub" id="lobbySub"></p>
+      <div class="rules">
+        아래가 <b>그림자 군단</b>(나), 위가 <b>붉은 군단</b>이에요. 빈 자리에 건물을 지으면 <b>병사가 저절로 나와 싸우고</b>, 죽으면 다시 채워져요(건물 위 숫자 = 나와 있는 수/최대).<br>
+        <b>수정</b>은 시간마다 들어오고 <b>수정 광산</b>을 지으면 더 빨리 모여요. 같은 건물을 다시 누르면 레벨업(최대 3), 병사가 늘고 강해져요.<br>
+        <b>낙뢰</b>는 버튼을 누른 뒤 전장을 눌러 떨어뜨리고, <b>함성</b>은 아군 전체를 치료하고 강하게 해요.<br>
+        적 <b>본진</b>을 부수면 승리. 6분이 지나면 본진 체력이 많이 남은 쪽이 이겨요.<br>
+        <b>🧠 자동</b>을 켜면 수천 판을 싸우며 스스로 배운 <b>AI 지휘관</b>이 대신 지어요. 상대도 단계가 오르면 같은 AI가 맡아요.
+      </div>
+      <div class="ups" id="ups"></div>
+      <button class="btn pri wide" id="goBtn">출격</button>
+    </div>
+  </div>
+  <div class="ovl" id="end" hidden>
+    <div class="card">
+      <div class="logo" style="font-size:34px" id="endTitle">승리</div>
+      <p class="sub" id="endMsg"></p>
+      <div class="stats" id="endStats"></div>
+      <button class="btn pri wide" id="endOk">계속</button>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+'use strict';
+const el = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const THREE = window.THREE;
+const MOBILE = matchMedia('(pointer:coarse)').matches;
+const FXOPT = { on: (() => { try { return localStorage.getItem('mug-fx') !== 'off'; } catch (e) { return true; } })() };
+// look switches (remembered on this device): 만화풍 shared with 오토체스 (on by default), 도트 for this game (off by default)
+const optOn = (k, def) => { try { const v = localStorage.getItem(k); return v ? v === 'on' : def; } catch (e) { return def; } };
+const LOOK = { toon: optOn('mug-toon', true), dot: optOn('mug-dot-shadow', false), dotSize: (() => { try { return +localStorage.getItem('mug-dot-size') || 2; } catch (e) { return 2; } })() };
+const VX = window.MGFX.VX;
+function fmt(n) {
+  n = Math.floor(n);
+  if (n < 1e4) return n.toLocaleString('ko-KR');
+  const u = [[1e16, '경'], [1e12, '조'], [1e8, '억'], [1e4, '만']];
+  for (const [v, s] of u) if (n >= v) { const x = n / v; return (x >= 100 ? Math.floor(x) : x.toFixed(x >= 10 ? 1 : 2).replace(/\.?0+$/, '')) + s; }
+  return String(n);
+}
+const josa = (w, a, b) => { const c = w.charCodeAt(w.length - 1); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? a : b; };
+
+/* ================= 3D ================= */
+const view = el('view'), glc = el('gl'), ovc = el('ov'), octx = ovc.getContext('2d');
+let camDist = 30, W = 0, H = 0, dpr = 1, renderer, scene, camera, ground, MODELS = {}, CLIPS = {}, PROPS = {}, CHAR_SCALE = .5, GLOW_TEX, sun, hemi;
+const lin = h => new THREE.Color(h).convertSRGBToLinear();
+const ARENA = 9;   // the hunting field is a square, -ARENA..ARENA on x and z
+const HOME_Z = 4.5;   // the sovereign's post in the south half; the rifts are all on the north edge
+const CAM = { h: 20, back: 14, x: 0, z: 0 };
+function initGL() {
+  renderer = new THREE.WebGLRenderer({ canvas: glc, antialias: true });
+  renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(40, 1, .5, 90);
+  hemi = new THREE.HemisphereLight(0xd8d0ff, 0x1a1420, .7); scene.add(hemi);
+  sun = new THREE.DirectionalLight(0xfff0e0, 1.05); sun.position.set(6, 14, 8); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); sun.shadow.camera.layers.enableAll();
+  Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 16, bottom: -16 }); sun.target.position.set(0, 0, -3); scene.add(sun, sun.target);
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(.3, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); GLOW_TEX = new THREE.CanvasTexture(c);
+  MGFX.init({ renderer, scene, camera, host: view, glowTex: GLOW_TEX, mobile: MOBILE, low: () => !FXOPT.on, post: () => FXOPT.on, toon: () => LOOK.toon, exposure: 1, grade: { vig: .38, con: 1.05, sat: .95 }, bloom: { threshold: 1, strength: .6 } });
+  ground = new THREE.Mesh(new THREE.PlaneGeometry(110, 110), new THREE.MeshStandardMaterial({ color: 0x334422, roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.z = 0; ground.receiveShadow = true; scene.add(ground);
+  resize();
+}
+// painted-looking ground: soft blotches over the region colour, so the field never reads as one flat plane
+function groundTex(base) {
+  const N = 512, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d');
+  const col = new THREE.Color(base); g.fillStyle = '#' + col.getHexString(); g.fillRect(0, 0, N, N);
+  // every mark is drawn at its wrapped positions too, so the repeated texture has no visible seams
+  const wrap = (x, y, r, fn) => { for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) if (x + ox + r > 0 && x + ox - r < N && y + oy + r > 0 && y + oy - r < N) fn(x + ox, y + oy); };
+  for (let k = 0; k < 420; k++) {
+    const x = Math.random() * N, y = Math.random() * N, r = 8 + Math.random() * 46, dark = Math.random() < .55, a = dark ? .06 + Math.random() * .1 : .03 + Math.random() * .05;
+    wrap(x, y, r, (px, py) => {
+      const gr = g.createRadialGradient(px, py, 0, px, py, r);
+      gr.addColorStop(0, dark ? `rgba(0,0,0,${a})` : `rgba(255,250,230,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(px - r, py - r, r * 2, r * 2);
+    });
+  }
+  g.lineWidth = 1; for (let k = 0; k < 2600; k++) { const x = Math.random() * N, y = Math.random() * N; g.strokeStyle = `rgba(${Math.random() < .5 ? '0,0,0,.18' : '255,255,240,.08'})`; g.beginPath(); g.moveTo(x, y); g.lineTo(x + rnd(-1, 1.5), y - rnd(2, 5)); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(9, 9); t.anisotropy = 4;
+  return t;
+}
+// KayKit's nature atlas is lime green with red trunks; recolour a copy toward sage leaves and brown bark
+const MUTED = new Map();
+function muted(tex) {
+  if (MUTED.has(tex)) return MUTED.get(tex);
+  const img = tex.image, c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height), a = d.data;
+  const f = (p, q, t) => { t = (t % 1 + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < .5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+  for (let i = 0; i < a.length; i += 4) {
+    const r = a[i] / 255, gg = a[i + 1] / 255, b = a[i + 2] / 255, mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+    if (mx === mn) continue;
+    let l = (mx + mn) / 2; const dd = mx - mn; let s = l > .5 ? dd / (2 - mx - mn) : dd / (mx + mn);
+    let h = (mx === r ? (gg - b) / dd + (gg < b ? 6 : 0) : mx === gg ? (b - r) / dd + 2 : (r - gg) / dd + 4) * 60;
+    if (s < .15) continue;
+    if (h > 60 && h < 160) { h = 92 + (h - 100) * .35; s *= .5; l *= .72; }
+    else if (h < 40 || h > 330) { h = 20; s *= .45; l *= .7; }
+    else continue;
+    const q = l < .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q, hh = h / 360;
+    a[i] = f(p, q, hh + 1 / 3) * 255; a[i + 1] = f(p, q, hh) * 255; a[i + 2] = f(p, q, hh - 1 / 3) * 255;
+  }
+  g.putImageData(d, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.encoding = tex.encoding; t.flipY = tex.flipY; t.wrapS = tex.wrapS; t.wrapT = tex.wrapT;
+  MUTED.set(tex, t); return t;
+}
+const DOT = { rt: null, scene: null, cam: null, mat: null, cc: new THREE.Color() };
+function dotPass() {
+  const k = LOOK.dotSize, w = Math.max(1, Math.round(W / k)), h = Math.max(1, Math.round(H / k));
+  if (!DOT.scene) {
+    DOT.mat = new THREE.ShaderMaterial({
+      uniforms: { tex: { value: null }, px: { value: new THREE.Vector2() }, exposure: { value: 1 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: `uniform sampler2D tex; uniform vec2 px; uniform float exposure; varying vec2 vUv;
+        vec3 rrt(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
+        vec3 aces(vec3 c){ const mat3 i = mat3(vec3(0.59719,0.07600,0.02840), vec3(0.35458,0.90834,0.13383), vec3(0.04823,0.01566,0.83777));
+          const mat3 o = mat3(vec3(1.60475,-0.10208,-0.00327), vec3(-0.53108,1.10813,-0.07276), vec3(-0.07367,-0.00605,1.07602));
+          c *= exposure / 0.6; c = i * c; c = rrt(c); c = o * c; return clamp(c, 0.0, 1.0); }
+        vec3 srgb(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(0.0031308, c)); }
+        void main(){
+          vec2 uv = (floor(vUv / px) + 0.5) * px;
+          vec4 c = texture2D(tex, uv);
+          if (c.a < 0.5) {
+            float n = max(max(texture2D(tex, uv + vec2(px.x, 0.0)).a, texture2D(tex, uv - vec2(px.x, 0.0)).a), max(texture2D(tex, uv + vec2(0.0, px.y)).a, texture2D(tex, uv - vec2(0.0, px.y)).a));
+            if (n < 0.5) discard;
+            gl_FragColor = vec4(0.05, 0.035, 0.07, 1.0); return;
+          }
+          vec3 col = aces(c.rgb);
+          float l = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(vec3(l), col, 1.15);
+          gl_FragColor = vec4(srgb(clamp(col, 0.0, 1.0)), 1.0);
+        }`,
+      depthTest: false, depthWrite: false, transparent: true,
+    });
+    DOT.scene = new THREE.Scene(); DOT.cam = new THREE.Camera();
+    const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), DOT.mat); q.frustumCulled = false; DOT.scene.add(q);
+  }
+  if (!DOT.rt || DOT.rt.width !== w || DOT.rt.height !== h) {
+    if (DOT.rt) DOT.rt.dispose();
+    const hf = renderer.capabilities.isWebGL2 && renderer.extensions.has('EXT_color_buffer_float');
+    DOT.rt = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, type: hf ? THREE.HalfFloatType : THREE.UnsignedByteType });
+    DOT.mat.uniforms.tex.value = DOT.rt.texture; DOT.mat.uniforms.px.value.set(1 / w, 1 / h);
+  }
+  DOT.mat.uniforms.exposure.value = renderer.toneMappingExposure;
+  for (const o of scene.children) if (o.isLight) o.layers.enable(1);   // lights are layer-filtered too
+  const bg = scene.background, ca = renderer.getClearAlpha(), tm = renderer.toneMapping; renderer.getClearColor(DOT.cc);
+  scene.background = null; camera.layers.set(1); renderer.toneMapping = THREE.NoToneMapping;   // the quad does the ACES step
+  renderer.setRenderTarget(DOT.rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, camera);
+  renderer.setRenderTarget(null); renderer.toneMapping = tm; camera.layers.set(0); scene.background = bg; renderer.setClearColor(DOT.cc, ca);
+  const ac = renderer.autoClear; renderer.autoClear = false; renderer.render(DOT.scene, DOT.cam); renderer.autoClear = ac;
+}
+async function loadAssets() {
+  const loader = new THREE.GLTFLoader(), files = ['chars', 'anims', 'props'], prog = [0, 0, 0];
+  const fetchModel = (f, i) => new Promise((ok, bad) => {
+    const x = new XMLHttpRequest(); x.open('GET', `../assets/${f}.txt?v=2`);
+    x.onprogress = e => { prog[i] = e.loaded; el('loadBar').style.width = Math.min(100, (prog[0] + prog[1] + prog[2]) / 7e6 * 100) + '%'; };
+    x.onerror = () => bad(new Error(f));
+    x.onload = () => {
+      try {
+        const bin = atob(x.responseText.trim()), u8 = new Uint8Array(bin.length);
+        for (let k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k);
+        const cib = window.createImageBitmap; window.createImageBitmap = undefined;
+        try { loader.parse(u8.buffer, '', ok, bad); } finally { window.createImageBitmap = cib; }
+      } catch (e) { bad(e); }
+    };
+    x.send();
+  });
+  const [chars, anims, props] = await Promise.all(files.map(fetchModel));
+  const names = new Set(); anims.scene.traverse(o => names.add(o.name));
+  for (const c of chars.scene.children) { c.traverse(o => { const m = /^(.*)_(\d+)$/.exec(o.name); if (m && names.has(m[1])) o.name = m[1]; }); MODELS[c.name] = c; }
+  for (const a of anims.animations) CLIPS[a.name] = a;
+  for (const p of props.scene.children) PROPS[p.name] = p;
+  const kb = new THREE.Box3().setFromObject(MODELS.Knight); CHAR_SCALE = 1.05 / (kb.max.y - kb.min.y);
+  MGFX.assets({ clips: CLIPS, props: PROPS, charScale: CHAR_SCALE });
+  try { await MGFX.hdSetup({ base: '../assets/models/', knight: MODELS.Knight, charH: 1.05, preload: [], onReady: () => {} }); } catch (e) { console.warn(e); }
+}
+function styleAnims(st, sk) {
+  return {
+    idle: sk ? 'Skeletons_Idle' : st === 'bow' ? 'Ranged_Bow_Idle' : st === '2h' ? 'Idle_B' : 'Idle_A',
+    run: sk ? 'Skeletons_Walking' : st === 'bow' ? 'Running_HoldingBow' : 'Running_A',
+    atk: { '1h': ['Melee_1H_Attack_Chop', 'Melee_1H_Attack_Slice_Diagonal'], '2h': ['Melee_2H_Attack_Chop'], bow: ['Ranged_Bow_Release'], magic: ['Ranged_Magic_Shoot'], xbow: ['Ranged_1H_Shoot'] }[st] || ['Melee_1H_Attack_Chop'],
+    death: sk ? 'Skeletons_Death' : 'Death_A',
+  };
+}
+function propClone(name, glow) {
+  const p = PROPS[name]; if (!p) return null; const c = p.clone(true);
+  if (glow) c.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(glow); o.material.emissiveIntensity = .9; } });
+  return c;
+}
+// shadows: body darkened toward violet-black with a violet rim, glowing eyes, weapons tinted the same way
+function shadowRim(mat) {
+  mat.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <output_fragment>',
+      'float rimS = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 2.2);\n  outgoingLight += vec3(0.55, 0.3, 1.0) * rimS * 0.75;\n#include <output_fragment>');
+  };
+  mat.customProgramCacheKey = () => 'shadowrim';
+}
+const SHADOW_BODY = new THREE.Color(0x1a1524), SHADOW_GLOW = new THREE.Color(0x3a1488);
+function makeActor(d, sc = 1) {
+  const hd = MGFX.hd(d.hd), root = new THREE.Group(), m = THREE.SkeletonUtils.clone(hd ? hd.root : MODELS[d.m]);
+  m.scale.setScalar((hd ? 1 : CHAR_SCALE) * (d.s || 1) * sc);
+  const mats = [];
+  m.traverse(n => {
+    if (!n.isMesh) return;
+    n.castShadow = true; n.frustumCulled = false; n.material = n.material.clone(); mats.push(n.material);
+    if (d.shadow) { n.material.color.multiply(SHADOW_BODY); n.material.emissive = SHADOW_GLOW.clone(); n.material.emissiveIntensity = .14; shadowRim(n.material); }
+    else { MGFX.addRim(n.material); if (d.tint && !hd) n.material.color.multiply(new THREE.Color(d.tint)); if (d.glow) { n.material.emissive = new THREE.Color(d.glow); n.material.emissiveIntensity = .2; } }
+    n.material.userData.baseE = n.material.emissive.clone(); n.material.userData.baseI = n.material.emissiveIntensity;
+  });
+  root.add(m);
+  const H0 = (hd ? hd.H : 1.05) * (d.s || 1) * sc;
+  const a = { root, m, mats, hd, mixer: new THREE.AnimationMixer(m), acts: {}, cur: null, curName: '', lock: 0, A: styleAnims(d.st, d.sk), h: H0, atkI: 0 };
+  const hr = m.getObjectByName('handslotr'), hl = m.getObjectByName('handslotl');
+  const wglow = d.shadow ? '#7a3cff' : d.wglow;
+  if (d.r && hr) { const w = MGFX.fitProp(propClone(d.r, wglow), hd); if (w) hr.add(w); }
+  if (d.l && hl) { const w = MGFX.fitProp(propClone(d.l, wglow), hd); if (w) hl.add(w); }
+  if (d.shadow) {   // two violet eye-glints at head height
+    for (const sx of [-.07, .07]) { const e = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0xb98cff, blending: THREE.AdditiveBlending, depthWrite: false })); e.scale.setScalar(.16 * (d.s || 1) * sc); e.position.set(sx * (d.s || 1) * sc, H0 * .86, .14 * (d.s || 1) * sc); root.add(e); }
+  }
+  play(a, a.A.idle); a.mixer.update(Math.random() * 2);
+  MGFX.toonObj(a, m);
+  if (d.shadow && LOOK.toon) m.traverse(n => { if (n.isMesh && !n.userData.outline && n.material.isMeshToonMaterial) shadowRim(n.material); });
+  if (LOOK.dot) root.traverse(o => o.layers.set(1));
+  scene.add(root);
+  return a;
+}
+function play(a, name, opt = {}) {
+  const lib = a.hd ? a.hd.clip : n => CLIPS[n];
+  const clip = lib(name) || (/Idle/.test(name) ? lib('Idle_A') : null); if (!clip) return;
+  if (a.curName === name && !opt.once) return;
+  let act = a.acts[name]; if (!act) act = a.acts[name] = a.mixer.clipAction(clip);
+  act.reset(); act.setEffectiveTimeScale(opt.speed || 1); act.setEffectiveWeight(1);
+  act.setLoop(opt.once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity); act.clampWhenFinished = !!opt.once;
+  if (a.cur && a.cur !== act) act.crossFadeFrom(a.cur, .12, false);
+  act.play(); a.cur = act; a.curName = name; a.lock = opt.once ? clip.duration / (opt.speed || 1) * .85 : 0;
+}
+function killActor(a) { if (!a) return; scene.remove(a.root); a.mixer.stopAllAction(); for (const m of a.mats) m.dispose(); for (const m of a.omats || []) m.dispose(); }
+const lerpAng = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; };
+
+let AC = null;
+function audio() { try { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); } catch (e) {} }
+function tone(f, d, type = 'sine', v = .05, delay = 0) { if (!AC) return; try { const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + .02); } catch (e) {} }
+/* ================= FRONT CORE =================
+   그림자 전선: a short 1:1 base battle on one portrait field. Each side builds on 8 plots; factories keep their
+   units topped up, units walk to the enemy and fight on their own, turrets and the core shoot back.
+   Crystals pay for everything. Both sides decide through the same brain interface (rule AI or a trained net).
+   No drawing here — runs in the page and in Node (balance sims and training). */
+const FC = (() => {
+'use strict';
+let rng = Math.random;
+const mulberry = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const rand = (a, b) => a + rng() * (b - a);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+
+/* ---------- field ---------- */
+const HALF_X = 8.5, CORE_Z = 17, T_MAX = 360;
+const SIDES = ['b', 'r'];   // b = 그림자 군단 (bottom, player), r = 붉은 군단 (top)
+const other = s => s === 'b' ? 'r' : 'b';
+const fwd = s => s === 'b' ? -1 : 1;   // toward the enemy along z
+// 8 plots for the bottom side; the top side mirrors z. Front row first (index 0-3 front, 4-7 back)
+const PLOTS = [[-6.4, 9], [-2.2, 8.4], [2.2, 8.4], [6.4, 9], [-6.6, 13.4], [-2.6, 12.8], [2.6, 12.8], [6.6, 13.4]];
+const plotPos = (s, i) => ({ x: PLOTS[i][0], z: s === 'b' ? PLOTS[i][1] : -PLOTS[i][1] });
+
+/* ---------- data ---------- */
+const UNIT = {
+  grunt: { n: '돌격병', hp: 130, dmg: 13, as: 1, range: 1.2, sp: 2.6, rad: .35, aoe: 0, every: 6, worth: 1 },
+  sniper: { n: '저격병', hp: 75, dmg: 17, as: 1.3, range: 6, sp: 2.4, rad: .32, aoe: 0, every: 7, worth: 1.1 },
+  golem: { n: '골렘', hp: 380, dmg: 28, as: 1.8, range: 1.6, sp: 1.7, rad: .55, aoe: 1.4, every: 16, worth: 2.6 },
+  mage: { n: '화염 술사', hp: 85, dmg: 24, as: 2, range: 5.5, sp: 2.2, rad: .32, aoe: 1.7, every: 11, worth: 1.8 },
+};
+const BLD = {
+  barracks: { n: '병영', unit: 'grunt', cost: [60, 80, 130], hp: 520 },
+  range: { n: '사격장', unit: 'sniper', cost: [70, 90, 140], hp: 480 },
+  forge: { n: '골렘 공방', unit: 'golem', cost: [150, 170, 230], hp: 650 },
+  sanctum: { n: '화염 성소', unit: 'mage', cost: [120, 140, 200], hp: 500 },
+  turret: { n: '포탑', cost: [100, 120, 170], hp: 650, dmg: 18, as: 1, range: 6.5 },
+  mine: { n: '수정 광산', cost: [90, 110, 160], hp: 420, inc: [2, 3.5, 5] },
+};
+const TYPES = Object.keys(BLD);
+// counters: attacker kind -> target kind -> damage multiplier
+const BONUS = { sniper: { golem: 1.7 }, golem: { grunt: 1.3 }, grunt: { sniper: 1.4, mage: 1.4 }, mage: { grunt: 1.35, sniper: 1.15 } };
+const CAP = [2, 3, 4];             // units per factory by building level
+const LVM = [1, 1.2, 1.45];        // unit / turret strength by building level
+const CORE = { hp: 2300, dmg: 32, as: 1.2, range: 7.5, inc: 3 };
+const SKILL = {
+  bolt: { n: '낙뢰', cd: 20, dmg: 170, r: 3 },
+  rally: { n: '함성', cd: 32, dur: 6, buff: .4, heal: .25 },
+};
+
+/* ---------- a match ----------
+   opt: { seed, mul: {b, r} strength multipliers, lv: {b:{grunt:0..}, r:{...}} meta levels, unlock: {b:[types], r:[types]}, brains: {b, r} } */
+function newMatch(opt = {}) {
+  if (opt.seed != null) rng = mulberry(opt.seed);
+  const M = { t: 0, over: false, winner: null, units: [], blds: [], shots: [], fx: [], timers: [], seq: 1, ev: [],
+    side: {}, opt };
+  for (const s of SIDES) {
+    M.side[s] = { s, cr: 140, mul: (opt.mul && opt.mul[s]) || 1, lv: (opt.lv && opt.lv[s]) || {}, unlock: (opt.unlock && opt.unlock[s]) || ['barracks', 'range', 'turret', 'mine'],
+      cds: { bolt: 6, rally: 12 }, rallyT: 0, brain: opt.brains && opt.brains[s] || null, thinkT: rand(0, 1), plan: null, spent: 0, kills: 0, built: 0 };
+    M.blds.push({ id: M.seq++, side: s, type: 'core', plot: -1, lv: 0, x: 0, z: s === 'b' ? CORE_Z : -CORE_Z, hp: CORE.hp * M.side[s].mul, maxHp: CORE.hp * M.side[s].mul, rad: 1.8, atkT: 0, dead: false });
+  }
+  return M;
+}
+const coreOf = (M, s) => M.blds.find(b => b.side === s && b.type === 'core');
+const bldAt = (M, s, i) => M.blds.find(b => b.side === s && b.plot === i && !b.dead);
+const metaMul = (M, s, unit) => 1 + .1 * ((M.side[s].lv[unit]) || 0);
+function income(M, s) { let v = CORE.inc; for (const b of M.blds) if (b.side === s && !b.dead && b.type === 'mine') v += BLD.mine.inc[b.lv]; return v * (M.side[s].lv.mine ? 1 + .1 * M.side[s].lv.mine : 1); }
+
+/* ---------- actions (same for player, rule AI and net) ---------- */
+// cost to build type on plot i (new) or upgrade what stands there
+function costAt(M, s, i, type) { const b = bldAt(M, s, i); if (b) return b.lv >= 2 ? Infinity : BLD[b.type].cost[b.lv + 1]; return BLD[type].cost[0]; }
+function canBuild(M, s, i, type) {
+  const S = M.side[s], b = bldAt(M, s, i);
+  if (M.over) return '전투가 끝났어요';
+  if (b) { if (b.lv >= 2) return '최고 레벨이에요'; } else if (!S.unlock.includes(type)) return '아직 열리지 않은 건물이에요';
+  if (S.cr < costAt(M, s, i, type)) return '수정이 모자라요';
+  return null;
+}
+function build(M, s, i, type) {
+  const why = canBuild(M, s, i, type); if (why) return { ok: false, msg: why };
+  const S = M.side[s], b = bldAt(M, s, i), c = costAt(M, s, i, type); S.cr -= c; S.spent += c; S.built++;
+  if (b) { const r = b.hp / b.maxHp; b.lv++; b.maxHp = BLD[b.type].hp * (1 + .35 * b.lv) * S.mul; b.hp = b.maxHp * Math.min(1, r + .3); M.ev.push(['up', s, i]); return { ok: true, msg: `${BLD[b.type].n} ${b.lv + 1}레벨` }; }
+  const p = plotPos(s, i), hp = BLD[type].hp * S.mul;
+  M.blds.push({ id: M.seq++, side: s, type, plot: i, lv: 0, x: p.x, z: p.z, hp, maxHp: hp, rad: 1.1, atkT: 0, spawnT: 1.5, dead: false, out: 0 });
+  M.ev.push(['build', s, i, type]);
+  return { ok: true, msg: `${BLD[type].n} 건설` };
+}
+function sell(M, s, i) {   // knock down a plot's building for half its cost (to change plans)
+  const b = bldAt(M, s, i); if (!b) return { ok: false, msg: '건물이 없어요' };
+  let v = 0; for (let k = 0; k <= b.lv; k++) v += BLD[b.type].cost[k]; M.side[s].cr += Math.floor(v * .5); b.dead = true; M.ev.push(['sell', s, i]);
+  return { ok: true, msg: '건물을 허물었어요' };
+}
+function cast(M, s, k, x, z) {
+  const S = M.side[s], sk = SKILL[k]; if (M.over || S.cds[k] > 0) return { ok: false, msg: '아직 준비 중이에요' };
+  S.cds[k] = sk.cd;
+  if (k === 'bolt') {
+    M.fx.push({ k: 'bolt', s, x, z, t: 0 });
+    for (const u of M.units) if (u.side !== s && !u.dead && Math.hypot(u.x - x, u.z - z) < sk.r + u.rad) hit(M, u, sk.dmg * (1 + .1 * (S.lv.bolt || 0)), null, s);
+    for (const b of M.blds) if (b.side !== s && !b.dead && Math.hypot(b.x - x, b.z - z) < sk.r + b.rad) hit(M, b, sk.dmg * .5, null, s);
+  } else {
+    S.rallyT = sk.dur * (1 + .1 * (S.lv.rally || 0));
+    for (const u of M.units) if (u.side === s && !u.dead) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * sk.heal);
+    M.fx.push({ k: 'rally', s, t: 0 });
+  }
+  M.ev.push(['cast', s, k]); return { ok: true, msg: sk.n };
+}
+// where a bolt does the most: the densest enemy cluster (prefer near our own side when defending)
+function bestBolt(M, s) {
+  let best = null, bs = 0; const r = SKILL.bolt.r;
+  for (const u of M.units) { if (u.side === s || u.dead) continue; let v = 0;
+    for (const w of M.units) if (w.side !== s && !w.dead && Math.hypot(w.x - u.x, w.z - u.z) < r) v += UNIT[w.k].worth * (w.hp / w.maxHp + .3);
+    if ((u.z - 0) * fwd(s) < 0) v *= 1.3;   // inside our half
+    if (v > bs) { bs = v; best = u; } }
+  return best ? { x: best.x, z: best.z, v: bs } : null;
+}
+function autoSkills(M, s) {
+  const S = M.side[s];
+  if (S.cds.bolt <= 0) { const b = bestBolt(M, s); if (b && b.v >= 2.5) cast(M, s, 'bolt', b.x, b.z); }
+  if (S.cds.rally <= 0) { const mine = M.units.filter(u => u.side === s && !u.dead), fight = mine.filter(u => u.tgt && !u.tgt.dead).length;
+    if (mine.length >= 5 && fight >= 3) cast(M, s, 'rally'); }
+}
+
+/* ---------- combat ---------- */
+function hit(M, t, dmg, src, side) {
+  if (t.dead || M.over) return;
+  if (src && src.k && t.k && BONUS[src.k] && BONUS[src.k][t.k]) dmg *= BONUS[src.k][t.k];
+  t.hp -= dmg; t.hurt = .12;
+  if (t.hp <= 0) {
+    t.dead = true; t.hp = 0;
+    const by = src ? src.side : side; if (by) M.side[by].kills += t.k ? 1 : 0;
+    if (t.k) { M.side[by] && (M.side[by].cr += Math.round(UNIT[t.k].worth * 4)); M.ev.push(['die', t.side, t.id]); }   // a little bounty
+    else { M.ev.push(['wreck', t.side, t.plot]); if (t.type === 'core') end(M, other(t.side)); }
+  }
+}
+function end(M, w) { if (M.over) return; M.over = true; M.winner = w; M.ev.push(['end', w]); }
+function later(M, d, fn) { M.timers.push([d, fn]); }
+function shoot(M, from, to, dmg, aoe, kind) {
+  const d = dist(from, to), T = clamp(d / 18, .08, .4);
+  M.shots.push({ x: from.x, z: from.z, y: from.k ? .9 : from.type === 'core' ? 3.2 : 2.2, tx: to.x, tz: to.z, t: 0, T, side: from.side, kind });
+  later(M, T, () => {
+    if (aoe) { for (const u of M.units) if (u.side !== from.side && !u.dead && Math.hypot(u.x - to.x, u.z - to.z) < aoe + u.rad) hit(M, u, u === to ? dmg : dmg * .6, from); if (to.type && !to.dead) hit(M, to, dmg, from); }
+    else hit(M, to, dmg, from);
+  });
+}
+function spawn(M, b) {
+  const S = M.side[b.side], U = UNIT[BLD[b.type].unit], k = BLD[b.type].unit, m = LVM[b.lv] * S.mul * metaMul(M, b.side, k) * (1 + M.t / T_MAX * 1.1);   // later waves hit harder so a match always ends
+  const u = { id: M.seq++, side: b.side, k, home: b.id, x: b.x + rand(-.6, .6), z: b.z + fwd(b.side) * 1.4, hp: U.hp * m, maxHp: U.hp * m, dmg: U.dmg * m, as: U.as, range: U.range, sp: U.sp, rad: U.rad, aoe: U.aoe,
+    atkT: rand(.2, .6), tgt: null, retT: 0, dead: false, hurt: 0, lane: rand(-1, 1) };
+  M.units.push(u); b.out++; M.ev.push(['spawn', b.side, u.id]);
+}
+const enemiesNear = (M, u, r) => { let best = null, bd = r; for (const v of M.units) if (v.side !== u.side && !v.dead) { const d = dist(u, v) - v.rad; if (d < bd) { bd = d; best = v; } } return best; };
+function nearestBld(M, u) { let best = null, bd = 1e9; for (const b of M.blds) if (b.side !== u.side && !b.dead) { const d = dist(u, b) - b.rad + (b.type === 'core' ? 3 : 0); if (d < bd) { bd = d; best = b; } } return best; }
+function unitStep(M, u, dt) {
+  u.atkT -= dt; u.retT -= dt; u.hurt = Math.max(0, u.hurt - dt);
+  const S = M.side[u.side], buff = S.rallyT > 0;
+  if (u.retT <= 0 || !u.tgt || u.tgt.dead) { u.retT = .4; u.tgt = enemiesNear(M, u, Math.max(6.5, u.range + 1.5)) || nearestBld(M, u); }
+  const t = u.tgt; if (!t) return;
+  const d = dist(u, t) - (t.rad || 0) - u.rad;
+  if (d > u.range) {
+    // walk toward the target; units drift to their own lane when far away so the field does not funnel into one file
+    let dx = t.x - u.x, dz = t.z - u.z; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    if (!t.k && Math.abs(t.z - u.z) > 6) dx = dx * .6 + (u.lane * 4 - u.x) * .05;
+    const sp = u.sp * (buff ? 1.3 : 1) * dt; u.x = clamp(u.x + dx * sp, -HALF_X, HALF_X); u.z = clamp(u.z + dz * sp, -CORE_Z - 1, CORE_Z + 1); u.moving = true; u.face = t; return;
+  }
+  u.moving = false; u.face = t;
+  if (u.atkT > 0) return;
+  u.atkT = u.as; u.anim = 1; const dmg = u.dmg * (buff ? 1 + SKILL.rally.buff : 1) * rand(.92, 1.08);
+  if (u.range > 2) shoot(M, u, t, dmg, u.aoe, u.k);
+  else later(M, .2, () => { if (u.dead) return; hit(M, t, dmg, u); if (u.aoe) for (const v of M.units) if (v !== t && v.side !== u.side && !v.dead && dist(v, t) < u.aoe) hit(M, v, dmg * .5, u); });
+}
+function bldStep(M, b, dt) {
+  const S = M.side[b.side], B = b.type === 'core' ? CORE : BLD[b.type];
+  if (B.unit) {
+    if (b.out < CAP[b.lv]) { b.spawnT -= dt; if (b.spawnT <= 0) { b.spawnT = UNIT[B.unit].every / (1 + .15 * b.lv); spawn(M, b); } }
+    return;
+  }
+  if (!B.dmg) return;
+  b.atkT -= dt; if (b.atkT > 0) return;
+  let t = null, bd = B.range; for (const u of M.units) if (u.side !== b.side && !u.dead) { const d = dist(b, u); if (d < bd) { bd = d; t = u; } }
+  if (!t) return;
+  b.atkT = B.as; b.tgt = t;
+  shoot(M, b, t, B.dmg * (b.type === 'core' ? 1 : LVM[b.lv]) * S.mul * (b.type === 'turret' ? metaMul(M, b.side, 'turret') : 1), 0, b.type === 'core' ? 'core' : 'turret');
+}
+function power(M, s) {   // for the tide bar: living strength on each side
+  let p = 0; for (const u of M.units) if (u.side === s && !u.dead) p += UNIT[u.k].worth * (u.hp / u.maxHp) * 10 * (u.dmg / UNIT[u.k].dmg);
+  for (const b of M.blds) if (b.side === s && !b.dead) p += (b.type === 'core' ? 20 : 6 * (b.lv + 1)) * (b.hp / b.maxHp);
+  return p;
+}
+const share = M => { const a = power(M, 'b'), c = power(M, 'r'); return a + c > 0 ? a / (a + c) : .5; };
+
+function step(M, dt) {
+  if (M.over) { tickTimers(M, dt); return; }
+  M.t += dt;
+  tickTimers(M, dt);
+  for (const s of SIDES) {
+    const S = M.side[s]; S.cr += income(M, s) * dt;
+    for (const k in S.cds) S.cds[k] = Math.max(0, S.cds[k] - dt); S.rallyT -= dt;
+    S.thinkT -= dt; if (S.thinkT <= 0) { S.thinkT = 1.5; think(M, s); }
+  }
+  for (const u of M.units) if (!u.dead) unitStep(M, u, dt);
+  for (const b of M.blds) if (!b.dead) bldStep(M, b, dt);
+  // keep bodies apart
+  const al = M.units.filter(u => !u.dead);
+  for (let i = 0; i < al.length; i++) for (let j = i + 1; j < al.length; j++) {
+    const p = al[i], q = al[j]; let dx = q.x - p.x, dz = q.z - p.z; if (dx > 1.2 || dx < -1.2 || dz > 1.2 || dz < -1.2) continue;
+    let d = Math.hypot(dx, dz); const mn = p.rad + q.rad; if (d >= mn) continue; if (d < 1e-4) { dx = rand(-1, 1); dz = rand(-1, 1); d = Math.hypot(dx, dz); }
+    const k = (mn - d) / 2 / d; p.x -= dx * k; p.z -= dz * k; q.x += dx * k; q.z += dz * k;
+  }
+  for (const u of al) for (const b of M.blds) { if (b.dead) continue; const dx = u.x - b.x, dz = u.z - b.z, d = Math.hypot(dx, dz), mn = b.rad + u.rad; if (d < mn && d > 1e-4) { u.x = b.x + dx / d * mn; u.z = b.z + dz / d * mn; } }
+  // the dead free their factory slot; corpses are dropped
+  for (const u of M.units) if (u.dead && !u.gone) { u.gone = true; const h = M.blds.find(b => b.id === u.home); if (h) h.out--; }
+  if (M.units.length > 200) M.units = M.units.filter(u => !u.dead || u.fade > 0);
+  for (const sh of M.shots) sh.t += dt; M.shots = M.shots.filter(s => s.t < s.T);
+  for (const f of M.fx) f.t += dt; M.fx = M.fx.filter(f => f.t < 1.2);
+  if (M.t >= T_MAX) { const cb = coreOf(M, 'b'), cr = coreOf(M, 'r'), a = cb.hp / cb.maxHp, c = cr.hp / cr.maxHp; end(M, Math.abs(a - c) > .02 ? (a > c ? 'b' : 'r') : (share(M) >= .5 ? 'b' : 'r')); }
+}
+function tickTimers(M, dt) { if (!M.timers.length) return; for (const t of M.timers) t[0] -= dt; const due = M.timers.filter(t => t[0] <= 0); M.timers = M.timers.filter(t => t[0] > 0); for (const t of due) t[1](); }
+
+/* ---------- brains ----------
+   A brain only picks an intent every 1.5s: which building type to invest in next (or save). Placement and
+   build-vs-upgrade follow fixed rules, so the rule AI and the trained net play the same game. */
+const INTENTS = ['save', ...TYPES];
+function placeFor(M, s, type) {
+  // upgrade the weakest of this type once there are two; otherwise build new on the best free plot
+  const mine = M.blds.filter(b => b.side === s && !b.dead && b.type === type).sort((a, b) => a.lv - b.lv);
+  const free = [0, 1, 2, 3, 4, 5, 6, 7].filter(i => !bldAt(M, s, i));
+  if (mine.length && (mine.length >= 2 || !free.length) && mine[0].lv < 2) return mine[0].plot;
+  if (!free.length) return mine.length && mine[0].lv < 2 ? mine[0].plot : -1;
+  const front = type === 'turret' || type === 'barracks', order = front ? [1, 2, 0, 3, 5, 6, 4, 7] : [5, 6, 4, 7, 1, 2, 0, 3];
+  return order.find(i => free.includes(i));
+}
+function doIntent(M, s, k) {
+  if (k === 'save') return;
+  const S = M.side[s]; if (!S.unlock.includes(k) && !M.blds.some(b => b.side === s && !b.dead && b.type === k)) return;
+  const i = placeFor(M, s, k); if (i < 0) return;
+  if (S.cr >= costAt(M, s, i, k)) build(M, s, i, k);
+}
+// observation for the net (the same features from either side's view)
+function observe(M, s) {
+  const o = other(s), S = M.side[s], cnt = (side, t) => M.blds.filter(b => b.side === side && !b.dead && b.type === t).reduce((a, b) => a + 1 + b.lv * .5, 0);
+  const uc = (side, k) => M.units.filter(u => u.side === side && !u.dead && u.k === k).length;
+  const inMine = M.units.filter(u => u.side === o && !u.dead && u.z * fwd(s) < 0).length;
+  const f = [S.cr / 200, income(M, s) / 10, M.t / T_MAX, share(M) * (s === 'b' ? 1 : -1) + (s === 'b' ? 0 : 1),
+    coreOf(M, s).hp / coreOf(M, s).maxHp, coreOf(M, o).hp / coreOf(M, o).maxHp, inMine / 6,
+    ...TYPES.map(t => cnt(s, t) / 3), ...TYPES.map(t => cnt(o, t) / 3),
+    ...Object.keys(UNIT).map(k => uc(s, k) / 6), ...Object.keys(UNIT).map(k => uc(o, k) / 6),
+    ...TYPES.map(t => S.unlock.includes(t) ? 1 : 0), M.blds.filter(b => b.side === s && !b.dead && b.plot >= 0).length / 8, S.cds.bolt > 0 ? 0 : 1];
+  return f;
+}
+const OBS_N = 7 + 6 * 2 + 4 * 2 + 6 + 2;
+// the rule AI: fixed priorities with a little noise, reacts to enemies in its half with turrets
+function ruleBrain(M, s) {
+  const S = M.side[s], o = other(s), has = t => M.blds.filter(b => b.side === s && !b.dead && b.type === t).length;
+  const inMine = M.units.filter(u => u.side === o && !u.dead && u.z * fwd(s) < 2).length;
+  const score = {};
+  for (const t of TYPES) { if (!S.unlock.includes(t)) continue; score[t] = rand(0, 8); }
+  if (score.mine != null) score.mine += (has('mine') < 2 ? 40 : has('mine') < 3 && M.t > 90 ? 12 : 0) - M.t / 25;
+  if (score.barracks != null) score.barracks += has('barracks') < 1 ? 45 : 10;
+  if (score.range != null) score.range += has('range') < 1 ? 30 : 9;
+  if (score.turret != null) score.turret += Math.min(18, inMine * 4) + (has('turret') < 1 && M.t > 60 ? 10 : 0) - has('turret') * 6;
+  if (score.forge != null) score.forge += has('forge') < 1 ? 20 : 6;
+  if (score.sanctum != null) score.sanctum += has('sanctum') < 1 ? 18 : 6;
+  // answer what the enemy fields: snipers for golems, golems and fire for grunt swarms, grunts for back-liners
+  const foe = k => M.units.filter(u => u.side === o && !u.dead && u.k === k).length + M.blds.filter(b => b.side === o && !b.dead && b.type === { grunt: 'barracks', sniper: 'range', golem: 'forge', mage: 'sanctum' }[k]).length * 2;
+  if (score.range != null) score.range += foe('golem') * 5;
+  if (score.forge != null) score.forge += foe('grunt') * 2;
+  if (score.sanctum != null) score.sanctum += foe('grunt') * 2 + foe('sniper') * 1.5;
+  if (score.barracks != null) score.barracks += foe('sniper') * 2 + foe('mage') * 2;
+  let best = 'save', bs = 0; for (const t in score) if (score[t] > bs) { bs = score[t]; best = t; }
+  return best;
+}
+// a small MLP: obs -> tanh(H) -> intents; weights {W1, b1, W2, b2, H}
+function netBrain(net) {
+  return (M, s) => {
+    const x = observe(M, s), H = net.H, h = new Float64Array(H);
+    for (let i = 0; i < H; i++) { let v = net.b1[i]; for (let j = 0; j < x.length; j++) v += net.W1[i * x.length + j] * x[j]; h[i] = Math.tanh(v); }
+    let best = 0, bv = -1e9;
+    for (let a = 0; a < INTENTS.length; a++) {
+      const k = INTENTS[a]; if (k !== 'save' && !M.side[s].unlock.includes(k)) continue;
+      let v = net.b2[a]; for (let i = 0; i < H; i++) v += net.W2[a * H + i] * h[i]; if (v > bv) { bv = v; best = a; }
+    }
+    return INTENTS[best];
+  };
+}
+function think(M, s) {
+  const S = M.side[s];
+  if (S.manual) { if (S.autoSk) autoSkills(M, s); return; }   // the player builds by hand (skills may still be automatic)
+  const brain = S.brain || ruleBrain;
+  S.plan = brain(M, s); doIntent(M, s, S.plan);
+  autoSkills(M, s);
+}
+
+function play(opt, dt = .1) { const M = newMatch(opt); while (!M.over) step(M, dt); return M; }
+
+return { HALF_X, CORE_Z, T_MAX, SIDES, PLOTS, plotPos, UNIT, BLD, TYPES, CAP, LVM, CORE, SKILL, INTENTS, OBS_N,
+  newMatch, step, play, build, sell, cast, canBuild, costAt, bldAt, coreOf, income, share, power, bestBolt, observe, ruleBrain, netBrain, think, other, fwd,
+  seed: s => { rng = mulberry(s); } };
+})();
+if (typeof module !== 'undefined') module.exports = FC;
+const FRONT_BRAIN = {"H":24,"IN":35,"OUT":7,"intents":["save","barracks","range","forge","sanctum","turret","mine"],"theta":[-0.3043,-0.5824,0.2217,0.1388,0.2204,0.3405,-0.5703,-0.3128,-0.3675,0.2479,-0.8463,-0.1604,-0.5943,0.3581,-0.5015,-0.2332,0.3092,-0.1549,0.0516,-0.395,0.4486,-0.0282,-0.6284,-0.6148,-0.044,-0.1688,-0.1669,0.2674,0.4623,-0.2978,-0.0433,-0.2271,0.185,0.0024,-0.1853,0.3584,-0.3617,-0.5733,-0.1247,-0.1408,0.0738,-0.3428,-0.2138,-0.0128,-0.2089,-0.0705,-0.5446,0.0902,-0.3583,0.6615,0.1197,0.4894,0.2039,-0.2617,-0.2412,0.2607,0.2611,-0.561,0.6206,0.5114,0.0953,0.1156,-0.4315,-0.1621,0.1587,-0.1663,0.1621,-0.2649,-0.1679,0.2316,-0.613,-0.307,0.0753,-0.0978,0.9251,0.1675,-0.1755,0.0629,0.1028,-0.0918,-0.0517,0.4281,-0.0013,-0.031,-0.5482,0.1507,-0.2297,0.1362,0.3579,-0.0298,-0.4487,0.1798,-0.345,-0.0084,-0.0836,0.0546,0.3627,-0.4019,0.018,0.0698,0.5685,-0.3059,-0.0205,0.0365,-0.0906,-0.2188,-0.9554,0.565,-0.5004,-0.3583,0.1888,0.2384,0.1483,0.1789,0.34,0.0984,-0.0155,0.2362,0.1771,-0.5066,0.1466,-0.7972,0.188,0.495,0.4926,0.5019,-0.0164,-0.3568,-0.0561,-0.1999,-0.319,0.4584,-0.4179,-1.0995,-0.1521,0.2424,-0.1781,-0.0961,-0.535,0.042,-0.1639,-0.0323,1.0372,-0.0849,-0.2508,0.5132,0.0332,-0.1677,0.488,-0.2587,0.1611,0.276,0.133,0.1201,-0.1298,0.2208,0.1783,-0.1395,0.0348,-0.8545,-0.2254,-0.3389,0.0542,0.164,0.1428,0.3386,-0.1729,-0.4968,0.3641,-0.0777,-0.0107,-0.3801,-0.1346,0.2678,-0.1838,0.4156,0.2762,0.2767,-0.1418,0.5368,0.4196,0.2945,-0.6859,-0.1106,0.025,-0.3769,0.0873,0.5605,0.1879,0.4417,-0.533,0.117,-0.5339,0.3369,-0.3148,-0.2222,-0.0172,-0.4958,0.0189,-0.0687,-0.3798,-0.6056,-0.5801,0.3937,-0.0471,-0.3046,0.3283,0.4635,0.0928,0.2744,-0.0204,0.2943,-0.6719,0.3463,0.4832,-0.6827,-0.2133,-0.7667,0.0174,-0.0914,0.4541,0.0167,0.0996,0.2741,0.5018,0.142,-0.3324,0.0171,-0.1683,-0.6086,-0.3279,-0.2519,-0.207,0.0665,0.2106,-0.3111,0.6496,-0.1905,0.8115,-0.5442,0.3741,0.2034,0.0231,-0.0228,-0.0423,0.2274,-0.2978,0.0292,-0.0638,0.2554,0.2632,-0.7632,-0.0685,0.256,0.0757,0.0347,0.1529,0.2806,-0.0174,-0.1949,-0.0495,-0.5462,0.123,0.3906,0.1041,0.1871,0.0858,0.5672,-0.0991,-0.1001,0.2219,-0.2351,-0.4969,-0.0418,0.2877,0.3016,-0.1416,0.5083,0.3971,0.2084,0.0648,-0.3125,0.0138,-0.1432,0.2584,-0.1029,0.2916,0.2653,0.2996,-0.29,0.1609,-0.167,0.1203,0.6707,0.3008,-0.122,0.2712,-0.2904,-0.0839,0.281,0.4675,-0.1484,-0.2486,0.6497,0.2491,0.0539,-0.5074,0.0522,-0.0542,-0.042,0.1159,-0.35,-0.4069,-0.4646,-0.1146,0.4763,0.401,-0.5293,0.1902,-0.0027,0.0844,-0.0607,-0.284,-0.1625,-0.3178,0.1577,0.344,-0.4595,0.0534,0.1756,-0.0829,-0.1385,0.0525,-0.3842,0.1708,-0.0438,0.1201,-0.6567,-0.2245,0.0857,0.308,-0.0185,0.2703,-0.1118,0.3817,-0.2588,0.1919,0.5601,0.587,-0.1514,-0.1289,0.2692,0.0002,-0.1124,-0.1251,-0.2999,0.0578,-0.3704,-0.3213,-0.0335,-0.2467,0.2589,-0.9091,0.1422,-0.3437,-0.6619,-0.2538,-0.0678,-0.0705,-0.4059,0.4735,0.0709,0.3289,0.413,0.57,-0.552,0.0311,-0.3469,-0.2031,0.0078,0.7418,0.325,-0.4442,-0.2169,0.3397,-0.1645,0.5924,0.2986,0.096,0.3422,0.1478,0.351,0.4882,0.2908,0.0632,-0.327,-0.0357,0.1522,0.0997,-0.2857,-0.828,0.402,0.8673,0.2717,0.2571,0.0975,0.0962,-0.3567,0.2814,-0.3195,0.1579,0.0799,0.5365,-0.083,-0.0672,0.2087,-0.4388,-0.2809,-0.2539,-0.1542,-0.357,0.407,0.0494,0.2119,0.3006,-0.7178,0.0214,0.477,-0.3947,0.238,0.049,-0.0104,0.3067,-0.0231,0.3724,-0.1561,0.5258,-0.0984,-0.329,-0.2864,-0.3609,-0.5143,-0.0536,-0.6204,0.32,-0.1648,0.4929,-0.2424,0.1416,0.3281,-0.2943,-0.0187,-0.1174,0.264,0.7074,0.504,0.1618,0.6377,-0.1657,0.4955,-0.4934,-0.0098,-0.2737,0.2727,-0.0411,0.3622,-0.174,0.3883,0.3339,0.2606,0.6901,-0.5725,-0.2934,0.1175,0.555,0.0403,-0.3284,-0.2438,0.4491,-0.2885,-0.3181,0.0507,0.0163,0.3358,0.4331,-0.2834,-0.4475,-0.0089,-0.2884,-0.1312,0.1436,0.1523,0.1096,-0.1001,-0.1882,0.3135,0.4034,-0.048,0.408,-0.1041,-0.2804,0.38,-0.1259,-0.5186,-0.017,0.4966,-0.3751,-0.4037,-0.2967,0.4111,-0.4993,0.2043,0.0596,1.0027,-0.2363,-0.2648,-0.2053,0.0482,0.3909,-0.3301,0.471,-0.1773,0.3567,0.2912,-0.1661,-0.0928,-0.0354,0.1802,0.163,-0.4389,-0.0214,-0.2095,-0.0356,0.4552,0.0574,0.6919,-0.18,-0.4383,0.2014,-0.0084,0.205,-0.7597,-0.6275,0.3065,0.0613,0.2697,-0.5188,0.6845,0.3304,0.1246,0.4503,-0.1193,0.2151,0.288,0.3092,-0.06,-0.3461,-0.4824,-0.0829,-0.1086,-0.2173,0.431,-0.1924,0.3134,0.6186,-0.2734,-0.4672,-0.0365,-0.2267,-0.0257,0.1164,-0.1269,-0.5416,0.0328,-0.1122,0.0682,-0.1224,-0.0953,0.1303,-0.2646,-0.3105,0.2317,-0.2392,-0.7155,0.6613,0.1049,-0.0418,-0.1656,-0.0223,-0.3046,0.3683,0.1772,-0.8114,0.5409,-0.4662,0.4522,-0.0636,0.3744,0.0507,-0.5056,-0.2539,0.2999,-0.1805,0.2172,-0.2554,0.0389,-0.1766,-0.0463,0.1232,0.5482,0.1808,0.0359,0.4267,-1.1038,-0.2759,-0.1548,-0.1555,0.5185,-0.2054,-0.11,0.0974,-0.0457,-0.4232,0.3871,0.2476,-0.3215,0.1774,0.1745,0.2792,0.0294,0.4568,-0.0595,-0.1153,0.2436,-0.0496,0.4113,0.2399,0.0229,-0.6592,-0.3632,0.0125,-0.4033,-0.1435,0.2712,-0.2077,-0.6016,-0.1162,0.1699,0.1507,-0.2637,0.1383,0.1635,-0.2797,-0.4214,-0.2826,-0.1989,-0.1212,0.1214,-0.0333,-0.6438,0.0585,0.8145,-0.3708,0.2385,-0.4203,-0.4324,0.0085,0.4061,-0.1313,-0.0732,-0.2649,-0.1069,0.1613,-0.2091,0.539,0.1249,0.3021,-0.2638,0.0206,-0.3294,0.2865,0.0653,-0.1246,-0.0391,-0.2984,-0.1089,-0.387,-0.0903,-0.001,-0.3987,0.115,0.6804,-0.4439,0.402,-0.0175,0.1463,-0.7486,0.1639,0.1102,0.049,0.3754,0.6263,-0.587,0.1345,-0.1437,-0.1121,0.2968,0.4172,-0.3158,0.1153,0.2134,0.0504,-0.0055,-0.8341,-0.406,-0.0612,-0.5301,-0.4375,-0.2754,0.1343,-0.1858,0.3376,0.6375,0.131,0.2933,-0.042,-0.3024,0.195,-0.0079,-0.0418,0.0932,0.1399,0.3542,0.3188,-0.2376,0.3936,-0.6174,0.4903,0.1836,0.0115,-0.2604,0.4423,-0.9273,-0.2277,-0.0838,0.0801,-0.2071,-0.18,0.3429,0.1193,0.0616,-0.2285,-0.0827,-0.5117,0.0078,-0.2909,0.0897,0.3226,-0.0581,-0.3727,-0.4083,0.4298,-0.037,0.0696,0.2395,-0.5843,-0.2339,0.341,0.6085,0.1692,0.2743,-0.1632,-0.2377,0.0528,-0.5219,0.3287,-0.0682,0.4022,0.4042,-0.1601,-0.0855,-0.4517,-0.1729,0.1246,0.047,0.0706,-0.093,0.2947,0.1353,0.2002,0.0655,-0.1037,-0.4487,0.251,0.0729,0.8889,-0.0641,0.0791,-0.0688,0.4597,0.0488,-0.2726,0.4157,-0.7537,0.5076,-0.5426,0.4927,-0.2073,-0.1116,0.4443,0.0389,-0.0311,-0.67,-0.0802,-0.2752,0.1325,-0.4751,-0.1323,-0.0635,-0.0275,0.1529,-0.1592,0.155,0.3946,0.3022,-0.1803,0.4889,0.0924,0.0344,0.3702,-0.1575,0.0319,0.0516,-0.2099,0.088,0.0156,-0.5264,0.2879,-0.0614,-0.1894,0.4294,0.0406,0.3663,-0.2018,0.2489,-0.5725,0.3232,-0.2205,-0.5074,-0.3205,0.1142,0.2117,0.1929,0.1501,0.1764,0.0255,-0.6513,0.2659,-0.1929,0.3311,-0.2627,0.4668,-0.2692,0.2248,0.8151,0.2794,-0.1568,0.1984,-0.4264,-0.0355,-0.16,-0.1675,0.1208,0.0853,0.4868,-0.2073,0.3285,-0.1255,0.1285,0.0783,0.1051,-0.319,0.0554,0.015,-0.0923,-0.2208,-0.0787,-0.5223,-0.8082,-0.0468,0.1638,-0.7703,0.5456,-0.0404,-0.0051,-0.2532,-0.2091,-0.1284,-0.2356,-0.012,-0.4433,-0.533,0.0921,-0.2987,-0.3609,0.059,0.0057,-0.7363,0.0039,-0.0494,0.0538,0.1126,-0.1126,-0.0897,0.6426,0.1443,-0.2048,-0.27,-0.5733,0.2459,0.1492,-0.4937,-0.2065,0.1622,-0.1403,0.8663,-0.2994,0.2627,-0.3124,-0.1313,0.1187,0.2505,0.812,-0.7825,0.3187,-0.4085,0.5629,0.1648,-0.2684,0.1217,-0.1696,-0.2047,-0.4366,-0.0694,0.2176,0.0387,-0.1814,-0.0175,0.0442,-0.0639,0.3026,-0.0704,0.3145,-0.2839,0.1114,0.1996,0.126,-0.3593,0.2494,-0.0484,-0.2646,0.1498,0.6369,0.0512,-0.1749,-0.16,0.4459,-0.3939,-0.2479,-0.1312,-0.0253,0.1922,-0.4466,-0.1229,-0.2762,0.0365,0.552,0.1277,0.0262,0.5074,0.1162,0.2475,0.2267,0.0224,0.0161,-0.2377,0.1535,-0.1218,-0.4911,-0.8847,0.2242,-0.4435,-0.1818,-0.6251,0.0105,-0.3703,0.2801,0.0226,0.2903,0.0026,-0.7664,-0.2213,-0.0932,0.1048,-0.301,-0.1355,0.346,-0.1094,0.6821,0.2537,0.3374,0.0215,0.027,-0.144,0.0924,0.3038,-0.6412,-0.051,-0.0271,-0.2224,-0.0944,-0.4148,-0.3435,-0.5428,0.1447,-0.3088,0.0214,-0.7423,0.2025,0.6889,0.1203,0.0139,0.1525,-0.5157,0.2694,0.2676,0.0921,-0.3369,0.4624],"gen":50,"held":1};
+/* ================= FRONT VIEW =================
+   3D field (procedural buildings, KayKit soldiers), HUD, build sheet, lobby with permanent upgrades.
+   Rules live in FC (front_core.js). The trained build brain arrives as FRONT_BRAIN (from brain.json at build time). */
+LOOK.dot = false;
+const VERSION = 'v1.0';
+const KEY = 'mug-front-v1';
+let S = null, M = null;
+const NET = typeof FRONT_BRAIN !== 'undefined' && FRONT_BRAIN ? (() => { const th = FRONT_BRAIN.theta, H = FRONT_BRAIN.H, I = FRONT_BRAIN.IN, O = FRONT_BRAIN.OUT;
+  return FC.netBrain({ H, W1: th.slice(0, I * H), b1: th.slice(I * H, I * H + H), W2: th.slice(I * H + H, I * H + H + O * H), b2: th.slice(I * H + H + O * H) }); })() : null;
+const ICON = { barracks: '🛡', range: '🏹', forge: '🗿', sanctum: '🔥', turret: '🗼', mine: '💎', core: '🏰' };
+const DESC = { barracks: '돌격병: 앞에서 버티는 근접 병사', range: '저격병: 멀리서 쏘는 궁수', forge: '골렘: 느리지만 단단한 거인, 주변까지 내리침', sanctum: '화염 술사: 불덩이로 무리를 태움',
+  turret: '포탑: 가까이 온 적을 쏘는 방어 탑', mine: '수정 광산: 수정이 더 빨리 모여요' };
+function toast(t, bad) { const e = el('toast'); e.textContent = t; e.classList.toggle('bad', !!bad); e.classList.add('show'); clearTimeout(toast.tm); toast.tm = setTimeout(() => e.classList.remove('show'), 1600); }
+const tfmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+/* ================= META (permanent) ================= */
+function fresh() { return { stage: 1, gold: 0, lv: {}, wins: 0, losses: 0, speed: 1, auto: false, autoSk: true, best: 1 }; }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+function load() { try { const o = JSON.parse(localStorage.getItem(KEY)); if (o) return Object.assign(fresh(), o); } catch (e) {} return fresh(); }
+const UPS = [
+  { k: 'grunt', n: '돌격병 강화', d: '체력·공격 +10%' }, { k: 'sniper', n: '저격병 강화', d: '체력·공격 +10%' }, { k: 'golem', n: '골렘 강화', d: '체력·공격 +10%', need: 3 },
+  { k: 'mage', n: '화염 술사 강화', d: '체력·공격 +10%', need: 5 }, { k: 'turret', n: '포탑 강화', d: '포탑 공격 +10%' }, { k: 'mine', n: '광산 강화', d: '수정 수입 +10%' },
+  { k: 'bolt', n: '낙뢰 강화', d: '낙뢰 피해 +10%' }, { k: 'rally', n: '함성 강화', d: '함성 지속 +10%' }];
+const upCost = lv => Math.round(60 * Math.pow(1.45, lv));
+const unlocksFor = st => ['barracks', 'range', 'turret', 'mine', ...(st >= 3 ? ['forge'] : []), ...(st >= 5 ? ['sanctum'] : [])];
+// the trained commander plays about 25% stronger than the rule AI, so its stages start lower and climb from there
+const enemyMul = st => st >= 4 && NET ? .85 + .035 * (st - 4) : 1 + .035 * (st - 1);
+const enemyBrain = st => st >= 4 && NET ? '학습 AI' : '규칙 AI';
+function renderLobby() {
+  el('lobbySub').innerHTML = `<b style="color:var(--gold)">${S.stage}단계</b> · 금화 <b style="color:var(--gold)">${S.gold}</b> · ${S.wins}승 ${S.losses}패<br>상대: 붉은 군단 (능력치 ×${enemyMul(S.stage).toFixed(2)}, ${enemyBrain(S.stage)} 지휘)`;
+  el('ups').innerHTML = UPS.map(u => { const lv = S.lv[u.k] || 0, lock = u.need && S.stage < u.need, c = upCost(lv);
+    return `<div class="up"><div class="grow"><b>${u.n}</b> <span style="color:var(--gold)">Lv${lv}</span><div class="t2">${lock ? `${u.need}단계에 열려요` : u.d}</div></div><button class="btn gold" data-up="${u.k}" ${lock || S.gold < c || lv >= 15 ? 'disabled' : ''}>${lv >= 15 ? '최대' : c + '금'}</button></div>`; }).join('');
+}
+el('ups').addEventListener('click', e => { const b = e.target.closest('[data-up]'); if (!b) return; audio(); const k = b.dataset.up, lv = S.lv[k] || 0, c = upCost(lv); if (S.gold < c) return; S.gold -= c; S.lv[k] = lv + 1; save(); sfx('buy'); renderLobby(); });
+
+/* ================= 3D ================= */
+const MATS = new Map();
+function mat(col, opt = {}) { const k = col + JSON.stringify(opt); if (MATS.has(k)) return MATS.get(k);
+  const m = LOOK.toon ? new THREE.MeshToonMaterial({ color: lin(col), ...opt }) : new THREE.MeshStandardMaterial({ color: lin(col), roughness: .8, ...opt }); MATS.set(k, m); return m; }
+function mesh(geo, col, x = 0, y = 0, z = 0, opt) { const m = new THREE.Mesh(geo, mat(col, opt)); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; return m; }
+const G = { box: (w, h, d) => new THREE.BoxGeometry(w, h, d), cyl: (a, b, h, s = 10) => new THREE.CylinderGeometry(a, b, h, s), cone: (r, h, s = 10) => new THREE.ConeGeometry(r, h, s) };
+const SIDECOL = { b: { main: '#5a4a8a', trim: '#a77bff', glow: '#9a6cff', dark: '#3a3050' }, r: { main: '#8a4a42', trim: '#ff6a4a', glow: '#ff5a3a', dark: '#4a2a28' } };
+function crystal(g, x, y, z, col, s = 1) { const c = mesh(new THREE.OctahedronGeometry(.32 * s), col, x, y, z, { emissive: lin(col), emissiveIntensity: .9 }); c.scale.y = 1.6; g.add(c); return c; }
+function makeBld(type, side, lv) {
+  const g = new THREE.Group(), C = SIDECOL[side], s = 1 + lv * .12;
+  const base = mesh(G.cyl(1.25, 1.4, .35, 8), C.dark, 0, .18, 0); g.add(base);
+  switch (type) {
+    case 'core': {
+      g.remove(base); g.add(mesh(G.cyl(2.2, 2.5, .7, 8), C.dark, 0, .35, 0)); g.add(mesh(G.cyl(1.5, 1.8, 2.4, 8), C.main, 0, 1.9, 0));
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + .78, x = Math.cos(a) * 1.8, z = Math.sin(a) * 1.8; g.add(mesh(G.cyl(.4, .5, 2.6, 8), C.main, x, 1.3, z)); g.add(mesh(G.cone(.55, .8, 8), C.trim, x, 2.9, z)); }
+      g.add(mesh(G.cone(1.7, 1.4, 8), C.trim, 0, 3.8, 0)); g.userData.gem = crystal(g, 0, 5, 0, C.glow, 2); break; }
+    case 'barracks': g.add(mesh(G.box(1.7, .9, 1.3), C.main, 0, .8, 0)); g.add(mesh(G.cone(1.25, .7, 4), C.trim, 0, 1.6, 0)).rotation.y = Math.PI / 4;
+      g.add(mesh(G.cyl(.04, .04, 1.6, 5), '#5a4a3a', .8, 1.1, .6)); g.add(mesh(G.box(.5, .32, .03), C.trim, 1.05, 1.7, .6)); break;
+    case 'range': g.add(mesh(G.box(1.5, .8, 1.2), C.main, -.15, .75, -.1)); g.add(mesh(G.cone(1.1, .6, 4), C.dark, -.15, 1.45, -.1)).rotation.y = Math.PI / 4;
+      for (const x of [-.6, .6]) { const d = mesh(G.cyl(.3, .3, .06, 12), '#e8e0d0', x, .75, .9); d.rotation.x = Math.PI / 2; g.add(d); } break;
+    case 'forge': g.add(mesh(G.box(1.8, 1, 1.5), C.dark, 0, .85, 0)); g.add(mesh(G.cyl(.25, .3, 1.4, 8), '#4a4450', .6, 1.8, -.4)); g.add(mesh(G.box(.6, .35, .4), '#6a6a78', -.4, 1.5, .5));
+      g.userData.gem = crystal(g, .6, 2.7, -.4, '#ff8a3a', .8); break;
+    case 'sanctum': for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; g.add(mesh(G.cyl(.12, .14, 1.5, 6), C.main, Math.cos(a) * .9, 1.1, Math.sin(a) * .9)); }
+      g.add(mesh(G.cyl(1.1, 1.1, .15, 10), C.trim, 0, 1.9, 0)); g.userData.gem = crystal(g, 0, 1.15, 0, '#ff7a2a', 1.3); break;
+    case 'turret': g.add(mesh(G.cyl(.55, .75, 2.2, 8), C.main, 0, 1.4, 0)); g.add(mesh(G.cyl(.8, .8, .35, 8), C.dark, 0, 2.6, 0)); g.userData.gem = crystal(g, 0, 3.2, 0, C.glow, 1.2); break;
+    case 'mine': for (let i = 0; i < 5; i++) { const a = i * 1.3, c = crystal(g, Math.cos(a) * .55, .7, Math.sin(a) * .55, '#6ae0ff', 1 + (i % 2) * .5); c.rotation.z = (i - 2) * .2; }
+      g.add(mesh(G.box(.6, .35, .45), WOODC, -.9, .45, .7)); break;
+  }
+  for (let i = 0; i < lv; i++) g.add(mesh(G.box(.18, .18, .18), '#ffd060', -.9 + i * .3, .45, 1.2, { emissive: lin('#806020') }));   // level pips
+  g.scale.setScalar(type === 'core' ? 1 : s); g.rotation.y = side === 'r' ? Math.PI : 0;
+  return g;
+}
+const WOODC = '#7a5a3a';
+const view3 = { blds: new Map(), plots: [], units: new Map(), shotPool: [], ready: false };
+function buildField() {
+  ground.material.map = groundTex(0x46505a); ground.material.color.set(0xffffff); ground.material.needsUpdate = true;
+  scene.background = lin(0x1a1d24); scene.fog = new THREE.Fog(lin(0x1a1d24), 60, 120);
+  hemi.color.set(0xe8e4ff); hemi.groundColor.set(0x202028); hemi.intensity = .8;
+  Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 24, bottom: -24 }); sun.shadow.camera.updateProjectionMatrix();
+  const half = (col, op, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(FC.HALF_X * 2 + 2, 21), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.set(0, .02, z); scene.add(m); };
+  half(0x3a2070, .22, 10.5); half(0x5a0a10, .22, -10.5);
+  const line = new THREE.Mesh(new THREE.PlaneGeometry(FC.HALF_X * 2 + 2, .14), new THREE.MeshBasicMaterial({ color: 0xff5a7a, transparent: true, opacity: .7, depthWrite: false, blending: THREE.AdditiveBlending })); line.rotation.x = -Math.PI / 2; line.position.y = .03; scene.add(line);
+  const trees = ['Tree_1_A', 'Tree_2_A', 'Tree_Bare_1_A', 'Tree_Bare_2_A'], rocks = ['Rock_1_A', 'Rock_2_A', 'Rock_3_A'];
+  for (let i = 0; i < 90; i++) {
+    const side = Math.random() < .5 ? -1 : 1, x = side * rnd(FC.HALF_X + 2.5, 18), z = rnd(-24, 24), isRock = Math.random() < .35, p = PROPS[pick(isRock ? rocks : trees)]; if (!p) continue;
+    const o = p.clone(true), sz = new THREE.Box3().setFromObject(p).getSize(new THREE.Vector3()).y || 1; o.scale.setScalar((isRock ? rnd(.7, 1.6) : rnd(2.2, 3.4)) / sz);
+    o.traverse(n => { if (n.isMesh) { n.material = n.material.clone(); if (n.material.map) n.material.map = muted(n.material.map); n.material.color.multiply(new THREE.Color(0x9a9aa8)); n.castShadow = true; } });
+    o.position.set(x, 0, z); o.rotation.y = rnd(0, 6.28); scene.add(o);
+  }
+  for (const s of FC.SIDES) for (let i = 0; i < 8; i++) {
+    const p = FC.plotPos(s, i), r = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.25, 28), new THREE.MeshBasicMaterial({ color: s === 'b' ? 0xc9a8ff : 0xff8a7a, transparent: true, opacity: .45, depthWrite: false }));
+    r.rotation.x = -Math.PI / 2; r.position.set(p.x, .04, p.z); scene.add(r); view3.plots.push({ s, i, r });
+  }
+  view3.ready = true;
+}
+function clearMatchView() {
+  for (const [, v] of view3.blds) { scene.remove(v.g); v.g.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+  view3.blds.clear();
+  for (const [, a] of view3.units) killActor(a.act); view3.units.clear();
+}
+const LOOKS = {
+  b: { grunt: { m: 'Knight', r: 'sword_1handed', l: 'shield_round', st: '1h', shadow: 1 }, sniper: { m: 'Ranger', l: 'bow_withString', st: 'bow', shadow: 1 },
+    golem: { m: 'Barbarian', r: 'axe_2handed', st: '2h', s: 1.55, shadow: 1 }, mage: { m: 'Mage', r: 'staff', st: 'magic', shadow: 1 } },
+  r: { grunt: { m: 'Knight', r: 'sword_1handed', l: 'shield_spikes', st: '1h', tint: '#e09080' }, sniper: { m: 'Ranger', l: 'bow_withString', st: 'bow', tint: '#e09080' },
+    golem: { m: 'Barbarian', r: 'axe_2handed', st: '2h', s: 1.55, tint: '#c86a5a', glow: '#ff3020' }, mage: { m: 'Mage', r: 'staff', st: 'magic', tint: '#e08070', glow: '#ff5a20' } },
+};
+function syncView(dt) {
+  // buildings
+  const seen = new Set();
+  for (const b of M.blds) {
+    const key = b.id; seen.add(key); let v = view3.blds.get(key);
+    if (!v || v.lv !== b.lv) { if (v) scene.remove(v.g); const g = makeBld(b.type, b.side, b.lv); g.position.set(b.x, 0, b.z); scene.add(g); if (v || M.t > .5) VX.pillar(b.x, b.z, b.side === 'b' ? 0xa77bff : 0xff6a4a, 4); v = { g, lv: b.lv, dead: false }; view3.blds.set(key, v); }
+    if (b.dead && !v.dead) { v.dead = true; VX.bigBoom(b.x, b.z, b.type === 'core' ? 5 : 2.5, b.side === 'b' ? 0x9a6cff : 0xff5a3a); VX.shake(b.type === 'core' ? .8 : .3); v.sink = 1; }
+    if (v.sink > 0) { v.sink -= dt * .8; v.g.position.y = -(1 - Math.max(0, v.sink)) * 3; if (v.sink <= 0) { scene.remove(v.g); } }
+    if (v.g.userData.gem) { v.g.userData.gem.rotation.y += dt * 1.5; }
+  }
+  for (const [k, v] of view3.blds) if (!seen.has(k)) { scene.remove(v.g); view3.blds.delete(k); }
+  for (const p of view3.plots) p.r.visible = !FC.bldAt(M, p.s, p.i) && (p.s === 'b' || M.t < 1e9);
+  // units
+  for (const u of M.units) {
+    let a = view3.units.get(u.id);
+    if (!a) { if (u.dead) continue; a = { act: makeActor(LOOKS[u.side][u.k], 1.45), fade: 0 }; a.act.root.position.set(u.x, 0, u.z); view3.units.set(u.id, a); }
+    const r = a.act.root, p = r.position;
+    if (u.dead) { if (!a.dying) { a.dying = true; a.fade = 1.2; play(a.act, a.act.A.death, { once: true }); } a.fade -= dt; if (a.fade < 0) { killActor(a.act); view3.units.delete(u.id); continue; } a.act.mixer.update(dt); continue; }
+    const k = Math.min(1, dt * 12); p.x += (u.x - p.x) * k; p.z += (u.z - p.z) * k;
+    const f = u.face && !u.face.dead ? u.face : null, want = f ? Math.atan2(f.x - p.x, f.z - p.z) : u.side === 'b' ? Math.PI : 0;
+    r.rotation.y = lerpAng(r.rotation.y, want, Math.min(1, dt * 8)); a.act.lock -= dt;
+    if (u.anim) { u.anim = 0; const nm = a.act.A.atk[a.act.atkI++ % a.act.A.atk.length]; play(a.act, nm, { once: true, speed: 1.4 }); }
+    else if (a.act.lock <= 0) play(a.act, u.moving ? a.act.A.run : a.act.A.idle);
+    const hurt = u.hurt > .03; if (hurt !== a.fl) { a.fl = hurt; for (const m of a.act.mats) { if (hurt) { m.emissive.setRGB(.9, .15, .08); m.emissiveIntensity = .8; } else { m.emissive.copy(m.userData.baseE); m.emissiveIntensity = m.userData.baseI; } } }
+    a.act.mixer.update(dt);
+  }
+  for (const [id, a] of view3.units) if (!M.units.some(u => u.id === id)) { killActor(a.act); view3.units.delete(id); }
+  // shots: glowing bolts along their flight
+  let n = 0;
+  for (const s of M.shots) {
+    let o = view3.shotPool[n]; if (!o) { o = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, blending: THREE.AdditiveBlending, depthWrite: false })); scene.add(o); view3.shotPool.push(o); }
+    const q = Math.min(1, s.t / s.T); o.visible = true; o.position.set(s.x + (s.tx - s.x) * q, s.y + (.6 - s.y) * q + Math.sin(q * Math.PI) * .5, s.z + (s.tz - s.z) * q);
+    o.material.color.set(s.kind === 'mage' ? 0xff7a2a : s.side === 'b' ? 0xb98cff : 0xff6a4a); o.scale.setScalar(s.kind === 'mage' ? .9 : s.kind === 'core' ? .8 : .45); n++;
+  }
+  for (let i = n; i < view3.shotPool.length; i++) view3.shotPool[i].visible = false;
+  // effects and events
+  for (const e of M.ev) {
+    if (e[0] === 'cast' && e[2] === 'bolt') { const f = M.fx.filter(x => x.k === 'bolt' && x.s === e[1]).pop(); if (f) { VX.pillar(f.x, f.z, 0x9ad0ff, 9); VX.shockwave(f.x, f.z, FC.SKILL.bolt.r, 0x9ad0ff, .5); VX.flash('rgba(150,200,255,.25)', .3); VX.shake(.3); } sfx('bolt'); }
+    if (e[0] === 'cast' && e[2] === 'rally') { for (const u of M.units) if (u.side === e[1] && !u.dead) VX.pillar(u.x, u.z, e[1] === 'b' ? 0xc9a8ff : 0xffa070, 2.5); sfx('rally'); }
+    if (e[0] === 'build' && e[1] === 'r' && Math.random() < .5) sfx('click');
+    if (e[0] === 'end') setTimeout(showEnd, 1800);
+  }
+  M.ev.length = 0;
+}
+
+/* ---------- camera: the whole field in a portrait frame ---------- */
+function resize() {
+  W = view.clientWidth; H = view.clientHeight; dpr = Math.min(devicePixelRatio || 1, 2);
+  if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); MGFX.resize(W, H, dpr); }
+  ovc.width = W * dpr; ovc.height = H * dpr;
+  if (!camera) return;
+  const half = Math.tan(camera.fov * Math.PI / 360), need = Math.max(10.5 / (half * camera.aspect), 21 / half) * .82, tilt = .55;
+  CAM.h = Math.cos(tilt) * need; CAM.back = Math.sin(tilt) * need; camDist = need; camera.far = need * 2 + 80; camera.updateProjectionMatrix();
+  camFollow();
+}
+function camFollow() { if (!camera) return; camera.position.set(0, CAM.h, 1.5 + CAM.back); camera.lookAt(0, 0, 1.5); if (scene && scene.fog) { scene.fog.near = camDist * 1.6; scene.fog.far = camDist * 3; } }
+addEventListener('resize', resize);
+
+/* ---------- overlay: bars and factory counters ---------- */
+const V3 = new THREE.Vector3();
+const scr = (x, y, z) => { V3.set(x, y, z).project(camera); return V3.z > 1 ? null : [(V3.x + 1) / 2 * W, (1 - V3.y) / 2 * H]; };
+function drawOverlay() {
+  const c = octx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H); if (!M) return;
+  const bar = (x, y, w, p, col) => { c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(x - w / 2 - 1, y - 1, w + 2, 5); c.fillStyle = col; c.fillRect(x - w / 2, y, w * p, 3); };
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (const b of M.blds) {
+    if (b.dead) continue; const p = scr(b.x, b.type === 'core' ? 6 : 3.2, b.z); if (!p) continue;
+    bar(p[0], p[1], b.type === 'core' ? 54 : 34, b.hp / b.maxHp, b.side === 'b' ? '#b98cff' : '#ff7a6a');
+    const B = FC.BLD[b.type];
+    if (B && B.unit) { const t = `${Math.max(0, b.out)}/${FC.CAP[b.lv]}`; c.font = `800 11px 'Noto Sans KR', sans-serif`; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.75)'; c.strokeText(t, p[0], p[1] - 9); c.fillStyle = '#fff'; c.fillText(t, p[0], p[1] - 9); }
+  }
+  for (const u of M.units) { if (u.dead || u.hp >= u.maxHp) continue; const p = scr(u.x, u.k === 'golem' ? 2 : 1.4, u.z); if (p) bar(p[0], p[1], u.k === 'golem' ? 22 : 14, u.hp / u.maxHp, u.side === 'b' ? '#c9a8ff' : '#ff8a7a'); }
+  // free plots on our side: a + with the cheapest cost
+  const Sb = M.side.b;
+  for (let i = 0; i < 8; i++) { if (FC.bldAt(M, 'b', i)) continue; const pp = FC.plotPos('b', i), p = scr(pp.x, .3, pp.z); if (!p) continue;
+    const ok = Sb.unlock.some(t => Sb.cr >= FC.BLD[t].cost[0]); c.fillStyle = ok ? 'rgba(168,130,42,.92)' : 'rgba(20,14,34,.7)'; c.beginPath(); c.arc(p[0], p[1], 11, 0, 7); c.fill();
+    c.fillStyle = '#fff'; c.font = `800 15px sans-serif`; c.fillText('+', p[0], p[1] + 1); }
+  if (aim) { c.strokeStyle = 'rgba(255,208,112,.8)'; c.lineWidth = 2; c.setLineDash([6, 4]); c.strokeRect(6, 60, W - 12, H - 150); c.setLineDash([]); }
+}
+
+/* ================= HUD & INPUT ================= */
+let aim = null;
+function hud() {
+  if (!M) return; const Sb = M.side.b, sh = FC.share(M);
+  el('cr').innerHTML = `💎 ${Math.floor(Sb.cr)}<small>+${FC.income(M, 'b').toFixed(1)}/초</small>`;
+  el('clock').textContent = tfmt(Math.max(0, FC.T_MAX - M.t));
+  el('tide').firstElementChild.style.width = sh * 100 + '%';
+  el('tideTxt').innerHTML = `<span>${Math.round(sh * 100)}%</span><span>${100 - Math.round(sh * 100)}%</span>`;
+  el('bSpeed').textContent = `×${S.speed}`; el('bAuto').classList.toggle('on', S.auto); el('bAuto').textContent = S.auto ? '🧠 AI 지휘' : '🧠 직접';
+  el('stageTag').textContent = `${S.stage}단계 · 상대 ${enemyBrain(S.stage)} · ${VERSION}`;
+  for (const k of ['bolt', 'rally']) { const b = el('sk_' + k), cd = Sb.cds[k]; b.querySelector('.cd').style.setProperty('--p', cd / FC.SKILL[k].cd * 100 + '%'); b.classList.toggle('ready', cd <= 0); b.classList.toggle('aim', aim === k); }
+  el('hint').textContent = aim ? '낙뢰를 떨어뜨릴 곳을 누르세요' : S.auto ? `AI 지휘관: ${planText(Sb.plan)}` : '빈 자리(+)를 눌러 짓고, 건물을 눌러 레벨업';
+}
+const planText = p => !p || p === 'save' ? '수정을 모으는 중' : `${FC.BLD[p].n}에 투자`;
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitP = new THREE.Vector3();
+glc.addEventListener('pointerdown', e => {
+  if (!M || M.over) return; audio();
+  const r = glc.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera); if (!ray.ray.intersectPlane(plane, hitP)) return;
+  if (aim) { const res = FC.cast(M, 'b', aim, hitP.x, hitP.z); aim = null; if (!res.ok) toast(res.msg, true); hud(); return; }
+  let best = -1, bd = 2; for (let i = 0; i < 8; i++) { const p = FC.plotPos('b', i), d = Math.hypot(hitP.x - p.x, hitP.z - p.z); if (d < bd) { bd = d; best = i; } }
+  if (best >= 0) openPlot(best); else closeSheet();
+});
+function openPlot(i) {
+  const b = FC.bldAt(M, 'b', i), Sb = M.side.b; sfx('click');
+  el('sheet').hidden = false; el('sheet').dataset.plot = i;
+  if (b) {
+    const B = FC.BLD[b.type], up = b.lv < 2 ? B.cost[b.lv + 1] : null;
+    el('sheetTitle').textContent = `${ICON[b.type]} ${B.n} ${b.lv + 1}레벨`;
+    el('sheetBody').innerHTML = `<div class="t2" style="font-size:12px;color:var(--dim);margin-bottom:8px">${DESC[b.type]}${B.unit ? ` · 병사 ${FC.CAP[b.lv]}명 유지` : ''}</div>` +
+      (up ? `<button class="opt" data-act="up" ${Sb.cr < up ? 'disabled' : ''}><span class="ic">⬆</span><span class="grow"><b>${b.lv + 2}레벨로</b><div class="t2">${B.unit ? `병사 ${FC.CAP[b.lv + 1]}명, 더 강하고 빠르게` : b.type === 'mine' ? `수입 +${B.inc[b.lv + 1]}/초` : '공격 +20%, 체력 +35%'}</div></span><span class="c">💎${up}</span></button>` : '<div class="t2">최고 레벨이에요</div>') +
+      `<button class="opt" data-act="sell"><span class="ic">🔨</span><span class="grow"><b>허물기</b><div class="t2">쓴 수정의 절반을 돌려받아요</div></span></button>`;
+  } else {
+    el('sheetTitle').textContent = '건물 짓기';
+    el('sheetBody').innerHTML = FC.TYPES.map(t => { const lock = !Sb.unlock.includes(t), c = FC.BLD[t].cost[0];
+      return `<button class="opt" data-act="build:${t}" ${lock || Sb.cr < c ? 'disabled' : ''}><span class="ic">${ICON[t]}</span><span class="grow"><b>${FC.BLD[t].n}</b><div class="t2">${lock ? (t === 'forge' ? '3단계에 열려요' : '5단계에 열려요') : DESC[t]}</div></span><span class="c">💎${c}</span></button>`; }).join('');
+  }
+}
+function closeSheet() { el('sheet').hidden = true; }
+el('sheetX').onclick = closeSheet;
+el('sheetBody').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b || b.disabled) return; audio(); const i = +el('sheet').dataset.plot, a = b.dataset.act;
+  let r; if (a === 'up') { const x = FC.bldAt(M, 'b', i); r = FC.build(M, 'b', i, x.type); } else if (a === 'sell') r = FC.sell(M, 'b', i); else r = FC.build(M, 'b', i, a.split(':')[1]);
+  if (r) { toast(r.msg, !r.ok); if (r.ok) sfx('build'); } closeSheet(); hud(); });
+el('sk_bolt').onclick = () => { audio(); if (!M || M.side.b.cds.bolt > 0) return; aim = aim ? null : 'bolt'; hud(); };
+el('sk_rally').onclick = () => { audio(); if (!M) return; const r = FC.cast(M, 'b', 'rally'); if (!r.ok) toast(r.msg, true); hud(); };
+el('bSpeed').onclick = () => { audio(); S.speed = S.speed >= 3 ? 1 : S.speed + 1; save(); hud(); };
+el('bAuto').onclick = () => { audio(); S.auto = !S.auto; save(); applyAuto(); toast(S.auto ? 'AI 지휘관이 건물을 지어요' : '직접 지어요'); hud(); };
+function applyAuto() { if (!M) return; const Sb = M.side.b; Sb.manual = !S.auto; Sb.autoSk = S.auto || S.autoSk; Sb.brain = S.auto ? (NET || null) : null; }
+
+/* ================= MATCH FLOW ================= */
+function startMatch() {
+  clearMatchView(); closeSheet(); aim = null;
+  const st = S.stage, lvR = {}; for (const k of ['grunt', 'sniper', 'golem', 'mage', 'turret']) lvR[k] = Math.floor((st - 1) / 3);
+  M = FC.newMatch({ seed: Date.now() % 1e9, mul: { b: 1, r: enemyMul(st) }, lv: { b: S.lv, r: lvR }, unlock: { b: unlocksFor(st), r: unlocksFor(Math.max(st, 2)) }, brains: { r: st >= 4 && NET ? NET : null } });
+  applyAuto(); el('lobby').hidden = true; el('end').hidden = true; running = true; hud();
+}
+function showEnd() {
+  if (!M || !el('end').hidden) return; running = false;
+  const win = M.winner === 'b', st = S.stage, gold = win ? 60 + 15 * st : 25 + 5 * st;
+  S.gold += gold; if (win) { S.wins++; S.stage++; S.best = Math.max(S.best, S.stage); } else S.losses++;
+  save(); sfx(win ? 'win' : 'lose');
+  el('endTitle').textContent = win ? '승리' : '패배'; el('endTitle').style.color = win ? '' : '#ffb0a0';
+  const cb = FC.coreOf(M, 'b'), cr = FC.coreOf(M, 'r');
+  el('endMsg').innerHTML = win ? `붉은 군단을 물리쳤어요. 다음은 <b>${S.stage}단계</b>${S.stage === 3 ? ' — 골렘 공방이 열려요!' : S.stage === 5 ? ' — 화염 성소가 열려요!' : ''}` : '다시 도전해 보세요. 금화로 군단을 강화할 수 있어요.';
+  el('endStats').innerHTML = [['시간', tfmt(M.t)], ['금화', `+${gold}`], ['처치', M.side.b.kills], ['쓴 수정', Math.round(M.side.b.spent)], ['내 본진', Math.round(cb.hp / cb.maxHp * 100) + '%'], ['적 본진', Math.round(cr.hp / cr.maxHp * 100) + '%']].map(([a, b]) => `<div>${a}<b>${b}</b></div>`).join('');
+  el('end').hidden = false;
+}
+el('endOk').onclick = () => { audio(); el('end').hidden = true; renderLobby(); el('lobby').hidden = false; };
+el('goBtn').onclick = () => { audio(); try { startMatch(); } catch (e) { showErr(e); } };
+
+const sfx = k => ({
+  click: () => tone(660, .04, 'triangle', .02), buy: () => { tone(880, .07, 'triangle', .05); tone(1320, .09, 'triangle', .04, .05); },
+  build: () => { tone(220, .12, 'square', .03); tone(330, .12, 'square', .025, .1); }, bolt: () => { tone(90, .4, 'sawtooth', .06); tone(1200, .15, 'square', .03); },
+  rally: () => [392, 523, 659].forEach((f, i) => tone(f, .25, 'triangle', .04, i * .07)),
+  win: () => [392, 494, 587, 784].forEach((f, i) => tone(f, .3, 'triangle', .05, i * .08)), lose: () => tone(160, .6, 'sawtooth', .04),
+}[k] || (() => {}))();
+
+/* ================= LOOP ================= */
+function showErr(e) { const m = (e && (e.stack || e.message)) || String(e); console.error(e); if (showErr.n++ > 3) return; let d = el('errbox'); if (!d) { d = document.createElement('div'); d.id = 'errbox'; d.style.cssText = 'position:absolute;left:8px;right:8px;top:40%;z-index:20;background:rgba(80,10,10,.92);color:#fff;font:11px monospace;padding:8px;border-radius:8px;white-space:pre-wrap;max-height:40%;overflow:auto'; d.onclick = () => d.remove(); document.body.appendChild(d); } d.textContent = `[${VERSION}] 오류 (눌러서 닫기)\n` + m.slice(0, 600); }
+showErr.n = 0;
+addEventListener('error', e => showErr(e.error || e.message));
+let last = performance.now(), running = false, uiT = 0, acc = 0;
+function frame(now) { requestAnimationFrame(frame); try { frameBody(now); } catch (e) { showErr(e); } }
+function frameBody(now) {
+  const dt = Math.min(.1, (now - last) / 1000); last = now;
+  if (running && M) { acc += dt * S.speed; let n = 0; while (acc >= .05 && n < 12) { FC.step(M, .05); acc -= .05; n++; } uiT -= dt; if (uiT <= 0) { uiT = .2; hud(); } }
+  if (renderer && view3.ready) {
+    if (M) syncView(dt * (running ? S.speed : 1));
+    const tm = FXOPT.on && MGFX.hasPost ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping; if (renderer.toneMapping !== tm) renderer.toneMapping = tm;
+    VX.update(dt * (running ? S.speed : 1)); MGFX.render(); drawOverlay();
+  }
+}
+let glLost = false;
+glc.addEventListener('webglcontextlost', e => { e.preventDefault(); if (glLost) return; glLost = true; save(); setTimeout(() => location.reload(), 500); });
+async function start() {
+  initGL();
+  try { await loadAssets(); } catch (e) { el('loadMsg').textContent = '그래픽 파일을 불러오지 못했어요. 새로고침해 주세요.'; return; }
+  el('loading').hidden = true; S = load(); buildField(); resize(); renderLobby(); el('lobby').hidden = false;
+}
+start().catch(showErr);
+requestAnimationFrame(frame);
+window.__F = { FC, get M() { return M; }, get S() { return S; }, startMatch, NET, step: (n = 100) => { for (let i = 0; i < n; i++) FC.step(M, .05); }, render: () => { syncView(.05); MGFX.render(); drawOverlay(); hud(); } };
+})();
+</script>
+</body>
+</html>
