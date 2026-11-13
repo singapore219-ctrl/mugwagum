@@ -733,7 +733,7 @@ function renderList() {
     }
     h += `</div><p class="note">정복한 영토로 돌아가 웨이브를 반복하면 골드를 모을 수 있어요. 최고 기록: ${regionName(Math.floor((S.best - 1) / 10))} 웨이브 ${(S.best - 1) % 10 + 1} · 처치 ${fmt(S.kills)}</p>`;
     h += `<button class="btn wide" data-a="reset" style="margin-top:6px">${resetAsk ? '정말 처음부터 할까요? 한 번 더 누르세요' : '처음부터 다시 하기'}</button>
-      <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px;padding:10px" href="../">무과금 사냥터로</a>`;
+      <a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px;padding:10px" href="../">게임 선택으로</a>`;
   }
   el('list').innerHTML = h;
 }

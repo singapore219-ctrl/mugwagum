@@ -1,11 +1,11 @@
 {
-  "name": "무과금 사냥터",
-  "short_name": "무과금사냥터",
-  "description": "혼자 즐기는 3D 사냥·파밍·강화 게임",
+  "name": "무과금 게임방",
+  "short_name": "무과금게임",
+  "description": "혼자 즐기는 무과금 게임 모음",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
-  "orientation": "landscape",
+  "orientation": "any",
   "background_color": "#0e0c09",
   "theme_color": "#0e0c09",
   "icons": [

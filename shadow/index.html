@@ -1167,7 +1167,7 @@ function renderList() {
       <div class="row"><div class="info"><div class="n">도트 캐릭터</div><div class="s">2D 도트 + 3D 배경</div></div><button class="tog ${LOOK.dot ? 'on' : ''}" data-a="look" data-v="dot" aria-pressed="${LOOK.dot}"></button></div>
       ${LOOK.dot ? `<div class="row"><div class="info"><div class="n">도트 크기</div></div><div class="bulk" style="margin:0">${[2, 3, 4].map(n => `<button class="${LOOK.dotSize === n ? 'on' : ''}" data-a="dotsize" data-v="${n}">${['', '', '작게', '중간', '크게'][n]}</button>`).join('')}</div></div>` : ''}`;
     h += `<button class="btn" style="width:100%;margin-top:6px;padding:10px" data-a="reset">${resetAsk ? '정말 처음부터 할까요? 한 번 더 누르세요' : '처음부터 다시 하기'}</button>
-      <a class="btn" style="display:block;text-align:center;text-decoration:none;margin-top:8px;padding:10px" href="../">무과금 사냥터로</a>`;
+      <a class="btn" style="display:block;text-align:center;text-decoration:none;margin-top:8px;padding:10px" href="../">게임 선택으로</a>`;
   }
   el('list').innerHTML = h;
 }
