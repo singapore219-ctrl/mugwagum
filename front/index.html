@@ -66,6 +66,8 @@ button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
 .x{background:rgba(255,255,255,.08);border:0;border-radius:50%;width:30px;height:30px;font-size:15px;color:#fff}
 .opt{display:flex;align-items:center;gap:10px;padding:9px 10px;margin-bottom:6px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--line);width:100%;text-align:left;color:inherit}
 .opt:disabled{opacity:.4}
+.opt.wait{opacity:.7;border-style:dashed}.opt.wait .c{color:var(--dim)}
+.opt.res{border-color:#f1d58c;border-style:solid;box-shadow:0 0 0 1px #f1d58c inset;opacity:1}
 .opt .ic{font-size:22px;width:30px;text-align:center}
 .opt .grow{flex:1;min-width:0}
 .opt b{font-size:13.5px}
@@ -668,7 +670,7 @@ const FRONT_BRAIN = {"H":24,"IN":35,"OUT":7,"intents":["save","barracks","range"
    3D field (procedural buildings, KayKit soldiers), HUD, build sheet, lobby with permanent upgrades.
    Rules live in FC (front_core.js). The trained build brain arrives as FRONT_BRAIN (from brain.json at build time). */
 LOOK.dot = false;
-const VERSION = 'v1.2';
+const VERSION = 'v1.3';
 const KEY = 'mug-front-v1';
 let S = null, M = null;
 const NET = typeof FRONT_BRAIN !== 'undefined' && FRONT_BRAIN ? (() => { const th = FRONT_BRAIN.theta, H = FRONT_BRAIN.H, I = FRONT_BRAIN.IN, O = FRONT_BRAIN.OUT;
@@ -856,7 +858,8 @@ function hud() {
   el('bSpeed').textContent = `×${S.speed}`; el('bAuto').classList.toggle('on', S.auto); el('bAuto').textContent = S.auto ? '🧠 AI 지휘' : '🧠 직접';
   el('stageTag').textContent = `${S.stage}단계 · 상대 ${enemyBrain(S.stage)} · ${VERSION}`;
   for (const k of ['bolt', 'rally']) { const b = el('sk_' + k), cd = Sb.cds[k]; b.querySelector('.cd').style.setProperty('--p', cd / FC.SKILL[k].cd * 100 + '%'); b.classList.toggle('ready', cd <= 0); b.classList.toggle('aim', aim === k); }
-  el('hint').textContent = aim ? '낙뢰를 떨어뜨릴 곳을 누르세요' : S.auto ? `AI 지휘관: ${planText(Sb.plan)}` : '빈 자리(+)를 눌러 짓고, 건물을 눌러 레벨업';
+  runReserve(); refreshSheet();
+  el('hint').textContent = aim ? '낙뢰를 떨어뜨릴 곳을 누르세요' : S.auto ? `AI 지휘관: ${planText(Sb.plan)}` : reserve ? `예약: ${reserve.n} — 💎${Math.max(0, Math.ceil(reserve.cost - Sb.cr))} 더 모이면 바로 지어요` : '빈 자리(+)를 눌러 짓고, 건물을 눌러 레벨업';
 }
 const planText = p => !p || p === 'save' ? '수정을 모으는 중' : `${FC.BLD[p].n}에 투자`;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitP = new THREE.Vector3();
@@ -876,18 +879,43 @@ function openPlot(i) {
     const B = FC.BLD[b.type], up = b.lv < 2 ? B.cost[b.lv + 1] : null;
     el('sheetTitle').textContent = `${ICON[b.type]} ${B.n} ${b.lv + 1}레벨`;
     el('sheetBody').innerHTML = `<div class="t2" style="font-size:12px;color:var(--dim);margin-bottom:8px">${DESC[b.type]}${B.unit ? ` · 병사 ${FC.CAP[b.lv]}명 유지` : ''}</div>` +
-      (up ? `<button class="opt" data-act="up" ${Sb.cr < up ? 'disabled' : ''}><span class="ic">⬆</span><span class="grow"><b>${b.lv + 2}레벨로</b><div class="t2">${B.unit ? `병사 ${FC.CAP[b.lv + 1]}명, 더 강하고 빠르게` : b.type === 'mine' ? `수입 +${B.inc[b.lv + 1]}/초` : '공격 +20%, 체력 +35%'}</div></span><span class="c">💎${up}</span></button>` : '<div class="t2">최고 레벨이에요</div>') +
+      (up ? `<button class="opt" data-act="up" data-cost="${up}"><span class="ic">⬆</span><span class="grow"><b>${b.lv + 2}레벨로</b><div class="t2">${B.unit ? `병사 ${FC.CAP[b.lv + 1]}명, 더 강하고 빠르게` : b.type === 'mine' ? `수입 +${B.inc[b.lv + 1]}/초` : '공격 +20%, 체력 +35%'}</div></span><span class="c">💎${up}</span></button>` : '<div class="t2">최고 레벨이에요</div>') +
       `<button class="opt" data-act="sell"><span class="ic">🔨</span><span class="grow"><b>허물기</b><div class="t2">쓴 수정의 절반을 돌려받아요</div></span></button>`;
   } else {
     el('sheetTitle').textContent = '건물 짓기';
     el('sheetBody').innerHTML = FC.TYPES.map(t => { const lock = !Sb.unlock.includes(t), c = FC.BLD[t].cost[0];
-      return `<button class="opt" data-act="build:${t}" ${lock || Sb.cr < c ? 'disabled' : ''}><span class="ic">${ICON[t]}</span><span class="grow"><b>${FC.BLD[t].n}</b><div class="t2">${lock ? (t === 'forge' ? '3단계에 열려요' : '5단계에 열려요') : DESC[t]}</div></span><span class="c">💎${c}</span></button>`; }).join('');
+      return `<button class="opt" data-act="build:${t}" ${lock ? 'disabled' : `data-cost="${c}"`}><span class="ic">${ICON[t]}</span><span class="grow"><b>${FC.BLD[t].n}</b><div class="t2">${lock ? (t === 'forge' ? '3단계에 열려요' : '5단계에 열려요') : DESC[t]}</div></span><span class="c">💎${c}</span></button>`; }).join('');
   }
 }
 function closeSheet() { el('sheet').hidden = true; }
+// while the menu is open, buttons follow the crystal count: ready ones light up, others show the seconds left
+function refreshSheet() {
+  if (el('sheet').hidden || !M) return;
+  const cr = M.side.b.cr, inc = FC.income(M, 'b'), i = +el('sheet').dataset.plot;
+  for (const b of el('sheetBody').querySelectorAll('[data-cost]')) {
+    const c = +b.dataset.cost, ok = cr >= c, res = reserve && reserve.plot === i && reserve.act === b.dataset.act;
+    b.classList.toggle('wait', !ok); b.classList.toggle('res', !!res);
+    const t = ok ? `💎${c}` : `💎${c} · ${Math.ceil((c - cr) / inc)}초`;
+    const tag = b.querySelector('.c'); if (tag.textContent !== t) tag.textContent = t;
+  }
+}
+// a reserved build/upgrade goes up as soon as it is affordable (and is dropped if the plot changed meanwhile)
+let reserve = null;
+function runReserve() {
+  if (!reserve || !M || M.over) return;
+  const { plot, act } = reserve, b = FC.bldAt(M, 'b', plot);
+  if (act === 'up' ? !b || b.lv >= 2 : !!b) { reserve = null; return; }
+  const type = act === 'up' ? b.type : act.split(':')[1], cost = FC.costAt(M, 'b', plot, type); reserve.cost = cost;
+  if (M.side.b.cr < cost) return;
+  const r = FC.build(M, 'b', plot, type); reserve = null;
+  if (r.ok) { toast(`예약 완료: ${r.msg}`); sfx('build'); if (!el('sheet').hidden && +el('sheet').dataset.plot === plot) closeSheet(); }
+}
 el('sheetX').onclick = closeSheet;
 let openedAt = 0;
 el('sheetBody').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b || b.disabled || performance.now() - openedAt < 350) return; audio(); const i = +el('sheet').dataset.plot, a = b.dataset.act;
+  // not enough crystals yet: reserve it, and it goes up the moment the crystals are there
+  if (b.dataset.cost && M.side.b.cr < +b.dataset.cost) { reserve = { plot: i, act: a, cost: +b.dataset.cost, n: b.querySelector('b').textContent }; toast(`예약했어요: ${reserve.n}`); sfx('click'); closeSheet(); hud(); return; }
+  if (reserve && reserve.plot === i) reserve = null;
   let r; if (a === 'up') { const x = FC.bldAt(M, 'b', i); r = FC.build(M, 'b', i, x.type); } else if (a === 'sell') r = FC.sell(M, 'b', i); else r = FC.build(M, 'b', i, a.split(':')[1]);
   if (r) { toast(r.msg, !r.ok); if (r.ok) sfx('build'); } closeSheet(); hud(); });
 el('sk_bolt').onclick = () => { audio(); if (!M || M.side.b.cds.bolt > 0) return; aim = aim ? null : 'bolt'; hud(); };
@@ -898,7 +926,7 @@ function applyAuto() { if (!M) return; const Sb = M.side.b; Sb.manual = !S.auto;
 
 /* ================= MATCH FLOW ================= */
 function startMatch() {
-  clearMatchView(); closeSheet(); aim = null;
+  clearMatchView(); closeSheet(); aim = null; reserve = null;
   const st = S.stage, lvR = {}; for (const k of ['grunt', 'sniper', 'golem', 'mage', 'turret']) lvR[k] = Math.floor((st - 1) / 3);
   M = FC.newMatch({ seed: Date.now() % 1e9, mul: { b: 1, r: enemyMul(st) }, lv: { b: S.lv, r: lvR }, unlock: { b: unlocksFor(st), r: unlocksFor(Math.max(st, 2)) }, brains: { r: st >= 4 && NET ? NET : null } });
   applyAuto(); el('lobby').hidden = true; el('end').hidden = true; running = true; hud();
