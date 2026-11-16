@@ -668,7 +668,7 @@ const FRONT_BRAIN = {"H":24,"IN":35,"OUT":7,"intents":["save","barracks","range"
    3D field (procedural buildings, KayKit soldiers), HUD, build sheet, lobby with permanent upgrades.
    Rules live in FC (front_core.js). The trained build brain arrives as FRONT_BRAIN (from brain.json at build time). */
 LOOK.dot = false;
-const VERSION = 'v1.1';
+const VERSION = 'v1.2';
 const KEY = 'mug-front-v1';
 let S = null, M = null;
 const NET = typeof FRONT_BRAIN !== 'undefined' && FRONT_BRAIN ? (() => { const th = FRONT_BRAIN.theta, H = FRONT_BRAIN.H, I = FRONT_BRAIN.IN, O = FRONT_BRAIN.OUT;
@@ -860,7 +860,8 @@ function hud() {
 }
 const planText = p => !p || p === 'save' ? '수정을 모으는 중' : `${FC.BLD[p].n}에 투자`;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitP = new THREE.Vector3();
-glc.addEventListener('pointerdown', e => {
+// open on click (finger lifted), not pointerdown: otherwise the lift lands on the menu that just opened under the finger
+glc.addEventListener('click', e => {
   if (!M || M.over) return; audio();
   const r = glc.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera); if (!ray.ray.intersectPlane(plane, hitP)) return;
@@ -870,7 +871,7 @@ glc.addEventListener('pointerdown', e => {
 });
 function openPlot(i) {
   const b = FC.bldAt(M, 'b', i), Sb = M.side.b; sfx('click');
-  el('sheet').hidden = false; el('sheet').dataset.plot = i;
+  el('sheet').hidden = false; el('sheet').dataset.plot = i; openedAt = performance.now();
   if (b) {
     const B = FC.BLD[b.type], up = b.lv < 2 ? B.cost[b.lv + 1] : null;
     el('sheetTitle').textContent = `${ICON[b.type]} ${B.n} ${b.lv + 1}레벨`;
@@ -885,7 +886,8 @@ function openPlot(i) {
 }
 function closeSheet() { el('sheet').hidden = true; }
 el('sheetX').onclick = closeSheet;
-el('sheetBody').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b || b.disabled) return; audio(); const i = +el('sheet').dataset.plot, a = b.dataset.act;
+let openedAt = 0;
+el('sheetBody').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b || b.disabled || performance.now() - openedAt < 350) return; audio(); const i = +el('sheet').dataset.plot, a = b.dataset.act;
   let r; if (a === 'up') { const x = FC.bldAt(M, 'b', i); r = FC.build(M, 'b', i, x.type); } else if (a === 'sell') r = FC.sell(M, 'b', i); else r = FC.build(M, 'b', i, a.split(':')[1]);
   if (r) { toast(r.msg, !r.ok); if (r.ok) sfx('build'); } closeSheet(); hud(); });
 el('sk_bolt').onclick = () => { audio(); if (!M || M.side.b.cds.bolt > 0) return; aim = aim ? null : 'bolt'; hud(); };
