@@ -56,6 +56,7 @@ const GAMES = [
   { id: 'shadow', n: '흑영 군단', ic: '👁️', tint: 'linear-gradient(135deg,#3a2a6a,#120a24)', d: '쓰러진 적을 그림자로 일으키는 무한 방치 몰이사냥', o: '가로', key: 'mug-shadow-v1' },
   { id: 'chess', n: '무과금 오토체스', ic: '♟️', tint: 'linear-gradient(135deg,#2a6a8a,#0e2a38)', d: '용병을 배치하는 오토배틀러. 친구와 하기', o: '가로·세로', key: 'mug-chess' },
   { id: 'war', n: '무과금 영토전쟁', ic: '🚩', tint: 'linear-gradient(135deg,#8a3a2a,#2a0e08)', d: '방치형 웨이브 디펜스로 영토 넓히기', o: '가로', key: 'mug-war-v1' },
+  { id: 'defense', n: '무과금 룬 디펜스', ic: '🔮', tint: 'linear-gradient(135deg,#2a5a8a,#101a38)', d: '룬을 소환하고 합쳐서 막는 랜덤 머지 디펜스', o: '세로·가로', key: 'mug-defense-v1' },
 ];
 const has = k => { try { return !!(k && localStorage.getItem(k)); } catch (e) { return false; } };
 let last = null; try { last = localStorage.getItem('mug-last-game'); } catch (e) {}
